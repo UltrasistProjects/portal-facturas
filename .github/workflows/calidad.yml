@@ -11,6 +11,7 @@ jobs:
   calidad:
     uses: UltrasistProjects/ci-templates/.github/workflows/sonarqube.yml@v1
     with:
+      working_directory: ./PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress
       project_key: portal-facturas
       runner: self-hosted
     secrets: inherit
