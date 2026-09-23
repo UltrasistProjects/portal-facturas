@@ -1,0 +1,6 @@
+DOCUMENTO FICTICIO DE PRUEBA - SIN VALIDEZ LEGAL
+Proyecto: Automatizacion Operativa 2026
+Tecnologia autorizada: Microsoft Power Platform
+Monto autorizado por periodo: MXN 100,000.00
+Vigencia: 01/01/2026 a 31/12/2026
+

@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Invoice Portal{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', path='/vendor/bootstrap.min.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', path='/vendor/bootstrap-icons.min.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', path='/css/app.css') }}">
+  <style>.brand-logo{width:72px;max-height:38px;object-fit:contain;display:block;flex:0 0 auto}</style>
+</head>
+<body>
+{% if user %}
+<div class="app-shell">
+  <aside class="sidebar">
+    <a class="brand" href="/"><img class="brand-logo" src="{{ url_for('static', path='/img/Ultrasistlogo.png') }}" alt="Ultrasist"><span>Invoice Portal<small>Prevalidacion</small></span></a>
+    <nav>
+      <a href="/" class="nav-item"><i class="bi bi-grid"></i> Dashboard</a>
+      <a href="/invoices" class="nav-item"><i class="bi bi-receipt"></i> Facturas</a>
+      {% if user.role.value in ['INTERNAL','ADMIN'] %}
+      <a href="/suppliers" class="nav-item"><i class="bi bi-buildings"></i> Proveedores</a>
+      <a href="/contracts" class="nav-item"><i class="bi bi-file-earmark-text"></i> Contratos</a>
+      {% endif %}
+      {% if user.role.value == 'ADMIN' %}
+      <div class="nav-label">Administracion</div>
+      <a href="/admin/users" class="nav-item"><i class="bi bi-people"></i> Usuarios</a>
+      <a href="/admin/rules" class="nav-item"><i class="bi bi-sliders"></i> Reglas</a>
+      <a href="/admin/audit" class="nav-item"><i class="bi bi-clock-history"></i> Audit Log</a>
+      {% endif %}
+    </nav>
+    <div class="sidebar-footer"><span class="role-pill">{{ user.role.value }}</span><strong>{{ user.name }}</strong><small>{{ user.email }}</small>
+      <form method="post" action="/logout"><input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}"><button class="btn-link">Cerrar sesion</button></form>
+    </div>
+  </aside>
+  <main class="main-content"><header class="topbar"><div><span class="environment">DEMO LOCAL</span></div><div class="principle"><i class="bi bi-shield-check"></i> Reglas deterministicas deciden la prevalidacion</div></header>
+    <div class="content-wrap">{% block content %}{% endblock %}</div>
+  </main>
+</div>
+{% else %}{% block anonymous %}{% endblock %}{% endif %}
+<script src="{{ url_for('static', path='/vendor/bootstrap.bundle.min.js') }}"></script>
+<script src="{{ url_for('static', path='/js/app.js') }}"></script>
+</body></html>

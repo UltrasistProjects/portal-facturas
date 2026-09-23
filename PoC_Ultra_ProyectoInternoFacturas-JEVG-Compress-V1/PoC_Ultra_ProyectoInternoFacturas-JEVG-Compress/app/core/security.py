@@ -1,0 +1,53 @@
+import secrets
+from typing import Annotated
+
+from fastapi import Depends, HTTPException, Request, status
+from pwdlib import PasswordHash
+from sqlalchemy.orm import Session
+
+from app.core.constants import Role
+from app.core.database import get_db
+
+password_hash = PasswordHash.recommended()
+
+
+def hash_password(password: str) -> str:
+    return password_hash.hash(password)
+
+
+def verify_password(password: str, hashed: str) -> bool:
+    return password_hash.verify(password, hashed)
+
+
+def csrf_token(request: Request) -> str:
+    token = request.session.get("csrf_token")
+    if not token:
+        token = secrets.token_urlsafe(32)
+        request.session["csrf_token"] = token
+    return token
+
+
+async def validate_csrf(request: Request) -> None:
+    form = await request.form()
+    supplied = str(form.get("csrf_token", ""))
+    expected = str(request.session.get("csrf_token", ""))
+    if not expected or not secrets.compare_digest(supplied, expected):
+        raise HTTPException(status_code=403, detail="Token CSRF invalido")
+
+
+def get_current_user(request: Request, db: Annotated[Session, Depends(get_db)]):
+    from app.models import User
+    user_id = request.session.get("user_id")
+    user = db.get(User, user_id) if user_id else None
+    if not user or not user.is_active:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Autenticacion requerida")
+    return user
+
+
+def require_roles(*roles: Role):
+    def dependency(user=Depends(get_current_user)):
+        if user.role not in roles:
+            raise HTTPException(status_code=403, detail="No cuenta con permisos")
+        return user
+    return dependency
+

@@ -1,0 +1,5 @@
+{% extends "base.html" %}{% block title %}Facturas{% endblock %}{% block content %}
+<div class="page-heading"><div><span class="eyebrow">EXPEDIENTES</span><h1>Facturas</h1><p>Historial documental y estado de prevalidacion.</p></div><a class="btn btn-primary" href="/invoices/new"><i class="bi bi-plus-lg"></i> Nueva factura</a></div>
+<section class="panel"><form class="filter-bar" method="get"><div class="search"><i class="bi bi-search"></i><input name="q" value="{{ q }}" placeholder="Buscar folio, factura, proyecto o proveedor"></div><select name="status" class="form-select"><option value="">Todos los estados</option>{% for state in statuses %}<option value="{{ state.value }}" {% if selected_status == state.value %}selected{% endif %}>{{ status_labels[state] }}</option>{% endfor %}</select><button class="btn btn-outline-primary">Filtrar</button></form>{% include "components/invoice_table.html" %}</section>
+{% endblock %}
+

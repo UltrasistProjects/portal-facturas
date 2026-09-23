@@ -1,0 +1,14 @@
+{% extends "base.html" %}{% block title %}Acceso | Invoice Portal{% endblock %}
+{% block anonymous %}
+<main class="login-page"><section class="login-panel"><div class="brand login-brand"><img class="brand-logo" src="{{ url_for('static', path='/img/Ultrasistlogo.png') }}" alt="Ultrasist"><span>Invoice Portal<small>Portal de proveedores</small></span></div>
+  <div class="login-copy"><span class="eyebrow">PoC LOCAL · ULTRASIST</span><h1>Recepcion documental con evidencia verificable.</h1><p>Prevalida CFDI, contratos y soportes con reglas deterministicas. La decision final siempre pertenece a una persona autorizada.</p>
+  <div class="principle-card"><i class="bi bi-diagram-3"></i><span>XML + reglas Python</span><i class="bi bi-arrow-right"></i><span>Evidencia</span><i class="bi bi-arrow-right"></i><span>Revision humana</span></div></div></section>
+  <section class="login-form-wrap"><form method="post" action="/login" class="login-card"><h2>Iniciar sesion</h2><p>Use una cuenta demo para acceder.</p>
+    {% if error %}<div class="alert alert-danger">{{ error }}</div>{% endif %}<input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+    <label>Correo electronico</label><input class="form-control" type="email" name="email" placeholder="usuario@poc.local" required autofocus>
+    <label>Contrasena</label><input class="form-control" type="password" name="password" required>
+    <button class="btn btn-primary w-100" type="submit">Ingresar al portal</button>
+    <div class="demo-credentials"><strong>Acceso rapido demo</strong><button type="button" data-demo="admin@poc.local|Admin123!">Administrador</button><button type="button" data-demo="pmo@poc.local|Pmo123!">PMO</button><button type="button" data-demo="proveedor1@poc.local|Proveedor123!">Proveedor</button></div>
+  </form></section></main>
+{% endblock %}
+

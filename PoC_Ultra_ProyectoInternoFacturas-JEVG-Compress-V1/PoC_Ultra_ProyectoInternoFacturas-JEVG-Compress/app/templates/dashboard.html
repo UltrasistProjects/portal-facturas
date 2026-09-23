@@ -1,0 +1,7 @@
+{% extends "base.html" %}{% block title %}Dashboard{% endblock %}{% block content %}
+<div class="page-heading"><div><span class="eyebrow">RESUMEN OPERATIVO</span><h1>Hola, {{ user.name.split()[0] }}</h1><p>{% if user.role.value == 'PROVIDER' %}Consulte y gestione sus expedientes de facturacion.{% else %}Monitoree la recepcion, prevalidacion y revision administrativa.{% endif %}</p></div><a class="btn btn-primary" href="/invoices/new"><i class="bi bi-plus-lg"></i> Nueva factura</a></div>
+<div class="kpi-grid"><div class="kpi-card"><span>Total facturas</span><strong>{{ kpis.total }}</strong><small>Expedientes visibles</small></div><div class="kpi-card"><span>En revision</span><strong>{{ kpis.review }}</strong><small>Requieren atencion</small></div><div class="kpi-card warning"><span>Con correcciones</span><strong>{{ kpis.correction }}</strong><small>Devueltas al proveedor</small></div><div class="kpi-card success"><span>Aceptadas</span><strong>{{ kpis.accepted }}</strong><small>{{ kpis.amount|money }} acumulado</small></div></div>
+<section class="panel"><div class="panel-header"><div><h2>Facturas recientes</h2><p>Ultimos movimientos en el portal</p></div><a href="/invoices">Ver todas <i class="bi bi-arrow-right"></i></a></div>
+{% include "components/invoice_table.html" %}</section>
+{% endblock %}
+
