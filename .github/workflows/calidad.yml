@@ -1,0 +1,16 @@
+# Invoca el pipeline compartido del equipo. No duplicar lógica aquí.
+name: Calidad
+
+on:
+  push:
+    branches: [qa, main]
+  pull_request:
+    branches: [qa, main]
+
+jobs:
+  calidad:
+    uses: UltrasistProjects/ci-templates/.github/workflows/sonarqube.yml@v1
+    with:
+      project_key: portal-facturas
+      runner: self-hosted
+    secrets: inherit
