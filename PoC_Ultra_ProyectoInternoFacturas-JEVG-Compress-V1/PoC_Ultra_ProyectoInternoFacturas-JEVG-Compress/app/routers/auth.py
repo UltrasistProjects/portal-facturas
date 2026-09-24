@@ -5,7 +5,9 @@ from fastapi.responses import RedirectResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.database import get_db
+from app.core.demo import quick_access_accounts
 from app.core.security import validate_csrf, verify_password
 from app.models import User
 from app.routers.common import templates
@@ -14,11 +16,16 @@ from app.services.audit_service import audit
 router = APIRouter()
 
 
+def render_login(request: Request, status_code: int = 200, **context):
+    context["demo_accounts"] = quick_access_accounts(settings.app_env)
+    return templates.TemplateResponse(request, "auth/login.html", context, status_code=status_code)
+
+
 @router.get("/login")
 def login_page(request: Request):
     if request.session.get("user_id"):
         return RedirectResponse("/", status_code=303)
-    return templates.TemplateResponse(request, "auth/login.html", {})
+    return render_login(request)
 
 
 @router.post("/login")
@@ -35,9 +42,7 @@ async def login(request: Request, email: str = Form(...), password: str = Form(.
             ip=request.client.host if request.client else None,
         )
         db.commit()
-        return templates.TemplateResponse(
-            request, "auth/login.html", {"error": "Credenciales invalidas o usuario deshabilitado"}, status_code=400
-        )
+        return render_login(request, 400, error="Credenciales invalidas o usuario deshabilitado")
     request.session.clear()
     request.session["user_id"] = user.id
     user.last_login_at = datetime.now(timezone.utc)

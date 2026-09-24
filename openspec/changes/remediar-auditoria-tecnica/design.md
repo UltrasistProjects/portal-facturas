@@ -231,7 +231,8 @@ Los scripts de soporte se escriben en Python, así sirven igual en Windows y Lin
   - ruff: `line-length=120`, reglas `E, F, W, I`;
   - pytest: `addopts` con `--cov=app --cov-fail-under=<umbral>`;
   - coverage: `source`, excluyendo sólo `if TYPE_CHECKING`.
-- **`requirements.lock`** generado con `pip-compile --generate-hashes`.
+- **`requirements.lock`** generado con `uv pip compile --universal --generate-hashes --python-version 3.12`. Se prefiere a `pip-compile` porque este sólo resuelve la plataforma actual: omitiría dependencias exclusivas de Windows (`colorama`) y `pip install --require-hashes` fallaría ahí.
+- **Resultado de `pip-audit` (2026-09-24):** hubo avisos en `starlette` 0.47.3 (el arreglo exige 1.3.1, lo que obliga a subir `fastapi` a 0.133.1, la mínima compatible), `lxml` 6.0.1, `python-dotenv` 1.1.1, `python-multipart` 0.0.20 y, en dev, `pytest` 8.4.2 (con `pytest-asyncio` 1.3.0 por compatibilidad). Se subió cada paquete a la versión corregida, la suite pasa sin cambios y el lock queda sin avisos conocidos.
 - **`tests/conftest.py`**, antes de importar `app`: fija `SECRET_KEY` aleatoria, `APP_ENV=test`, `DATABASE_URL` y `STORAGE_PATH` bajo `tmp_path_factory`, y ejecuta `alembic upgrade head` y el seed sobre esa BD. Las pruebas localizan los datos por `invoice_number` o `email`, nunca por `id`.
 - **Ajustes al seed para permitir el aislamiento:**
   - `seed_db.main(passwords=None)` acepta contraseñas explícitas, que las pruebas usan porque en `APP_ENV=test` serían aleatorias;

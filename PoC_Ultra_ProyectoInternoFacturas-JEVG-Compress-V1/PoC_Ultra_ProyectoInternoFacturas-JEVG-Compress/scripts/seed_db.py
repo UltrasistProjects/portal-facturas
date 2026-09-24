@@ -17,6 +17,8 @@ from sqlalchemy import select
 from app.core.config import settings
 from app.core.constants import SUPPLIER_REQUIREMENTS, DocumentType, InvoiceStatus, Role, SupplierType
 from app.core.database import SessionLocal
+from app.core.demo import DEMO_ACCOUNTS
+from app.core.passwords import generate_password
 from app.core.security import hash_password
 from app.models import AuditLog, Contract, Document, Invoice, Review, Supplier, User
 from app.services.validation_engine import run_validation
@@ -66,17 +68,21 @@ def add_document(
     return doc
 
 
-DEMO_PASSWORDS = {
-    "admin@poc.local": "Admin123!",
-    "pmo@poc.local": "Pmo123!",
-    "proveedor1@poc.local": "Proveedor123!",
-    "proveedor2@poc.local": "Proveedor123!",
-}
+def seed_passwords(passwords: dict[str, str] | None = None) -> dict[str, str]:
+    """Contrasenas por correo: explicitas, las demo documentadas en development o aleatorias en otro entorno."""
+    if passwords is not None:
+        return {account.email: passwords[account.email] for account in DEMO_ACCOUNTS}
+    if settings.app_env == "development":
+        return {account.email: account.password for account in DEMO_ACCOUNTS}
+    generated = {account.email: generate_password() for account in DEMO_ACCOUNTS}
+    print("Contrasenas generadas para los usuarios sembrados (se muestran una sola vez):")
+    for email, password in generated.items():
+        print(f"  {email}: {password}")
+    return generated
 
 
 def main(passwords: dict[str, str] | None = None) -> None:
-    """Siembra la demo. `passwords` (correo -> contrasena) sustituye las contrasenas demo."""
-    passwords = {**DEMO_PASSWORDS, **(passwords or {})}
+    """Siembra la demo. `passwords` (correo -> contrasena) fija las contrasenas de los usuarios sembrados."""
     demo = ROOT / "data" / "demo_documents"
     with tempfile.TemporaryDirectory(prefix="seed_") as tmp, SessionLocal() as db:
         workdir = Path(tmp)
@@ -87,6 +93,7 @@ def main(passwords: dict[str, str] | None = None) -> None:
         if db.scalar(select(User.id).limit(1)):
             print("La base ya contiene datos; use scripts/reset_demo.py para reconstruirla.")
             return
+        passwords = seed_passwords(passwords)
         moral = Supplier(
             business_name="Tecnologia Integral del Centro SA de CV",
             rfc="TIC210101ABC",

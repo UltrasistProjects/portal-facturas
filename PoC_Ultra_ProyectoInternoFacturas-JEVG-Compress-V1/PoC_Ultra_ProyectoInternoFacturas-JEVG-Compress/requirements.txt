@@ -1,15 +1,18 @@
-fastapi==0.116.1
+fastapi==0.133.1
+# Fijado explicitamente: es la dependencia con mayor superficie de seguridad (sesiones, middleware, errores).
+starlette==1.3.1
 uvicorn[standard]==0.35.0
 SQLAlchemy==2.0.43
 alembic==1.16.5
 Jinja2==3.1.6
 pydantic==2.11.7
 pydantic-settings==2.10.1
-python-dotenv==1.1.1
-lxml==6.0.1
+python-dotenv==1.2.3
+lxml==6.1.3
 PyMuPDF==1.26.4
-python-multipart==0.0.20
-httpx==0.28.1
+python-multipart==0.0.32
 pwdlib[argon2]==0.2.1
 itsdangerous==2.2.0
 email-validator==2.2.0
+# Base de datos IANA de zonas horarias (Windows no la incluye).
+tzdata==2026.4

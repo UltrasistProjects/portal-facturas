@@ -21,6 +21,8 @@ os.environ.update(
         "DATABASE_URL": f"sqlite:///{(TEST_ROOT / 'test.db').as_posix()}",
         "STORAGE_PATH": str(TEST_ROOT / "storage"),
         "LOG_DIR": str(TEST_ROOT / "logs"),
+        # TestClient usa http://testserver; con cookie Secure no se enviaria la sesion.
+        "SESSION_HTTPS_ONLY": "false",
     }
 )
 

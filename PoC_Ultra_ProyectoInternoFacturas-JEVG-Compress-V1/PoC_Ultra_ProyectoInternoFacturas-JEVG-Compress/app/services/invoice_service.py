@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 
 from app.core.constants import ALLOWED_TRANSITIONS, InvoiceStatus
+from app.core.errors import InvalidTransitionError
 from app.models import Invoice
 from app.services.audit_service import audit
 
@@ -10,7 +11,7 @@ from app.services.audit_service import audit
 def transition_invoice(db: Session, invoice: Invoice, target: InvoiceStatus, user_id: int | None = None) -> None:
     old = invoice.status
     if target not in ALLOWED_TRANSITIONS.get(old, set()):
-        raise ValueError(f"Transicion no permitida: {old.value} -> {target.value}")
+        raise InvalidTransitionError(f"Transicion no permitida: {old.value} -> {target.value}")
     invoice.status = target
     now = datetime.now(timezone.utc)
     if target == InvoiceStatus.UNDER_REVIEW:

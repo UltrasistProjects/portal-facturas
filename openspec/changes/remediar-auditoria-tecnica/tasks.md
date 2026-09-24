@@ -19,7 +19,7 @@
 
 ## 2. Fase 0 — Configuración segura y errores (SEC-01, SEC-02, COD-10)
 
-- [ ] 2.1 Reescribir `app/core/config.py`:
+- [x] 2.1 Reescribir `app/core/config.py`:
   - `BASE_DIR`, y `.env` anclado a `BASE_DIR`;
   - `secret_key` obligatoria, con validador (≥ 32 caracteres, rechaza el prefijo `change-me`);
   - `app_env` ∈ {`development`, `test`, `production`};
@@ -27,11 +27,11 @@
   - `session_https_only` derivado de `app_env`;
   - `business_timezone`, `log_dir` y `backup_retention`;
   - resolución de `storage_path`, `log_dir` y la ruta `sqlite:///` relativa contra `BASE_DIR`.
-- [ ] 2.2 Actualizar `.env.example`: `SECRET_KEY=` vacío con instrucciones de generación, `DEBUG=false`, y las variables nuevas (`BUSINESS_TIMEZONE`, `LOG_DIR`, `BACKUP_RETENTION`).
-- [ ] 2.3 Crear `scripts/create_env.py`, que copia `.env.example` y genera `SECRET_KEY` con `secrets.token_urlsafe(64)` sólo si `.env` no existe. Invocarlo desde `run_local.sh`, `run_local.ps1` y `run_local.bat`.
-- [ ] 2.4 En `app/main.py`: eliminar `debug=` de `FastAPI(...)`; montar `StaticFiles` y `Jinja2Templates` con rutas absolutas; enviar los logs a `settings.log_dir`.
-- [ ] 2.5 Crear `app/core/errors.py` con `BusinessRuleError`, `InvalidTransitionError` (hereda también de `ValueError`) y `DuplicateInvoiceError`. `transition_invoice` lanza `InvalidTransitionError`. Registrar un handler global que responda 409 en HTML o JSON según `Accept`.
-- [ ] 2.6 Pruebas:
+- [x] 2.2 Actualizar `.env.example`: `SECRET_KEY=` vacío con instrucciones de generación, `DEBUG=false`, y las variables nuevas (`BUSINESS_TIMEZONE`, `LOG_DIR`, `BACKUP_RETENTION`).
+- [x] 2.3 Crear `scripts/create_env.py`, que copia `.env.example` y genera `SECRET_KEY` con `secrets.token_urlsafe(64)` sólo si `.env` no existe. Invocarlo desde `run_local.sh`, `run_local.ps1` y `run_local.bat`.
+- [x] 2.4 En `app/main.py`: eliminar `debug=` de `FastAPI(...)`; montar `StaticFiles` y `Jinja2Templates` con rutas absolutas; enviar los logs a `settings.log_dir`.
+- [x] 2.5 Crear `app/core/errors.py` con `BusinessRuleError`, `InvalidTransitionError` (hereda también de `ValueError`) y `DuplicateInvoiceError`. `transition_invoice` lanza `InvalidTransitionError`. Registrar un handler global que responda 409 en HTML o JSON según `Accept`.
+- [x] 2.6 Pruebas:
   - `SECRET_KEY` ausente, placeholder o corta impide construir `Settings`;
   - `.env` existente no se sobrescribe;
   - excepción no manejada con `DEBUG=true` → 500 genérico sin traceback, con la traza en el log;
@@ -42,21 +42,21 @@
 
 ## 3. Fase 0 — Credenciales demo y dependencias (SEC-03, SEC-11)
 
-- [ ] 3.1 Crear `app/core/demo.py` con `DEMO_ACCOUNTS` (`Admin#Demo2026`, `Pmo#Demo2026`, `Proveedor#Demo2026`). El seed los usa sólo en `development`; en otro entorno genera contraseñas aleatorias conformes a la política y las imprime una sola vez.
-- [ ] 3.2 El router de login pasa las cuentas demo a la plantilla sólo si `app_env == "development"`. `auth/login.html` renderiza el bloque de acceso rápido de forma condicional, sin contraseñas codificadas en la plantilla.
-- [ ] 3.3 Verificaciones de arranque en el `lifespan` para `production`: abortar si hay usuarios `@poc.local` activos o si `SESSION_HTTPS_ONLY=false`, listando las causas.
-- [ ] 3.4 Actualizar la tabla de credenciales del README e indicar que sólo aplica en desarrollo.
-- [ ] 3.5 Pruebas:
+- [x] 3.1 Crear `app/core/demo.py` con `DEMO_ACCOUNTS` (`Admin#Demo2026`, `Pmo#Demo2026`, `Proveedor#Demo2026`). El seed los usa sólo en `development`; en otro entorno genera contraseñas aleatorias conformes a la política y las imprime una sola vez.
+- [x] 3.2 El router de login pasa las cuentas demo a la plantilla sólo si `app_env == "development"`. `auth/login.html` renderiza el bloque de acceso rápido de forma condicional, sin contraseñas codificadas en la plantilla.
+- [x] 3.3 Verificaciones de arranque en el `lifespan` para `production`: abortar si hay usuarios `@poc.local` activos o si `SESSION_HTTPS_ONLY=false`, listando las causas.
+- [x] 3.4 Actualizar la tabla de credenciales del README e indicar que sólo aplica en desarrollo.
+- [x] 3.5 Pruebas:
   - login en `development` muestra `data-demo`; en `production` no contiene `data-demo` ni contraseñas (usar `monkeypatch`);
   - el seed en `test` sin contraseñas explícitas genera contraseñas aleatorias;
   - el arranque en `production` aborta con un usuario demo activo o sin cookie `Secure`.
-- [ ] 3.6 Dependencias:
+- [x] 3.6 Dependencias:
   - fijar `starlette==<versión resuelta>` en `requirements.txt`;
   - mover `httpx` a `requirements-dev.txt`;
-  - añadir `tzdata` a producción, y `ruff`, `pytest-cov`, `pip-audit` y `pip-tools` a dev;
-  - generar `requirements.lock` con `pip-compile --generate-hashes`.
-- [ ] 3.7 Ejecutar `pip-audit -r requirements.lock` y registrar el resultado. Actualizar sólo los paquetes señalados, regenerar el lock y volver a correr la suite. Documentar las excepciones justificadas, si las hay.
-- [ ] 3.8 Checkpoint Fase 0: suite verde, `ruff` limpio, commit "fix(seguridad): fase 0 de la auditoría".
+  - añadir `tzdata` a producción, y `ruff`, `pytest-cov`, `pip-audit` y `uv` a dev;
+  - generar `requirements.lock` con `uv pip compile --universal --generate-hashes` (lock multiplataforma; `pip-compile` sólo resuelve la plataforma actual y rompería `--require-hashes` en Windows).
+- [x] 3.7 Ejecutar `pip-audit -r requirements.lock` y registrar el resultado. Actualizar sólo los paquetes señalados, regenerar el lock y volver a correr la suite. Documentar las excepciones justificadas, si las hay.
+- [x] 3.8 Checkpoint Fase 0: suite verde, `ruff` limpio, commit "fix(seguridad): fase 0 de la auditoría".
 
 ## 4. Línea base de migraciones (BD-03, adelantado a la Fase 1)
 

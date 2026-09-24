@@ -27,8 +27,8 @@ La AI recomienda o aporta evidencia; el Rule Engine determina la prevalidación 
 python -m venv .venv
 .venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
-pip install -r requirements.txt
-Copy-Item .env.example .env
+pip install --require-hashes -r requirements.lock
+python scripts/create_env.py
 python scripts/reset_demo.py
 uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
@@ -43,8 +43,8 @@ En CMD use `.venv\Scripts\activate` y `run_local.bat`.
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
-pip install -r requirements.txt
-cp .env.example .env
+pip install --require-hashes -r requirements.lock
+python scripts/create_env.py
 python scripts/reset_demo.py
 uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
@@ -53,12 +53,19 @@ Abra <http://127.0.0.1:8000>. El health check está en <http://127.0.0.1:8000/he
 
 ## Credenciales demo
 
+Sólo aplican con `APP_ENV=development`:
+
 | Rol | Usuario | Contraseña |
 |---|---|---|
-| ADMIN | `admin@poc.local` | `Admin123!` |
-| INTERNAL / PMO | `pmo@poc.local` | `Pmo123!` |
-| Proveedor moral | `proveedor1@poc.local` | `Proveedor123!` |
-| Proveedor físico | `proveedor2@poc.local` | `Proveedor123!` |
+| ADMIN | `admin@poc.local` | `Admin#Demo2026` |
+| INTERNAL / PMO | `pmo@poc.local` | `Pmo#Demo2026` |
+| Proveedor moral | `proveedor1@poc.local` | `Proveedor#Demo2026` |
+| Proveedor físico | `proveedor2@poc.local` | `Proveedor#Demo2026` |
+
+- La fuente única de estas cuentas es `app/core/demo.py`.
+- El bloque de acceso rápido del login sólo aparece en `development`.
+- En `test` o `production`, el seed genera contraseñas aleatorias y las imprime una sola vez en consola.
+- Con `APP_ENV=production`, la aplicación **no arranca** mientras exista alguna cuenta `@poc.local` activa.
 
 No reutilice estas contraseñas fuera de la PoC.
 
@@ -79,7 +86,21 @@ pip install -r requirements-dev.txt
 pytest
 ```
 
+La suite crea una BD SQLite y un `storage/` temporales por sesión. No lee ni modifica `data/invoice_portal.db` ni `storage/` del proyecto.
+
 La suite cubre login válido/inválido, CSRF, RBAC, aislamiento entre proveedores, parser CFDI, XML corrupto, RFC receptor, Método/Forma de pago extraídos, regla de fecha, montos con `Decimal`, UUID duplicado, score y transiciones inválidas.
+
+## Dependencias
+
+- `requirements.txt` declara las dependencias directas fijadas, y `requirements.lock` las congela todas (incluidas las transitivas) con hashes. El lock es universal: sirve en Windows, Linux y macOS.
+- Regenerar el lock tras cambiar `requirements.txt`:
+
+  ```bash
+  uv pip compile --universal --generate-hashes --python-version 3.12 requirements.txt -o requirements.lock
+  ```
+
+- Auditar vulnerabilidades conocidas: `pip-audit -r requirements.lock` (y `pip-audit -r requirements-dev.txt` para las herramientas).
+- Resultado de la auditoría del 2026-09-24: se corrigieron avisos en `starlette` (0.47.3 → 1.3.1, que obliga a subir `fastapi` a 0.133.1), `lxml` (6.1.3), `python-dotenv` (1.2.3), `python-multipart` (0.0.32) y `pytest` (9.0.3). El lock no tiene avisos conocidos.
 
 ## Estructura
 
@@ -134,7 +155,9 @@ Cada regla evaluada aporta al denominador según severidad: `CRITICAL=35`, `ERRO
 - Errores sin stack trace en UI; detalle técnico en `logs/app.log`.
 - Versiones sustituidas quedan en DB con `is_current=false` y referencia al documento anterior.
 
-Para producción configure una `SECRET_KEY` aleatoria larga, `DEBUG=false`, `SESSION_HTTPS_ONLY=true` y políticas adicionales de retención, malware scanning, headers, rate limiting y gestión de secretos.
+`SECRET_KEY` es obligatoria (mínimo 32 caracteres; se rechaza el valor de ejemplo `change-me...`). `scripts/create_env.py` la genera al crear `.env`. `DEBUG` sólo sube el nivel de log; nunca muestra trazas al usuario.
+
+Para producción use `APP_ENV=production`: la aplicación no arranca sin `SESSION_HTTPS_ONLY=true` ni con cuentas demo activas. Añada además políticas de retención, escaneo antimalware y gestión de secretos.
 
 ## AI Mock Mode
 
