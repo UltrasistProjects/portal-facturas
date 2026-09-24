@@ -258,6 +258,21 @@ class LoginAttempt(Base):
     attempted_at: Mapped[datetime] = mapped_column(UTCDateTime, default=now_utc)
 
 
+class UserSession(Base):
+    """Sesion del lado del servidor: la cookie solo lleva un identificador opaco; aqui se guarda su SHA-256
+    (AUDITORIA SEC-07)."""
+
+    __tablename__ = "user_sessions"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(restrict("users.id"), index=True)
+    sid_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=now_utc)
+    last_seen_at: Mapped[datetime] = mapped_column(UTCDateTime, default=now_utc)
+    revoked_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
+    ip: Mapped[str | None] = mapped_column(String(50))
+    user_agent: Mapped[str | None] = mapped_column(String(255))
+
+
 class Review(Base):
     __tablename__ = "reviews"
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -281,4 +296,5 @@ __all__ = [
     "AuditLog",
     "LoginAttempt",
     "Review",
+    "UserSession",
 ]

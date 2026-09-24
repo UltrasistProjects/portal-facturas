@@ -273,15 +273,15 @@
 
 ## 14. Fase 2 — Sesiones revocables (SEC-07)
 
-- [ ] 14.1 Crear el modelo `UserSession` (`user_id`, `sid_hash` único, `created_at`, `last_seen_at`, `revoked_at`, `ip`, `user_agent` truncado) y la revisión `0006_user_sessions`.
-- [ ] 14.2 Crear `app/services/session_service.py` con reloj inyectable: `create`, `resolve` (60 min de inactividad, 8 h absolutas, revocación), `touch` (a lo sumo 1 escritura por minuto), `revoke`, `revoke_all_for_user` y `purge` (vencidas hace más de 7 días).
-- [ ] 14.3 Integración:
+- [x] 14.1 Crear el modelo `UserSession` (`user_id`, `sid_hash` único, `created_at`, `last_seen_at`, `revoked_at`, `ip`, `user_agent` truncado) y la revisión `0006_user_sessions`.
+- [x] 14.2 Crear `app/services/session_service.py` con reloj inyectable: `create`, `resolve` (60 min de inactividad, 8 h absolutas, revocación), `touch` (a lo sumo 1 escritura por minuto), `revoke`, `revoke_all_for_user` y `purge` (vencidas hace más de 7 días).
+- [x] 14.3 Integración:
   - el login limpia la cookie y crea un `sid` nuevo;
   - el logout revoca;
   - `get_current_user` resuelve por `sid`;
   - `toggle_user` revoca las sesiones del usuario deshabilitado;
   - `SessionMiddleware` con `max_age` de 8 h y `https_only` desde `settings`.
-- [ ] 14.4 Pruebas:
+- [x] 14.4 Pruebas:
   - cookie reutilizada tras logout → redirige a `/login`;
   - inactividad de 61 min → expira;
   - actividad continua de más de 8 h → expira;

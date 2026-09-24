@@ -11,6 +11,7 @@ from app.models import AuditLog, Supplier, User
 from app.repositories.pagination import paginate
 from app.routers.common import templates
 from app.schemas import UserCreate, validation_message
+from app.services import session_service
 from app.services.audit_service import audit
 
 router = APIRouter(prefix="/admin")
@@ -72,6 +73,8 @@ async def toggle_user(
     if target and target.id != user.id:
         old = target.is_active
         target.is_active = not old
+        if not target.is_active:
+            session_service.revoke_all_for_user(db, target.id)
         audit(
             db, "USER_STATUS_CHANGED", "User", target.id, user.id, {"is_active": old}, {"is_active": target.is_active}
         )

@@ -37,11 +37,14 @@ async def validate_csrf(request: Request) -> None:
 
 def get_current_user(request: Request, db: Annotated[Session, Depends(get_db)]):
     from app.models import User
+    from app.services import session_service
 
-    user_id = request.session.get("user_id")
-    user = db.get(User, user_id) if user_id else None
+    user_session = session_service.resolve(db, request.session.get("sid"))
+    user = db.get(User, user_session.user_id) if user_session else None
     if not user or not user.is_active:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Autenticacion requerida")
+    if session_service.touch(user_session):
+        db.commit()  # renovacion por actividad; no hay otros cambios pendientes a esta altura
     return user
 
 
