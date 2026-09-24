@@ -1,5 +1,5 @@
 from sqlalchemy import select
-from tests.conftest import login
+from tests.conftest import invoice_by_number, login, supplier_by_email
 from app.core.database import SessionLocal
 from app.models import AuditLog, Invoice, ValidationResult
 from app.services.ai.mock_analyzer import LocalMockAnalyzer
@@ -7,7 +7,11 @@ from app.services.ai.mock_analyzer import LocalMockAnalyzer
 
 def test_paginas_principales_renderizan(client):
     login(client)
-    for path in ("/", "/invoices", "/invoices/2", "/suppliers", "/suppliers/1", "/contracts", "/admin/users", "/admin/rules", "/admin/audit"):
+    invoice = invoice_by_number("A-CORRECTA")
+    supplier = supplier_by_email("proveedor1@poc.local")
+    paths = ("/", "/invoices", f"/invoices/{invoice.id}", "/suppliers", f"/suppliers/{supplier.id}", "/contracts",
+             "/admin/users", "/admin/rules", "/admin/audit")
+    for path in paths:
         response = client.get(path)
         assert response.status_code == 200, path
         assert "Invoice Portal" in response.text

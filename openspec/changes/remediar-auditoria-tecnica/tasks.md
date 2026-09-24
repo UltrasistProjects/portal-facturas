@@ -2,19 +2,19 @@
 
 ## 1. Línea base y aislamiento de pruebas (COD-07b, COD-08)
 
-- [ ] 1.1 Crear `.venv` con Python 3.12, instalar `requirements-dev.txt`, ejecutar la suite actual en el checkout limpio y registrar el resultado de referencia (14 pruebas).
-- [ ] 1.2 Crear `pyproject.toml` con la configuración de `ruff` (`line-length=120`, reglas `E,F,W,I`), `pytest` y `coverage` (fuente `app`), aún sin umbral.
-- [ ] 1.3 Ajustar `scripts/seed_db.py`:
+- [x] 1.1 Crear `.venv` con Python 3.12, instalar `requirements-dev.txt`, ejecutar la suite actual en el checkout limpio y registrar el resultado de referencia (14 pruebas).
+- [x] 1.2 Crear `pyproject.toml` con la configuración de `ruff` (`line-length=120`, reglas `E,F,W,I`), `pytest` y `coverage` (fuente `app`), aún sin umbral.
+- [x] 1.3 Ajustar `scripts/seed_db.py`:
   - `main(passwords=None)` acepta contraseñas explícitas;
   - escribe documentos en `settings.storage_path`, no en `ROOT/storage`;
   - genera `_seed_N.xml` y el PDF demo en un directorio temporal, sin reescribir `data/demo_documents/factura_demo.pdf`.
-- [ ] 1.4 Reescribir `tests/conftest.py`. Antes de importar `app`:
+- [x] 1.4 Reescribir `tests/conftest.py`. Antes de importar `app`:
   - fijar `SECRET_KEY` aleatoria, `APP_ENV=test`, y `DATABASE_URL` y `STORAGE_PATH` bajo `tmp_path_factory`;
   - ejecutar `alembic upgrade head` y el seed con contraseñas explícitas;
   - eliminar la invocación de `reset_demo.py`.
-- [ ] 1.5 Sustituir en `tests/test_permissions.py` y `tests/test_demo_workflow.py` las dependencias de ids y folios del seed (`/invoices/2`, `FAC-2026-00002`, `/suppliers/1`) por búsquedas por `invoice_number` y `email`.
-- [ ] 1.6 Añadir una prueba guardián: la BD y el almacenamiento de la sesión de pruebas están bajo el directorio temporal, y `data/invoice_portal.db` y `storage/` del proyecto conservan su SHA-256 tras la suite.
-- [ ] 1.7 Commit aislado de pruebas: "test: aislar BD y almacenamiento de la suite".
+- [x] 1.5 Sustituir en `tests/test_permissions.py` y `tests/test_demo_workflow.py` las dependencias de ids y folios del seed (`/invoices/2`, `FAC-2026-00002`, `/suppliers/1`) por búsquedas por `invoice_number` y `email`.
+- [x] 1.6 Añadir una prueba guardián: la BD y el almacenamiento de la sesión de pruebas están bajo el directorio temporal, y `data/invoice_portal.db` y `storage/` del proyecto conservan su SHA-256 tras la suite.
+- [x] 1.7 Commit aislado de pruebas: "test: aislar BD y almacenamiento de la suite".
 - [ ] 1.8 Ejecutar `ruff format` y `ruff check --fix` (E701/E702/F401/I), corregir a mano lo restante sin cambios funcionales y verificar la suite. Hacer un commit aislado: "style: ruff format (sin cambios funcionales)".
 
 ## 2. Fase 0 — Configuración segura y errores (SEC-01, SEC-02, COD-10)

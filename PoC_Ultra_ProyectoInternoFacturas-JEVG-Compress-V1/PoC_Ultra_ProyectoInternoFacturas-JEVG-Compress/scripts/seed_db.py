@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import shutil
 import sys
+import tempfile
 from datetime import date, datetime, timezone
 from decimal import Decimal
 from pathlib import Path
@@ -13,6 +14,7 @@ sys.path.insert(0, str(ROOT))
 import fitz
 from sqlalchemy import select
 
+from app.core.config import settings
 from app.core.constants import DocumentType, InvoiceStatus, Role, SUPPLIER_REQUIREMENTS, SupplierType
 from app.core.database import SessionLocal
 from app.core.security import hash_password
@@ -33,7 +35,7 @@ def create_demo_pdf(path: Path) -> None:
 
 def add_document(db, *, user_id: int, supplier_id: int, invoice_id: int | None, doc_type: str, source: Path) -> Document:
     content = source.read_bytes()
-    folder = ROOT / "storage" / ("invoices" if invoice_id else "suppliers") / str(invoice_id or supplier_id)
+    folder = settings.storage_path.resolve() / ("invoices" if invoice_id else "suppliers") / str(invoice_id or supplier_id)
     folder.mkdir(parents=True, exist_ok=True)
     destination = folder / f"demo_{hashlib.sha256((str(invoice_id)+doc_type).encode()).hexdigest()[:10]}{source.suffix}"
     shutil.copyfile(source, destination)
@@ -46,11 +48,24 @@ def add_document(db, *, user_id: int, supplier_id: int, invoice_id: int | None, 
     return doc
 
 
-def main() -> None:
+DEMO_PASSWORDS = {
+    "admin@poc.local": "Admin123!",
+    "pmo@poc.local": "Pmo123!",
+    "proveedor1@poc.local": "Proveedor123!",
+    "proveedor2@poc.local": "Proveedor123!",
+}
+
+
+def main(passwords: dict[str, str] | None = None) -> None:
+    """Siembra la demo. `passwords` (correo -> contrasena) sustituye las contrasenas demo."""
+    passwords = {**DEMO_PASSWORDS, **(passwords or {})}
     demo = ROOT / "data" / "demo_documents"
-    pdf = demo / "factura_demo.pdf"
-    create_demo_pdf(pdf)
-    with SessionLocal() as db:
+    with tempfile.TemporaryDirectory(prefix="seed_") as tmp, SessionLocal() as db:
+        workdir = Path(tmp)
+        pdf = demo / "factura_demo.pdf"
+        if not pdf.is_file():
+            pdf = workdir / "factura_demo.pdf"
+            create_demo_pdf(pdf)
         if db.scalar(select(User.id).limit(1)):
             print("La base ya contiene datos; use scripts/reset_demo.py para reconstruirla.")
             return
@@ -62,10 +77,10 @@ def main() -> None:
             economic_proposal=True, bank_information="CLABE DEMO terminacion 0002", notes="Identidad y RFC ficticios para pruebas.")
         db.add_all([moral, physical]); db.flush()
         users = [
-            User(name="Administrador Demo", email="admin@poc.local", password_hash=hash_password("Admin123!"), role=Role.ADMIN),
-            User(name="PMO Demo", email="pmo@poc.local", password_hash=hash_password("Pmo123!"), role=Role.INTERNAL),
-            User(name="Proveedor Moral Demo", email="proveedor1@poc.local", password_hash=hash_password("Proveedor123!"), role=Role.PROVIDER, supplier_id=moral.id),
-            User(name="Proveedor Fisico Demo", email="proveedor2@poc.local", password_hash=hash_password("Proveedor123!"), role=Role.PROVIDER, supplier_id=physical.id),
+            User(name="Administrador Demo", email="admin@poc.local", password_hash=hash_password(passwords["admin@poc.local"]), role=Role.ADMIN),
+            User(name="PMO Demo", email="pmo@poc.local", password_hash=hash_password(passwords["pmo@poc.local"]), role=Role.INTERNAL),
+            User(name="Proveedor Moral Demo", email="proveedor1@poc.local", password_hash=hash_password(passwords["proveedor1@poc.local"]), role=Role.PROVIDER, supplier_id=moral.id),
+            User(name="Proveedor Fisico Demo", email="proveedor2@poc.local", password_hash=hash_password(passwords["proveedor2@poc.local"]), role=Role.PROVIDER, supplier_id=physical.id),
         ]
         db.add_all(users); db.flush()
         contracts = [
@@ -99,7 +114,7 @@ def main() -> None:
             db.add(invoice); db.flush()
             if xml_name:
                 xml_source = demo / xml_name
-                custom_xml = demo / f"_seed_{index}.xml"
+                custom_xml = workdir / f"_seed_{index}.xml"
                 raw = xml_source.read_text(encoding="utf-8").replace("DEMO0001-0000-4000-8000-000000000001", f"DEMO{index:04d}-0000-4000-8000-{index:012d}")
                 custom_xml.write_text(raw, encoding="utf-8")
                 add_document(db, user_id=users[2].id, supplier_id=moral.id, invoice_id=invoice.id, doc_type=DocumentType.INVOICE_XML.value, source=custom_xml)
@@ -113,8 +128,6 @@ def main() -> None:
                     db.add(Review(invoice_id=invoice.id, reviewer_id=users[1].id, decision=final_status.value, comments=f"Decision demo: {note}"))
             db.add(AuditLog(user_id=users[0].id, action="DEMO_SEEDED", entity="Invoice", entity_id=str(invoice.id), new_value={"scenario": note}))
             db.commit()
-            custom_xml = demo / f"_seed_{index}.xml"
-            if custom_xml.exists(): custom_xml.unlink()
         print("Seed completo: 4 usuarios, 2 proveedores, 2 contratos y 10 facturas demo.")
 
 
