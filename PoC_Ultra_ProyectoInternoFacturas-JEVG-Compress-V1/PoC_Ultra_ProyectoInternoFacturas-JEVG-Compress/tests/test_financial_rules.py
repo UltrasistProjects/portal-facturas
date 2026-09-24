@@ -1,6 +1,6 @@
-from datetime import date
 from decimal import Decimal
 from types import SimpleNamespace
+
 from app.rules.financial_rules import financial_rules
 from app.services.reconciliation_service import reconcile_amount
 
@@ -14,9 +14,10 @@ def test_monto_dentro_y_excedido():
 
 
 def test_reglas_financieras_y_duplicado_uuid():
-    invoice = SimpleNamespace(subtotal=Decimal("100"), tax=Decimal("16"), total=Decimal("116"), currency="MXN", uuid="U", invoice_number="F")
+    invoice = SimpleNamespace(
+        subtotal=Decimal("100"), tax=Decimal("16"), total=Decimal("116"), currency="MXN", uuid="U", invoice_number="F"
+    )
     contract = SimpleNamespace(authorized_amount=Decimal("100"), currency="MXN")
     results = financial_rules(invoice, contract, None, True, False)
     assert next(x for x in results if x.rule_code == "FIN-001").status == "PASS"
     assert next(x for x in results if x.rule_code == "FIN-004").status == "FAIL"
-

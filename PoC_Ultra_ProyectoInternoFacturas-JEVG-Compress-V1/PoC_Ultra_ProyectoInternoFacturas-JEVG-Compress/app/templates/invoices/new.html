@@ -1,6 +1,7 @@
 {% extends "base.html" %}{% block title %}Nueva factura{% endblock %}{% block content %}
 <div class="page-heading"><div><span class="eyebrow">NUEVO EXPEDIENTE</span><h1>Registrar factura</h1><p>Paso 1 de 4 · Informacion general</p></div></div>
 <div class="steps"><span class="active">1 <small>Informacion</small></span><span>2 <small>Documentos</small></span><span>3 <small>Prevalidacion</small></span><span>4 <small>Resultado</small></span></div>
+{% if error %}<div class="alert alert-danger">{{ error }}</div>{% endif %}
 <form method="post" class="panel form-panel"><input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}"><div class="form-grid">
 <div class="field span-2"><label>Proveedor</label><select name="supplier_id" id="supplier" class="form-select" required>{% for s in suppliers %}<option value="{{ s.id }}">{{ s.business_name }} · {{ s.rfc }}</option>{% endfor %}</select></div>
 <div class="field span-2"><label>Contrato activo</label><select name="contract_id" id="contract" class="form-select" required>{% for c in contracts %}<option value="{{ c.id }}" data-supplier="{{ c.supplier_id }}" data-project="{{ c.project_name }}" data-leader="{{ c.project_leader }}">{{ c.project_name }} · {{ c.authorized_amount|money }} {{ c.currency }}</option>{% endfor %}</select></div>

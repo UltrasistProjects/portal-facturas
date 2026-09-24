@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.core.constants import Role
 from app.core.database import get_db
+from app.core.middleware import bind_user
 
 password_hash = PasswordHash.recommended()
 
@@ -37,10 +38,16 @@ async def validate_csrf(request: Request) -> None:
 
 def get_current_user(request: Request, db: Annotated[Session, Depends(get_db)]):
     from app.models import User
-    user_id = request.session.get("user_id")
-    user = db.get(User, user_id) if user_id else None
+    from app.services import session_service
+
+    user_session = session_service.resolve(db, request.session.get("sid"))
+    user = db.get(User, user_session.user_id) if user_session else None
     if not user or not user.is_active:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Autenticacion requerida")
+    if session_service.touch(user_session):
+        db.commit()  # renovacion por actividad; no hay otros cambios pendientes a esta altura
+    request.state.user_id = user.id
+    bind_user(user.id)
     return user
 
 
@@ -49,5 +56,5 @@ def require_roles(*roles: Role):
         if user.role not in roles:
             raise HTTPException(status_code=403, detail="No cuenta con permisos")
         return user
-    return dependency
 
+    return dependency

@@ -1,19 +1,32 @@
 from functools import lru_cache
 from pathlib import Path
+from typing import Literal
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from pydantic import field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Raiz del proyecto: todas las rutas relativas de la configuracion se resuelven contra ella, no contra el CWD.
+BASE_DIR = Path(__file__).resolve().parents[2]
+
+MIN_SECRET_KEY_LENGTH = 32
+SECRET_KEY_HINT = 'Genere una con: python -c "import secrets; print(secrets.token_urlsafe(64))"'
 
 
 class Settings(BaseSettings):
     app_name: str = "Invoice Portal PoC"
-    app_env: str = "development"
-    debug: bool = True
-    secret_key: str = "change-me-use-a-long-random-value"
+    app_env: Literal["development", "test", "production"] = "development"
+    debug: bool = False
+    secret_key: str = Field(default="", validate_default=True)
     database_url: str = "sqlite:///./data/invoice_portal.db"
-    storage_path: Path = Path("./storage")
+    storage_path: Path = Path("storage")
+    log_dir: Path = Path("logs")
+    backup_dir: Path = Path("backups")
     max_upload_mb: int = 20
-    session_https_only: bool = False
+    # None significa "derivar de app_env": Secure fuera de development.
+    session_https_only: bool | None = None
+    business_timezone: str = "America/Mexico_City"
+    backup_retention: int = Field(default=14, ge=1)
     ai_enabled: bool = False
     document_ai_provider: str = "mock"
     azure_document_intelligence_endpoint: str = ""
@@ -25,7 +38,7 @@ class Settings(BaseSettings):
     azure_openai_deployment: str = ""
     azure_openai_api_version: str = ""
 
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+    model_config = SettingsConfigDict(env_file=BASE_DIR / ".env", env_file_encoding="utf-8", extra="ignore")
 
     @field_validator("debug", "session_https_only", "ai_enabled", mode="before")
     @classmethod
@@ -37,6 +50,63 @@ class Settings(BaseSettings):
             if normalized in {"0", "false", "no", "off", "release", "production", ""}:
                 return False
         return value
+
+    @field_validator("app_env", mode="before")
+    @classmethod
+    def normalized_env(cls, value):
+        return value.strip().lower() if isinstance(value, str) else value
+
+    @field_validator("secret_key")
+    @classmethod
+    def strong_secret_key(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError(f"SECRET_KEY es obligatoria. {SECRET_KEY_HINT}")
+        if value.lower().startswith("change-me"):
+            raise ValueError(f"SECRET_KEY contiene el valor de ejemplo inseguro 'change-me...'. {SECRET_KEY_HINT}")
+        if len(value) < MIN_SECRET_KEY_LENGTH:
+            raise ValueError(f"SECRET_KEY debe tener al menos {MIN_SECRET_KEY_LENGTH} caracteres. {SECRET_KEY_HINT}")
+        return value
+
+    @field_validator("business_timezone")
+    @classmethod
+    def known_timezone(cls, value: str) -> str:
+        try:
+            ZoneInfo(value)
+        except (ZoneInfoNotFoundError, ValueError) as exc:
+            raise ValueError(f"BUSINESS_TIMEZONE desconocida: {value!r} (ejemplo: America/Mexico_City)") from exc
+        return value
+
+    @field_validator("storage_path", "log_dir", "backup_dir")
+    @classmethod
+    def anchored_path(cls, value: Path) -> Path:
+        return (value if value.is_absolute() else BASE_DIR / value).resolve()
+
+    @field_validator("database_url")
+    @classmethod
+    def anchored_sqlite_url(cls, value: str) -> str:
+        prefix = "sqlite:///"
+        if not value.startswith(prefix):
+            return value
+        path = value.removeprefix(prefix)
+        if not path or path == ":memory:" or Path(path).is_absolute():
+            return value
+        return f"{prefix}{(BASE_DIR / path).resolve().as_posix()}"
+
+    @property
+    def sqlite_path(self) -> Path | None:
+        """Archivo de la BD si es SQLite en disco; None para otros motores o :memory:."""
+        prefix = "sqlite:///"
+        path = self.database_url.removeprefix(prefix)
+        if not self.database_url.startswith(prefix) or not path or path == ":memory:":
+            return None
+        return Path(path)
+
+    @model_validator(mode="after")
+    def derived_defaults(self):
+        if self.session_https_only is None:
+            self.session_https_only = self.app_env != "development"
+        return self
 
 
 @lru_cache
