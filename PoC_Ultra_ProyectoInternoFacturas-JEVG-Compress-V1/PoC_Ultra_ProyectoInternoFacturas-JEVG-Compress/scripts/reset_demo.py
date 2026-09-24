@@ -22,8 +22,9 @@ def main() -> None:
     if not settings.database_url.startswith("sqlite:///"):
         raise RuntimeError("reset_demo solo admite SQLite local")
     db_path = assert_inside_workspace(ROOT / settings.database_url.removeprefix("sqlite:///"))
-    if db_path.exists():
-        db_path.unlink()
+    # Con WAL, la BD tiene archivos -wal y -shm asociados que deben eliminarse junto con ella.
+    for path in (db_path, db_path.with_name(f"{db_path.name}-wal"), db_path.with_name(f"{db_path.name}-shm")):
+        path.unlink(missing_ok=True)
     for relative in ("storage/invoices", "storage/suppliers", "storage/temp"):
         folder = assert_inside_workspace(ROOT / relative)
         if folder.exists():

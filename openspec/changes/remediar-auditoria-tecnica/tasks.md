@@ -70,11 +70,11 @@
 
 ## 5. Fase 1 — PRAGMAs de SQLite e índices (BD-01, BD-06, BD-07)
 
-- [ ] 5.1 Ejecutar `PRAGMA foreign_key_check` sobre una BD sembrada y confirmar que no hay huérfanos. Implementar `install_sqlite_pragmas(engine)` en `app/core/database.py` (`foreign_keys=ON`, `journal_mode=WAL`, `busy_timeout=5000`, `synchronous=NORMAL`) y aplicarlo al engine de la app.
-- [ ] 5.2 En los modelos: `index=True` en `invoices.uploaded_by`, `invoices.reviewed_by`, `invoices.contract_id`, `documents.uploaded_by`, `documents.replaced_document_id`, `reviews.reviewer_id` y `users.supplier_id`. Añadir `Index("ix_invoices_supplier_created", supplier_id, created_at)` e índice en `invoices.created_at`, y quitar el índice simple de `invoices.supplier_id`.
-- [ ] 5.3 Crear la revisión `0002_indices` y verificar con `alembic check`.
-- [ ] 5.4 `scripts/reset_demo.py` elimina también `invoice_portal.db-wal` y `invoice_portal.db-shm`.
-- [ ] 5.5 Pruebas:
+- [x] 5.1 Ejecutar `PRAGMA foreign_key_check` sobre una BD sembrada y confirmar que no hay huérfanos. Implementar `install_sqlite_pragmas(engine)` en `app/core/database.py` (`foreign_keys=ON`, `journal_mode=WAL`, `busy_timeout=5000`, `synchronous=NORMAL`) y aplicarlo al engine de la app.
+- [x] 5.2 En los modelos: `index=True` en `invoices.uploaded_by`, `invoices.reviewed_by`, `invoices.contract_id`, `documents.uploaded_by`, `documents.replaced_document_id`, `reviews.reviewer_id` y `users.supplier_id`. Añadir `Index("ix_invoices_supplier_created", supplier_id, created_at)` e índice en `invoices.created_at`, y quitar el índice simple de `invoices.supplier_id`.
+- [x] 5.3 Crear la revisión `0002_indices` y verificar con `alembic check`.
+- [x] 5.4 `scripts/reset_demo.py` elimina también `invoice_portal.db-wal` y `invoice_portal.db-shm`.
+- [x] 5.5 Pruebas:
   - en una conexión nueva, `PRAGMA foreign_keys = 1`, `journal_mode = wal` y `busy_timeout = 5000`;
   - insertar una factura con `supplier_id` inexistente → `IntegrityError`;
   - una lectura concurrente durante una transacción de escritura abierta no falla;

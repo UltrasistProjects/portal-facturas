@@ -5,7 +5,7 @@ from sqlalchemy import engine_from_config, pool, text
 
 import app.models  # noqa: F401
 from app.core.config import settings
-from app.core.database import Base
+from app.core.database import Base, install_sqlite_pragmas
 
 config = context.config
 # Un llamador (p. ej. las pruebas) puede fijar otra BD en config.attributes["database_url"].
@@ -30,6 +30,7 @@ def run_migrations_online():
     connectable = engine_from_config(
         config.get_section(config.config_ini_section), prefix="sqlalchemy.", poolclass=pool.NullPool
     )
+    install_sqlite_pragmas(connectable)
     with connectable.connect() as connection:
         sqlite = connection.dialect.name == "sqlite"
         if sqlite:

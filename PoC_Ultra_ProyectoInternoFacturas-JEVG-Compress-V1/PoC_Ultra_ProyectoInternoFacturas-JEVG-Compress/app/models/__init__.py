@@ -4,7 +4,7 @@ from datetime import date, datetime, timezone
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Numeric, String, Text
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Index, Numeric, String, Text
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.types import JSON
@@ -24,7 +24,7 @@ class User(Base):
     email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
     password_hash: Mapped[str] = mapped_column(String(512))
     role: Mapped[Role] = mapped_column(SAEnum(Role), index=True)
-    supplier_id: Mapped[int | None] = mapped_column(ForeignKey("suppliers.id"), nullable=True)
+    supplier_id: Mapped[int | None] = mapped_column(ForeignKey("suppliers.id"), nullable=True, index=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -69,11 +69,13 @@ class Contract(Base):
 
 class Invoice(Base):
     __tablename__ = "invoices"
+    # (supplier_id, created_at) cubre el listado de un proveedor ordenado por fecha; created_at, el listado interno.
+    __table_args__ = (Index("ix_invoices_supplier_created", "supplier_id", "created_at"),)
     id: Mapped[int] = mapped_column(primary_key=True)
     internal_folio: Mapped[str] = mapped_column(String(30), unique=True, index=True)
-    supplier_id: Mapped[int] = mapped_column(ForeignKey("suppliers.id"), index=True)
-    uploaded_by: Mapped[int] = mapped_column(ForeignKey("users.id"))
-    contract_id: Mapped[int | None] = mapped_column(ForeignKey("contracts.id"))
+    supplier_id: Mapped[int] = mapped_column(ForeignKey("suppliers.id"))
+    uploaded_by: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    contract_id: Mapped[int | None] = mapped_column(ForeignKey("contracts.id"), index=True)
     invoice_number: Mapped[str] = mapped_column(String(100), index=True)
     uuid: Mapped[str | None] = mapped_column(String(50), index=True)
     invoice_date: Mapped[date | None] = mapped_column(Date)
@@ -87,10 +89,10 @@ class Invoice(Base):
     currency: Mapped[str] = mapped_column(String(3), default="MXN")
     status: Mapped[InvoiceStatus] = mapped_column(SAEnum(InvoiceStatus), default=InvoiceStatus.DRAFT, index=True)
     validation_score: Mapped[int | None]
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc, index=True)
     submitted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    reviewed_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    reviewed_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), index=True)
     comments: Mapped[str | None] = mapped_column(Text)
     supplier: Mapped[Supplier] = relationship(back_populates="invoices")
     contract: Mapped[Contract | None] = relationship()
@@ -112,13 +114,13 @@ class Document(Base):
     file_size: Mapped[int]
     sha256: Mapped[str] = mapped_column(String(64))
     uploaded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
-    uploaded_by: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    uploaded_by: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
     processing_status: Mapped[str] = mapped_column(String(30), default="PENDING")
     page_count: Mapped[int | None]
     document_date: Mapped[date | None] = mapped_column(Date)
     metadata_json: Mapped[dict[str, Any] | None] = mapped_column(JSON)
     is_current: Mapped[bool] = mapped_column(Boolean, default=True)
-    replaced_document_id: Mapped[int | None] = mapped_column(ForeignKey("documents.id"))
+    replaced_document_id: Mapped[int | None] = mapped_column(ForeignKey("documents.id"), index=True)
     invoice: Mapped[Invoice | None] = relationship(back_populates="documents", foreign_keys=[invoice_id])
 
 
@@ -159,7 +161,7 @@ class Review(Base):
     __tablename__ = "reviews"
     id: Mapped[int] = mapped_column(primary_key=True)
     invoice_id: Mapped[int] = mapped_column(ForeignKey("invoices.id"), index=True)
-    reviewer_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    reviewer_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
     decision: Mapped[str] = mapped_column(String(40))
     comments: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
