@@ -60,10 +60,10 @@
 
 ## 4. Línea base de migraciones (BD-03, adelantado a la Fase 1)
 
-- [ ] 4.1 **Antes de modificar cualquier modelo**, generar con `alembic revision --autogenerate` contra una BD vacía el snapshot del esquema actual. Reemplazar el cuerpo de `alembic/versions/0001_initial.py` (mismo `revision`) por `op.create_table`/`op.create_index` explícitos, sin importar `app.models`, y con `downgrade()` que lance `NotImplementedError("Restaure un respaldo")`.
-- [ ] 4.2 En `alembic/env.py`: `render_as_batch=True`; `PRAGMA foreign_keys=OFF` a nivel de conexión antes de abrir la transacción; `PRAGMA foreign_key_check` al terminar, fallando si hay violaciones.
-- [ ] 4.3 Reescribir `scripts/init_db.py`: `alembic upgrade head` y seed sólo si la BD está vacía, sustituyendo `create_all`.
-- [ ] 4.4 Pruebas:
+- [x] 4.1 **Antes de modificar cualquier modelo**, generar con `alembic revision --autogenerate` contra una BD vacía el snapshot del esquema actual. Reemplazar el cuerpo de `alembic/versions/0001_initial.py` (mismo `revision`) por `op.create_table`/`op.create_index` explícitos, sin importar `app.models`, y con `downgrade()` que lance `NotImplementedError("Restaure un respaldo")`.
+- [x] 4.2 En `alembic/env.py`: `render_as_batch=True`; `PRAGMA foreign_keys=OFF` a nivel de conexión antes de abrir la transacción; `PRAGMA foreign_key_check` al terminar, fallando si hay violaciones.
+- [x] 4.3 Reescribir `scripts/init_db.py`: `alembic upgrade head` y seed sólo si la BD está vacía, sustituyendo `create_all`.
+- [x] 4.4 Pruebas:
   - `upgrade head` sobre una BD vacía seguido de `alembic check` no reporta diferencias;
   - `downgrade base` lanza `NotImplementedError` sin tocar tablas;
   - ninguna revisión contiene `create_all`, `drop_all` ni `app.models`.

@@ -41,15 +41,23 @@ def _workspace_snapshot() -> dict[str, str]:
     return {str(p.relative_to(ROOT)): hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(files)}
 
 
+def alembic_config(database_url: str | None = None):
+    """Config de Alembic sin alembic.ini: su fileConfig reconfiguraria el logging a mitad de la suite."""
+    from alembic.config import Config
+
+    config = Config()
+    config.set_main_option("script_location", str(ROOT / "alembic"))
+    if database_url:
+        config.attributes["database_url"] = database_url
+    return config
+
+
 @pytest.fixture(scope="session", autouse=True)
 def test_database():
     before = _workspace_snapshot()
     from alembic import command
-    from alembic.config import Config
 
-    config = Config(str(ROOT / "alembic.ini"))
-    config.set_main_option("script_location", str(ROOT / "alembic"))
-    command.upgrade(config, "head")
+    command.upgrade(alembic_config(), "head")
     from scripts.seed_db import main as seed
 
     seed(passwords=TEST_PASSWORDS)
