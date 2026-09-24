@@ -19,7 +19,9 @@ La AI recomienda o aporta evidencia; el Rule Engine determina la prevalidación 
 
 - Python 3.12 recomendado (validado con 3.12.4).
 - Windows PowerShell/CMD o Linux/macOS con shell POSIX.
-- No requiere Node.js, Docker, Azure ni conexión a servicios externos para operar.
+- **Docker con Compose v2** para la base de datos: Docker Desktop en Windows y macOS; Docker Engine o Podman (con `podman compose` o el alias `docker`) en Linux. Sólo PostgreSQL corre en un contenedor; la aplicación corre en el host.
+- Puerto `55432` libre en `127.0.0.1` (configurable con `POSTGRES_PORT` en `.env`; el 5432 y el 5433 suelen estar ocupados por otras instancias).
+- No requiere Node.js, Azure ni conexión a servicios externos para operar.
 
 ## Instalación en Windows PowerShell
 
@@ -29,11 +31,12 @@ python -m venv .venv
 python -m pip install --upgrade pip
 pip install --require-hashes -r requirements.lock
 python scripts/create_env.py
+docker compose up -d --wait db
 python scripts/init_db.py
 uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
-También puede ejecutar `scripts\create_venv.ps1` y después `run_local.ps1`. `run_local` crea `.env` si no existe, aplica las migraciones y siembra la demo sólo si la base está vacía. **Conserva los datos entre arranques.**
+También puede ejecutar `scripts\create_venv.ps1` y después `run_local.ps1`. `run_local` crea o completa `.env`, levanta PostgreSQL (`docker compose up -d --wait db`), aplica las migraciones y siembra la demo sólo si la base está vacía. **Conserva los datos entre arranques.**
 
 En CMD use `.venv\Scripts\activate` y `run_local.bat`.
 
@@ -45,11 +48,12 @@ source .venv/bin/activate
 python -m pip install --upgrade pip
 pip install --require-hashes -r requirements.lock
 python scripts/create_env.py
+docker compose up -d --wait db
 python scripts/init_db.py
 uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
-Abra <http://127.0.0.1:8000>. El health check está en <http://127.0.0.1:8000/health>.
+O bien `./run_local.sh`, que hace lo mismo. Abra <http://127.0.0.1:8000>. El health check está en <http://127.0.0.1:8000/health>.
 
 ## Credenciales demo
 
@@ -71,39 +75,46 @@ No reutilice estas contraseñas fuera de la PoC.
 
 ## Base de datos, migraciones y demo
 
-- SQLite: `data/invoice_portal.db` (ignorada por Git). Opera en modo WAL, así que junto a ella aparecen `invoice_portal.db-wal` y `invoice_portal.db-shm`.
-- Aplicar migraciones y sembrar sólo si la base está vacía: `python scripts/init_db.py`.
+- **PostgreSQL 18** en Docker, definido en `compose.yaml` (servicio `db`, imagen `postgres:18.<menor>-alpine` fijada). Es el único motor soportado.
+  - Sólo escucha en `127.0.0.1:${POSTGRES_PORT}` (55432 por defecto).
+  - Toma `POSTGRES_USER`, `POSTGRES_DB` y `POSTGRES_PASSWORD` del mismo `.env` que la aplicación; sin `POSTGRES_PASSWORD`, `docker compose up` se niega a arrancar.
+  - Los datos viven en el volumen `portal-facturas_pgdata`: sobreviven a `docker compose down` y sólo se borran con `docker compose down -v`.
+  - `docker compose up -d --wait db` arranca el servicio y espera a que el healthcheck (`pg_isready`) lo declare `healthy`.
+- `DATABASE_URL` es obligatoria y debe usar `postgresql+psycopg://` (driver psycopg 3). `python scripts/create_env.py` la genera junto con `POSTGRES_PASSWORD`; en un `.env` existente sólo añade las claves ausentes y reemplaza, avisando, una URL de SQLite.
+- Tipos nativos: montos en `NUMERIC(16,2)` y confianza en `NUMERIC(5,4)` (un valor con más decimales se rechaza antes de enviarse: PostgreSQL lo redondearía en silencio), fechas-hora en `TIMESTAMPTZ` normalizadas a UTC y JSON en `JSONB`. Cada conexión trabaja en UTC.
+- Aplicar migraciones y sembrar sólo si la base está vacía: `python scripts/init_db.py` (falla con un mensaje claro si PostgreSQL no responde).
 - Aplicar migraciones: `alembic upgrade head`.
 - Cargar seed sobre una base vacía: `python scripts/seed_db.py`.
 - Reconstruir base y archivos demo: `python scripts/reset_demo.py`.
 
+> **`data/invoice_portal.db` ya no se usa.** Era la base SQLite de versiones anteriores y sólo contenía datos demo. No hay traslado automático: la demo se reconstruye en PostgreSQL con `init_db.py`. Puede conservar o borrar el archivo.
+
 **Migraciones.**
 
-- Cada revisión de `alembic/versions/` describe su cambio de forma explícita. `0001_initial` es el snapshot del esquema original y ningún `downgrade` borra todo: los que perderían datos lanzan `NotImplementedError` (restaure un respaldo).
-- **Regla:** todo cambio en `app/models` requiere una revisión nueva. Nunca edite una revisión publicada. `alembic check` (incluido en `scripts/check.py`) falla si modelos y migraciones difieren.
-- `0004_integridad_datos` convierte montos a centavos y rutas de documentos a relativas. Antes de tocar nada verifica precondiciones: huérfanos, UUID o números de factura duplicados, valores fuera de catálogo, montos con más de 2 decimales y rutas no convertibles. Si alguna falla, aborta sin cambios y lista las filas.
-  - Una BD sembrada con la versión anterior del seed **tiene UUID duplicados** entre escenarios demo y no migrará.
-  - Si es sólo demo, recréela con `python scripts/reset_demo.py`, que respalda antes de borrar.
+- Cada revisión de `alembic/versions/` describe su cambio de forma explícita. La base es `0001_postgresql_baseline`: crea las 11 tablas con sus llaves foráneas `RESTRICT`, `UNIQUE`, `CHECK` e índices, sin importar los modelos. La cadena anterior, escrita para SQLite, queda sólo en el historial de Git.
+- Ningún `downgrade` borra todo: los que perderían datos (incluido el de la revisión base) lanzan `NotImplementedError` (restaure un respaldo).
+- **Regla:** todo cambio en `app/models` requiere una revisión nueva a partir de `0001_postgresql_baseline`. Nunca edite una revisión publicada. `alembic check` (incluido en `scripts/check.py`) falla si modelos y migraciones difieren.
 
 `reset_demo.py` borra datos, así que actúa con cuidado:
 
-- no se ejecuta con `APP_ENV=production`;
-- valida que la BD y `storage/` estén dentro del workspace;
+- no se ejecuta con `APP_ENV=production` ni si `DATABASE_URL` apunta a un servidor que no sea local (`localhost`, `127.0.0.1` o `::1`);
+- valida que `storage/` esté dentro del workspace;
 - si detecta datos que no son demo (usuarios fuera de `@poc.local` o facturas no sembradas), pide escribir `REINICIAR`; sin terminal interactiva exige `--yes`;
 - antes de borrar genera un respaldo en `backups/`;
-- elimina la BD con sus archivos `-wal`/`-shm` y el contenido de `storage/`, aplica las migraciones y vuelve a sembrar.
+- recrea el esquema (`DROP SCHEMA public CASCADE; CREATE SCHEMA public`), vacía `storage/`, aplica las migraciones y vuelve a sembrar. Detenga la aplicación antes: si mantiene bloqueos, el script falla a los 10 s en lugar de esperar.
 
 ## Respaldo y restauración
 
 Los documentos fiscales deben conservarse 5 años. Respalde la BD **y** `storage/`; uno sin el otro no sirve.
 
-- **Respaldo:** `python scripts/backup.py`. Puede ejecutarse con la aplicación en marcha, porque usa la API de respaldo en línea de SQLite (consistente también con WAL).
-  - Crea `backups/<AAAAMMDD-HHMMSS>/` con la BD, `storage.zip` y `manifest.json` (revisión Alembic, fecha UTC y SHA-256 de cada artefacto).
+- **Respaldo:** `python scripts/backup.py`. Puede ejecutarse con la aplicación en marcha: `pg_dump` toma una instantánea transaccional consistente.
+  - `pg_dump -Fc` corre **dentro del contenedor** `db`, con la misma versión que el servidor. El `pg_dump` del host puede ser más antiguo y negarse a respaldar un servidor 18.
+  - Crea `backups/<AAAAMMDD-HHMMSS>/` con `<base>.dump`, `storage.zip` y `manifest.json` (revisión Alembic, versión del servidor, fecha UTC y SHA-256 de cada artefacto). Antes de darlo por bueno comprueba el volcado con `pg_restore --list`.
   - Conserva los `BACKUP_RETENTION` respaldos más recientes (14 por defecto) en `BACKUP_DIR` (`./backups`).
 - **Restauración:**
-  1. Detenga la aplicación.
+  1. Detenga la aplicación: `pg_restore --clean` necesita bloquear las tablas.
   2. Ejecute `python scripts/restore_backup.py backups/<AAAAMMDD-HHMMSS> --yes`.
-  3. El script verifica los SHA-256 del manifiesto y aborta si no coinciden. Luego respalda el estado actual y reemplaza la BD y `storage/`.
+  3. El script verifica los SHA-256 del manifiesto y el contenido de `storage.zip`, y aborta sin tocar nada si algo no cuadra. Luego respalda el estado actual (sin poda) y ejecuta `pg_restore --clean --if-exists --single-transaction --no-owner` en el contenedor: si falla, la BD queda como estaba. Por último reemplaza `storage/`.
   4. Arranque la aplicación.
 - Programe `backup.py` (Programador de tareas de Windows o cron) y copie `backups/` fuera del equipo. Un respaldo en el mismo disco no protege contra la pérdida del disco.
 
@@ -111,11 +122,16 @@ Los documentos fiscales deben conservarse 5 años. Respalde la BD **y** `storage
 
 ```powershell
 pip install -r requirements-dev.txt
+docker compose up -d --wait db   # las pruebas necesitan PostgreSQL
 pytest                      # pruebas con umbral de cobertura (pyproject.toml) y coverage.xml para SonarQube
 python scripts/check.py     # ruff, formato, alembic check, pytest y pip-audit (--skip-audit sin conexión)
 ```
 
-La suite crea una BD SQLite y un `storage/` temporales por sesión. No lee ni modifica `data/invoice_portal.db` ni `storage/` del proyecto. La cobertura mínima de `app/` es del 93 % (`--cov-fail-under`).
+- Cada sesión de `pytest` crea una base temporal `portal_test_<aleatorio>` en el servidor y un `storage/` temporal, y los elimina al terminar, también si la sesión falla. No modifica la base de trabajo ni `storage/` del proyecto: al terminar compara el número de filas de cada tabla y la huella de `storage/`.
+- Si el servidor no responde, la sesión se cancela indicando ejecutar `docker compose up -d --wait db`.
+- Otro servidor: defina `TEST_DATABASE_URL` (`postgresql+psycopg://...`); se usa en lugar de `DATABASE_URL`. Si no tiene acceso al contenedor `db`, defina también `PG_CLIENT=local` para que las pruebas de respaldo usen `pg_dump`/`pg_restore` del host, que deben ser de la misma versión mayor que el servidor o más nuevos. El CI compartido necesitará una de estas dos opciones.
+- `scripts/check.py` ejecuta `alembic check` sobre otra base temporal, que elimina al terminar aunque el paso falle.
+- La cobertura mínima de `app/` es del 93 % (`--cov-fail-under`).
 
 Cubre:
 
@@ -123,7 +139,7 @@ Cubre:
 - sesiones revocables, RBAC y aislamiento entre proveedores;
 - carga y descarga de documentos (firmas de contenido, tamaño, path traversal);
 - parser CFDI y reglas XML/FIN/DAT, incluido el límite del día 20 en hora local;
-- dinero exacto, restricciones de la BD y migraciones desde el esquema original con datos heredados;
+- dinero exacto (`NUMERIC` sin redondeo silencioso), restricciones de la BD, plan de consulta con `EXPLAIN` y migraciones sobre una base PostgreSQL vacía;
 - cabeceras de seguridad, errores sin traza y log JSON sin datos sensibles;
 - respaldo, restauración, reinicio de demo y empaquetado.
 
@@ -137,7 +153,7 @@ Cubre:
   ```
 
 - Auditar vulnerabilidades conocidas: `pip-audit -r requirements.lock` (y `pip-audit -r requirements-dev.txt` para las herramientas).
-- Resultado de la auditoría del 2026-09-24: se corrigieron avisos en `starlette` (0.47.3 → 1.3.1, que obliga a subir `fastapi` a 0.133.1), `lxml` (6.1.3), `python-dotenv` (1.2.3), `python-multipart` (0.0.32) y `pytest` (9.0.3). El lock no tiene avisos conocidos.
+- Resultado de la auditoría del 2026-09-24: se corrigieron avisos en `starlette` (0.47.3 → 1.3.1, que obliga a subir `fastapi` a 0.133.1), `lxml` (6.1.3), `python-dotenv` (1.2.3), `python-multipart` (0.0.32) y `pytest` (9.0.3). Después se añadió el driver `psycopg[binary]` 3.3.6 (con libpq incluida en wheels para Windows, Linux y macOS). El lock no tiene avisos conocidos.
 
 ## Estructura
 
@@ -153,8 +169,9 @@ app/
   templates/     interfaz Jinja server-rendered
   static/        CSS y JavaScript Vanilla
 alembic/         migraciones explícitas (una revisión por cambio de modelo)
-data/            SQLite generada y documentos sintéticos versionados
-scripts/         .env, BD, seed, reset, respaldo/restauración, empaquetado y check
+compose.yaml     PostgreSQL local (servicio db)
+data/            documentos sintéticos versionados
+scripts/         .env, BD, seed, reset, respaldo/restauración, utilidades de PostgreSQL (pgtools), empaquetado y check
 storage/         uploads segregados por proveedor/factura
 tests/           pruebas críticas automatizadas
 ```
@@ -207,7 +224,7 @@ Para producción use `APP_ENV=production`: la aplicación no arranca sin `SESSIO
 
 **Detrás de un proxy inverso**, arranque uvicorn con `--proxy-headers --forwarded-allow-ips=<IP del proxy>`. Sin eso, todas las peticiones parecen venir del proxy: el límite de login por IP se vuelve global y HSTS no se emite.
 
-**Cifrado en reposo (requisito de infraestructura).** La BD SQLite y `storage/` guardan en claro RFC, razones sociales, montos, datos bancarios y documentos. Con datos reales, cifre el volumen (BitLocker o LUKS) o migre a un motor con TDE (Azure SQL o PostgreSQL gestionado). Restrinja también el acceso a `backups/`.
+**Cifrado en reposo (requisito de infraestructura).** El volumen de PostgreSQL (`pgdata`) y `storage/` guardan en claro RFC, razones sociales, montos, datos bancarios y documentos. Con datos reales, cifre el disco donde Docker guarda sus volúmenes (BitLocker o LUKS) o use un servicio gestionado con cifrado (Azure Database for PostgreSQL). Restrinja también el acceso a `backups/`.
 
 ### Variables de entorno
 
@@ -217,7 +234,12 @@ Para producción use `APP_ENV=production`: la aplicación no arranca sin `SESSIO
 | `APP_ENV` | `development` | `development`, `test` o `production`. Gobierna los valores por defecto y las verificaciones de arranque. |
 | `DEBUG` | `false` | Sólo eleva el nivel de log. |
 | `SESSION_HTTPS_ONLY` | según `APP_ENV` | Cookie `Secure`; `true` fuera de `development`. |
-| `DATABASE_URL`, `STORAGE_PATH`, `LOG_DIR`, `BACKUP_DIR` | `./data/...`, `./storage`, `./logs`, `./backups` | Las rutas relativas se resuelven contra la raíz del proyecto, no contra el directorio de trabajo. |
+| `DATABASE_URL` | *(obligatoria)* | `postgresql+psycopg://usuario:contraseña@127.0.0.1:55432/portal`. `create_env.py` la genera; una URL de SQLite impide arrancar. |
+| `POSTGRES_USER`, `POSTGRES_DB`, `POSTGRES_PASSWORD` | `portal`, `portal`, *(generada)* | Credenciales del contenedor `db`; Compose las lee del mismo `.env`. |
+| `POSTGRES_PORT` | `55432` | Puerto publicado sólo en `127.0.0.1`. Si lo cambia, actualice también el puerto de `DATABASE_URL`. |
+| `TEST_DATABASE_URL` | *(sin definir)* | Servidor donde `pytest` y `scripts/check.py` crean sus bases temporales; sin definir, se usa el de `DATABASE_URL`. |
+| `PG_CLIENT` | `docker` | `docker`: `pg_dump`/`pg_restore` dentro del contenedor `db`. `local`: los binarios del host contra la URL (p. ej. CI con un servicio PostgreSQL). |
+| `STORAGE_PATH`, `LOG_DIR`, `BACKUP_DIR` | `./storage`, `./logs`, `./backups` | Las rutas relativas se resuelven contra la raíz del proyecto, no contra el directorio de trabajo. |
 | `BUSINESS_TIMEZONE` | `America/Mexico_City` | Zona de las reglas de calendario (corte del día 20) y del año del folio. |
 | `BACKUP_RETENTION` | `14` | Respaldos que conserva `scripts/backup.py`. |
 | `MAX_UPLOAD_MB` | `20` | Tamaño máximo por archivo. |
@@ -227,7 +249,7 @@ Para producción use `APP_ENV=production`: la aplicación no arranca sin `SESSIO
 `python scripts/package_release.py` genera `dist/<proyecto>-<fecha>.zip`:
 
 - Con Git, incluye sólo los archivos versionados; sin Git, recorre el árbol aplicando una lista de exclusión.
-- Nunca incluye `.env`, la BD (ni sus `-wal`/`-shm`), `logs/`, `storage/`, `backups/`, `.venv/` ni cachés.
+- Nunca incluye `.env`, bases SQLite heredadas en `data/`, `logs/`, `storage/`, `backups/`, `.venv/` ni cachés. La base PostgreSQL vive en el volumen de Docker, fuera del árbol.
 - Al terminar verifica el ZIP: si contiene algo prohibido, lo elimina y falla.
 
 No distribuya copias comprimidas a mano del directorio de trabajo.
@@ -271,4 +293,4 @@ Los XML bajo `data/demo_documents/` son estructuralmente útiles para el parser,
 
 ## Próximos pasos para producción
 
-PostgreSQL/Azure SQL (los montos en centavos se convierten a `NUMERIC` con una migración), Azure Blob con malware scanning, secretos administrados, Entra ID/External ID, cifrado y retención documental, workers para OCR, agregación centralizada del log JSON, pruebas E2E, accesibilidad formal y un workflow de excepciones con doble aprobación.
+Contenerizar la aplicación (Dockerfile y servicio `app` en Compose), PostgreSQL gestionado en Azure, Azure Blob con malware scanning, secretos administrados, Entra ID/External ID, cifrado y retención documental, workers para OCR, agregación centralizada del log JSON, pruebas E2E, accesibilidad formal y un workflow de excepciones con doble aprobación.

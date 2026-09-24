@@ -16,7 +16,7 @@ known-third-party = ["alembic"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-# Umbral = cobertura medida al completar la remediacion (93.4 %), redondeada hacia abajo; nunca menor que 80.
+# Umbral = cobertura medida tras migrar a PostgreSQL (93.76 %), redondeada hacia abajo; nunca menor que 80.
 addopts = "--cov=app --cov-report=term-missing:skip-covered --cov-report=xml --cov-fail-under=93"
 filterwarnings = [
     # PyMuPDF (SWIG) emite estas advertencias al importarse en Python 3.12+.
