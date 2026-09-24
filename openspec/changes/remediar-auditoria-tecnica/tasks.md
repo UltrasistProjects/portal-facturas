@@ -257,11 +257,11 @@
 
 ## 13. Fase 2 — Trazabilidad de contratos (BD-09)
 
-- [ ] 13.1 Añadir `created_at`, `created_by`, `updated_at` y `updated_by` a `Contract`. Crear el modelo `ContractAmendment` (`previous_amount`/`new_amount` como `Money`, `reason` obligatorio, `created_by`, `created_at`, `CHECK new > 0`). Crear la revisión `0005_trazabilidad_contratos`: los contratos existentes reciben la marca temporal de la migración y `*_by = NULL`.
-- [ ] 13.2 `create_contract` asigna los campos de auditoría.
-- [ ] 13.3 Crear `POST /contracts/{id}/amendments` (sólo ADMIN, con CSRF): valida motivo y monto > 0; en una transacción crea la enmienda, actualiza el monto y `updated_*`, y audita `CONTRACT_AMOUNT_CHANGED` con old/new. Añadir a `contracts/list.html` el formulario de enmienda (ADMIN) y el historial (INTERNAL y ADMIN).
-- [ ] 13.4 FIN-001 añade a `evidence` `authorized_amount` y `amendment_id` (la última enmienda, o `null`).
-- [ ] 13.5 Pruebas:
+- [x] 13.1 Añadir `created_at`, `created_by`, `updated_at` y `updated_by` a `Contract`. Crear el modelo `ContractAmendment` (`previous_amount`/`new_amount` como `Money`, `reason` obligatorio, `created_by`, `created_at`, `CHECK new > 0`). Crear la revisión `0005_trazabilidad_contratos`: los contratos existentes reciben la marca temporal de la migración y `*_by = NULL`.
+- [x] 13.2 `create_contract` asigna los campos de auditoría.
+- [x] 13.3 Crear `POST /contracts/{id}/amendments` (sólo ADMIN, con CSRF): valida motivo y monto > 0; en una transacción crea la enmienda, actualiza el monto y `updated_*`, y audita `CONTRACT_AMOUNT_CHANGED` con old/new. Añadir a `contracts/list.html` el formulario de enmienda (ADMIN) y el historial (INTERNAL y ADMIN).
+- [x] 13.4 FIN-001 añade a `evidence` `authorized_amount` y `amendment_id` (la última enmienda, o `null`).
+- [x] 13.5 Pruebas:
   - campos de auditoría en el alta;
   - enmienda válida (enmienda, monto, auditoría con old/new);
   - INTERNAL o PROVIDER → 403;

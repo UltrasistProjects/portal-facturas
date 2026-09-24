@@ -1,6 +1,7 @@
 from decimal import Decimal
 
 from app.rules.base import outcome
+from app.services.contract_service import current_amendment_id
 from app.services.reconciliation_service import reconcile_amount
 
 
@@ -24,7 +25,12 @@ def financial_rules(invoice, contract, xml_data, duplicate_uuid: bool, duplicate
             subtotal,
             "CFDI.xml",
             "Comprobante.SubTotal",
-            {"difference": str(rec.difference) if rec else None},
+            {
+                "difference": str(rec.difference) if rec else None,
+                # Monto y enmienda vigentes al validar: la evidencia sigue siendo auditable si el contrato cambia.
+                "authorized_amount": f"{contract.authorized_amount:.2f}" if contract else None,
+                "amendment_id": current_amendment_id(contract) if contract else None,
+            },
         ),
         outcome(
             "FIN-002",

@@ -93,7 +93,31 @@ class Contract(Base):
     end_date: Mapped[date] = mapped_column(Date)
     status: Mapped[ContractStatus] = mapped_column(enum_column(ContractStatus), default=ContractStatus.ACTIVE)
     notes: Mapped[str | None] = mapped_column(Text)
+    # Trazabilidad del control financiero principal (AUDITORIA BD-09).
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=now_utc)
+    created_by: Mapped[int | None] = mapped_column(restrict("users.id"))
+    updated_at: Mapped[datetime] = mapped_column(UTCDateTime, default=now_utc, onupdate=now_utc)
+    updated_by: Mapped[int | None] = mapped_column(restrict("users.id"))
     supplier: Mapped[Supplier] = relationship(back_populates="contracts")
+    amendments: Mapped[list[ContractAmendment]] = relationship(
+        back_populates="contract", order_by="ContractAmendment.id", passive_deletes="all"
+    )
+
+
+class ContractAmendment(Base):
+    """Cambio del monto autorizado. El monto solo se modifica mediante una enmienda auditada."""
+
+    __tablename__ = "contract_amendments"
+    __table_args__ = (CheckConstraint("new_amount_cents > 0", name="ck_contract_amendments_new_amount_positive"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    contract_id: Mapped[int] = mapped_column(restrict("contracts.id"), index=True)
+    previous_amount: Mapped[Decimal] = mapped_column("previous_amount_cents", Money())
+    new_amount: Mapped[Decimal] = mapped_column("new_amount_cents", Money())
+    reason: Mapped[str] = mapped_column(Text)
+    created_by: Mapped[int] = mapped_column(restrict("users.id"), index=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=now_utc)
+    contract: Mapped[Contract] = relationship(back_populates="amendments")
+    author: Mapped[User] = relationship()
 
 
 class Invoice(Base):
@@ -250,6 +274,7 @@ __all__ = [
     "User",
     "Supplier",
     "Contract",
+    "ContractAmendment",
     "Invoice",
     "Document",
     "ValidationResult",

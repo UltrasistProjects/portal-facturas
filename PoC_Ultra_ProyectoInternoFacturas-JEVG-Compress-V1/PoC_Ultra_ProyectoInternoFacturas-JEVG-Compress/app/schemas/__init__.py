@@ -20,6 +20,8 @@ FIELD_LABELS = {
     "authorized_amount": "Monto autorizado",
     "currency": "Moneda",
     "end_date": "Vigencia",
+    "new_amount": "Monto nuevo",
+    "reason": "Motivo",
 }
 ERROR_MESSAGES = {
     "missing": "es obligatorio",
@@ -110,6 +112,12 @@ class ContractCreate(BaseModel):
         if self.end_date < self.start_date:
             raise ValueError("la fecha de fin no puede ser anterior a la de inicio")
         return self
+
+
+class ContractAmendmentCreate(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+    new_amount: Decimal = Field(gt=0, decimal_places=2)
+    reason: str = Field(min_length=3, max_length=500)
 
 
 class InvoiceCreate(BaseModel):
