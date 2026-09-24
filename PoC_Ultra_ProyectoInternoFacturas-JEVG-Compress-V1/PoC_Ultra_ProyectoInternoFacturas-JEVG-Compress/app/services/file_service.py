@@ -60,12 +60,24 @@ class StoredFile:
     mime_type: str
     file_size: int
     sha256: str
+    # Lo que se persiste en documents.path: relativo a la raiz de almacenamiento, con "/".
+    relative_path: str
 
 
 class LocalFileStorage:
     def __init__(self, root: Path | None = None):
         self.root = (root or settings.storage_path).resolve()
         self.root.mkdir(parents=True, exist_ok=True)
+
+    def relative_path(self, path: Path) -> str:
+        return path.resolve().relative_to(self.root).as_posix()
+
+    def resolve(self, relative_path: str) -> Path:
+        """Ruta absoluta de un documento; rechaza rutas que salgan de la raiz (FileNotFoundError)."""
+        path = (self.root / relative_path).resolve()
+        if self.root not in path.parents:
+            raise FileNotFoundError(relative_path)
+        return path
 
     async def save_invoice_file(self, invoice_id: int, upload: UploadFile) -> StoredFile:
         return await self._save("invoices", invoice_id, upload)
@@ -93,7 +105,15 @@ class LocalFileStorage:
         folder.mkdir(parents=True, exist_ok=True)
         destination = folder / stored
         destination.write_bytes(content)
-        return StoredFile(original, stored, destination, mime, len(content), hashlib.sha256(content).hexdigest())
+        return StoredFile(
+            original,
+            stored,
+            destination,
+            mime,
+            len(content),
+            hashlib.sha256(content).hexdigest(),
+            self.relative_path(destination),
+        )
 
 
 def safe_download_name(name: str) -> str:

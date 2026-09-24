@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import re
 import shutil
 import sys
 import tempfile
@@ -21,6 +22,7 @@ from app.core.demo import DEMO_ACCOUNTS
 from app.core.passwords import generate_password
 from app.core.security import hash_password
 from app.models import AuditLog, Contract, Document, Invoice, Review, Supplier, User
+from app.services.file_service import LocalFileStorage
 from app.services.validation_engine import run_validation
 
 
@@ -39,9 +41,8 @@ def add_document(
     db, *, user_id: int, supplier_id: int, invoice_id: int | None, doc_type: str, source: Path
 ) -> Document:
     content = source.read_bytes()
-    folder = (
-        settings.storage_path.resolve() / ("invoices" if invoice_id else "suppliers") / str(invoice_id or supplier_id)
-    )
+    storage = LocalFileStorage()
+    folder = storage.root / ("invoices" if invoice_id else "suppliers") / str(invoice_id or supplier_id)
     folder.mkdir(parents=True, exist_ok=True)
     destination = (
         folder / f"demo_{hashlib.sha256((str(invoice_id) + doc_type).encode()).hexdigest()[:10]}{source.suffix}"
@@ -53,7 +54,7 @@ def add_document(
         document_type=doc_type,
         original_filename=source.name,
         stored_filename=destination.name,
-        path=str(destination.resolve()),
+        path=storage.relative_path(destination),
         mime_type="application/pdf"
         if source.suffix == ".pdf"
         else ("application/xml" if source.suffix == ".xml" else "text/plain"),
@@ -226,8 +227,11 @@ def main(passwords: dict[str, str] | None = None) -> None:
             if xml_name:
                 xml_source = demo / xml_name
                 custom_xml = workdir / f"_seed_{index}.xml"
-                raw = xml_source.read_text(encoding="utf-8").replace(
-                    "DEMO0001-0000-4000-8000-000000000001", f"DEMO{index:04d}-0000-4000-8000-{index:012d}"
+                # Un UUID fiscal distinto por factura, sea cual sea el del XML de origen (UNIQUE en invoices.uuid).
+                raw = re.sub(
+                    r'UUID="[^"]*"',
+                    f'UUID="DEMO{index:04d}-0000-4000-8000-{index:012d}"',
+                    xml_source.read_text(encoding="utf-8"),
                 )
                 custom_xml.write_text(raw, encoding="utf-8")
                 add_document(

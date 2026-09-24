@@ -12,6 +12,22 @@ class SupplierType(StrEnum):
     PERSONA_MORAL = "PERSONA_MORAL"
 
 
+class SupplierStatus(StrEnum):
+    ACTIVE = "ACTIVE"
+    INACTIVE = "INACTIVE"
+
+
+class ContractStatus(StrEnum):
+    ACTIVE = "ACTIVE"
+    INACTIVE = "INACTIVE"
+
+
+class ProcessingStatus(StrEnum):
+    PENDING = "PENDING"
+    PROCESSED = "PROCESSED"
+    FAILED = "FAILED"
+
+
 class InvoiceStatus(StrEnum):
     DRAFT = "DRAFT"
     UPLOADED = "UPLOADED"

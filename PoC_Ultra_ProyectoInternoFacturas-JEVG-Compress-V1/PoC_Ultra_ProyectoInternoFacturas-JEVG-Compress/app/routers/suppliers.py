@@ -6,7 +6,7 @@ from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.constants import Role, SupplierType
+from app.core.constants import ProcessingStatus, Role, SupplierType
 from app.core.database import get_db
 from app.core.security import get_current_user, require_roles, validate_csrf
 from app.models import Document, Supplier
@@ -111,12 +111,12 @@ async def upload_supplier_document(
         document_type=document_type,
         original_filename=stored.original_filename,
         stored_filename=stored.stored_filename,
-        path=str(stored.path),
+        path=stored.relative_path,
         mime_type=stored.mime_type,
         file_size=stored.file_size,
         sha256=stored.sha256,
         uploaded_by=user.id,
-        processing_status="PROCESSED",
+        processing_status=ProcessingStatus.PROCESSED,
         document_date=document_date,
         metadata_json={"scope": "supplier"},
         replaced_document_id=previous.id if previous else None,

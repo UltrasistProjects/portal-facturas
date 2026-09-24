@@ -178,34 +178,34 @@
 
 ## 11. Fase 2 — Integridad de datos y dinero exacto (BD-02, BD-04, BD-05, BD-10 UTC, BD-11, BD-12)
 
-- [ ] 11.1 Crear `app/core/types.py`:
+- [x] 11.1 Crear `app/core/types.py`:
   - `ScaledDecimal(scale)`: entero; rechaza valores no exactos en la escala;
   - `Money = ScaledDecimal(2)`;
   - `UTCDateTime`: normaliza a UTC al escribir y devuelve `tzinfo=UTC` al leer.
   
   Incluir pruebas unitarias.
-- [ ] 11.2 Añadir `SupplierStatus` y `ContractStatus` (`ACTIVE`, `INACTIVE`) en `app/core/constants.py` y reemplazar los literales `"ACTIVE"` en modelos, routers y `supplier_rules`.
-- [ ] 11.3 Actualizar los modelos:
+- [x] 11.2 Añadir `SupplierStatus` y `ContractStatus` (`ACTIVE`, `INACTIVE`) en `app/core/constants.py` y reemplazar los literales `"ACTIVE"` en modelos, routers y `supplier_rules`.
+- [x] 11.3 Actualizar los modelos:
   - columnas físicas `subtotal_cents`, `tax_cents`, `total_cents`, `authorized_amount_cents` y `confidence_bp` (`ScaledDecimal(4)`), conservando los nombres de atributo;
   - `UTCDateTime` en todas las fechas-hora;
   - `SAEnum(..., native_enum=False, create_constraint=True)` en rol, tipo de proveedor, estados de factura, proveedor y contrato, estado y severidad de regla, decisión de revisión y `processing_status`;
   - `CheckConstraint` en montos ≥ 0, `authorized_amount_cents > 0`, `end_date >= start_date`, `validation_score` 0..100 y `confidence_bp` 0..10000;
   - `UniqueConstraint("uuid")` y `UniqueConstraint("supplier_id", "invoice_number")` con nombres `uq_invoices_uuid` y `uq_invoices_supplier_number`;
   - `ondelete="RESTRICT"` en las FKs.
-- [ ] 11.4 En las relaciones de `Invoice`, quitar `delete-orphan` (`cascade="save-update, merge"`) y registrar un evento `before_delete` sobre `Invoice` que lance `BusinessRuleError("Borrado fisico de facturas prohibido")`.
-- [ ] 11.5 Rutas relativas:
+- [x] 11.4 En las relaciones de `Invoice`, quitar `delete-orphan` (`cascade="save-update, merge"`) y registrar un evento `before_delete` sobre `Invoice` que lance `BusinessRuleError("Borrado fisico de facturas prohibido")`.
+- [x] 11.5 Rutas relativas:
   - `LocalFileStorage.relative_path()` y `resolve()`, con verificación de raíz → 404;
   - `StoredFile.relative_path`;
   - usar la ruta relativa al persistir (routers de facturas y proveedores, seed), al descargar y en `validation_engine` (`parse_cfdi(storage.resolve(...))`).
-- [ ] 11.6 En `run_validation`, cuantizar a 2 decimales (`ROUND_HALF_UP`) los importes de cabecera del XML antes de asignarlos a la factura y conservar los valores originales en `metadata_json` del documento XML.
-- [ ] 11.7 Crear la revisión `0004_integridad_datos`, con operaciones batch y `downgrade` que lanza `NotImplementedError`:
+- [x] 11.6 En `run_validation`, cuantizar a 2 decimales (`ROUND_HALF_UP`) los importes de cabecera del XML antes de asignarlos a la factura y conservar los valores originales en `metadata_json` del documento XML.
+- [x] 11.7 Crear la revisión `0004_integridad_datos`, con operaciones batch y `downgrade` que lanza `NotImplementedError`:
   - precondiciones con informe y aborto sin cambios: `foreign_key_check`, duplicados de `uuid` y de `(supplier_id, invoice_number)`, valores fuera de enumeración, y rutas sin segmento `storage`;
   - conversión `CAST(ROUND(x*100) AS INTEGER)` para montos y `×10000` para confianza;
   - conversión de rutas absolutas (Windows y POSIX) a relativas;
   - FKs `RESTRICT`, `CHECK`s, enums y `UNIQUE`s.
-- [ ] 11.8 Añadir `ContractCreate` para validar el alta de contrato (fechas coherentes, monto > 0) con re-render 400 antes de llegar al `CHECK` de la BD.
-- [ ] 11.9 Prueba de migración: construir una BD en `0001` con datos del esquema anterior (montos `REAL`, rutas absolutas Windows) y ejecutar `upgrade head`. Verificar que se conservan los conteos por tabla, que los centavos y `confidence_bp` son correctos y que las rutas quedan relativas. Con `uuid` duplicados, verificar que aborta y la revisión no cambia.
-- [ ] 11.10 Pruebas de integridad:
+- [x] 11.8 Añadir `ContractCreate` para validar el alta de contrato (fechas coherentes, monto > 0) con re-render 400 antes de llegar al `CHECK` de la BD.
+- [x] 11.9 Prueba de migración: construir una BD en `0001` con datos del esquema anterior (montos `REAL`, rutas absolutas Windows) y ejecutar `upgrade head`. Verificar que se conservan los conteos por tabla, que los centavos y `confidence_bp` son correctos y que las rutas quedan relativas. Con `uuid` duplicados, verificar que aborta y la revisión no cambia.
+- [x] 11.10 Pruebas de integridad:
   - `typeof(subtotal_cents) = 'integer'` y round-trip exacto de `100000.10`;
   - `10.005` rechazado;
   - `SUM` de 0.10 + 0.20 + 0.30 = 0.60 exacto;
@@ -217,7 +217,7 @@
   - `DELETE` SQL de una factura con documentos → error;
   - `created_at` con `tzinfo` UTC;
   - ruta manipulada `../../.env` → 404.
-- [ ] 11.11 `alembic check` limpio y commit del grupo.
+- [x] 11.11 `alembic check` limpio y commit del grupo.
 
 ## 12. Fase 2 — Flujo de facturas y motor de validación (COD-01, COD-02, COD-09, BD-04, BD-10 DAT-001)
 

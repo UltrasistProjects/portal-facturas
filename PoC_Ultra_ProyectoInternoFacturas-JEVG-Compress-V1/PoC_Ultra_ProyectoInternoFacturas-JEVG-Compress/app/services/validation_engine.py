@@ -2,12 +2,12 @@ from __future__ import annotations
 
 from datetime import datetime
 from decimal import Decimal
-from pathlib import Path
 
 from sqlalchemy import and_, delete, select
 from sqlalchemy.orm import Session
 
-from app.core.constants import DocumentType, InvoiceStatus
+from app.core.constants import DocumentType, InvoiceStatus, ProcessingStatus
+from app.core.types import to_money
 from app.models import Document, Invoice, ValidationResult
 from app.rules.contract_rules import contract_rules
 from app.rules.date_rules import date_rules
@@ -18,6 +18,7 @@ from app.rules.supplier_rules import supplier_rules
 from app.rules.xml_rules import xml_rules
 from app.services.ai import get_document_analyzer
 from app.services.audit_service import audit
+from app.services.file_service import LocalFileStorage
 from app.services.invoice_service import transition_invoice
 from app.services.supplier_service import supplier_requirement_status
 from app.services.validation_score_service import calculate_score
@@ -45,21 +46,23 @@ def run_validation(db: Session, invoice: Invoice, user_id: int | None = None) ->
     xml_data, xml_error = None, None
     if xml_document:
         try:
-            xml_data = parse_cfdi(Path(xml_document.path))
-            xml_document.processing_status = "PROCESSED"
+            xml_data = parse_cfdi(LocalFileStorage().resolve(xml_document.path))
+            xml_document.processing_status = ProcessingStatus.PROCESSED
             xml_document.metadata_json = _json_safe(xml_data)
             invoice.uuid = xml_data.get("uuid")
             invoice.invoice_date = (
                 datetime.fromisoformat(xml_data["date"]).date() if xml_data.get("date") else invoice.invoice_date
             )
-            invoice.subtotal = xml_data.get("subtotal") or invoice.subtotal
-            invoice.tax = xml_data.get("tax") or invoice.tax
-            invoice.total = xml_data.get("total") or invoice.total
+            # El XSD admite hasta 6 decimales: se redondea a centavos de forma explicita; metadata_json del
+            # documento XML conserva los importes originales.
+            invoice.subtotal = to_money(xml_data.get("subtotal") or invoice.subtotal)
+            invoice.tax = to_money(xml_data.get("tax") or invoice.tax)
+            invoice.total = to_money(xml_data.get("total") or invoice.total)
             invoice.currency = xml_data.get("currency") or invoice.currency
         except (XMLParseError, ValueError) as exc:
             xml_error = str(exc)
-            xml_document.processing_status = "FAILED"
-    processable = all(d.processing_status != "FAILED" for d in documents)
+            xml_document.processing_status = ProcessingStatus.FAILED
+    processable = all(d.processing_status != ProcessingStatus.FAILED for d in documents)
     contract = invoice.contract
     requirements = supplier_requirement_status(
         invoice.supplier, [d for d in db.scalars(select(Document).where(Document.supplier_id == invoice.supplier_id))]

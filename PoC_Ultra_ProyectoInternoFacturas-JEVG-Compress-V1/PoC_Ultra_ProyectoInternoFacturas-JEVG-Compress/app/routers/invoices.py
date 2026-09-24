@@ -1,5 +1,4 @@
 from decimal import Decimal
-from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, RedirectResponse
@@ -7,7 +6,7 @@ from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.constants import DocumentType, InvoiceStatus, Role
+from app.core.constants import ContractStatus, DocumentType, InvoiceStatus, ProcessingStatus, Role, SupplierStatus
 from app.core.database import get_db
 from app.core.security import get_current_user, require_roles, validate_csrf
 from app.models import Contract, Document, Invoice, Review, Supplier, ValidationResult
@@ -57,9 +56,11 @@ def _new_invoice_page(request: Request, db: Session, user, error: str | None = N
         suppliers = [user.supplier]
     else:
         suppliers = list(
-            db.scalars(select(Supplier).where(Supplier.status == "ACTIVE").order_by(Supplier.business_name))
+            db.scalars(
+                select(Supplier).where(Supplier.status == SupplierStatus.ACTIVE).order_by(Supplier.business_name)
+            )
         )
-    contracts = list(db.scalars(select(Contract).where(Contract.status == "ACTIVE")))
+    contracts = list(db.scalars(select(Contract).where(Contract.status == ContractStatus.ACTIVE)))
     context = {"user": user, "suppliers": suppliers, "contracts": contracts, "error": error}
     return templates.TemplateResponse(request, "invoices/new.html", context, status_code=status_code)
 
@@ -190,7 +191,7 @@ async def upload_document(
         raise HTTPException(400, "Tipo documental invalido")
     try:
         stored = await LocalFileStorage().save_invoice_file(invoice.id, upload)
-        metadata, pages, processing = {}, None, "PROCESSED"
+        metadata, pages, processing = {}, None, ProcessingStatus.PROCESSED
         if stored.path.suffix == ".pdf":
             pdf = analyze_pdf(stored.path)
             pages = pdf["page_count"]
@@ -216,7 +217,7 @@ async def upload_document(
         document_type=document_type,
         original_filename=stored.original_filename,
         stored_filename=stored.stored_filename,
-        path=str(stored.path),
+        path=stored.relative_path,
         mime_type=stored.mime_type,
         file_size=stored.file_size,
         sha256=stored.sha256,
@@ -247,7 +248,10 @@ def download_document(invoice_id: int, document_id: int, db: Session = Depends(g
     doc = db.get(Document, document_id)
     if not doc or doc.invoice_id != invoice.id:
         raise HTTPException(404, "Documento no encontrado")
-    path = Path(doc.path)
+    try:
+        path = LocalFileStorage().resolve(doc.path)
+    except FileNotFoundError:
+        raise HTTPException(404, "Archivo no disponible") from None
     if not path.is_file():
         raise HTTPException(404, "Archivo no disponible")
     # Nunca el MIME almacenado: la descarga no debe interpretarse en el navegador (junto con nosniff).
