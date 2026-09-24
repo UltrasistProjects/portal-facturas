@@ -13,4 +13,6 @@ httpx==0.28.1
 pwdlib[argon2]==0.2.1
 itsdangerous==2.2.0
 email-validator==2.2.0
-
+pytest==...
+pytest-asyncio==...
+pytest-cov==7.1.0
