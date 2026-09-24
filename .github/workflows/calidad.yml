@@ -14,4 +14,5 @@ jobs:
       working_directory: ./PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress
       project_key: portal-facturas
       runner: self-hosted
+      setup_python: false
     secrets: inherit
