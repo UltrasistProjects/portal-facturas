@@ -13,7 +13,7 @@ def test_excepcion_no_manejada_no_expone_traza(monkeypatch, caplog):
     def boom(*_args, **_kwargs):
         raise RuntimeError("detalle-interno-secreto")
 
-    monkeypatch.setattr(dashboard, "visible_invoices", boom)
+    monkeypatch.setattr(dashboard, "status_counts", boom)
     with TestClient(app, raise_server_exceptions=False) as client, caplog.at_level(logging.ERROR):
         login(client)
         response = client.get("/")

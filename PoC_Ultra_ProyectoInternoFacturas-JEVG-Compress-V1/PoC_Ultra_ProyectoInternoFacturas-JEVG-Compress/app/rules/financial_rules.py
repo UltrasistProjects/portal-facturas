@@ -54,7 +54,8 @@ def financial_rules(invoice, contract, xml_data, duplicate_uuid: bool, duplicate
             "UUID no duplicado",
             "Posible factura duplicada por UUID",
             "UUID unico",
-            invoice.uuid,
+            # El UUID detectado en el XML: si es duplicado, no se asigna a la factura.
+            (xml_data or {}).get("uuid") or invoice.uuid,
         ),
         outcome(
             "FIN-005",

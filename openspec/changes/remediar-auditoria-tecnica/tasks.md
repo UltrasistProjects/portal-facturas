@@ -221,20 +221,20 @@
 
 ## 12. Fase 2 — Flujo de facturas y motor de validación (COD-01, COD-02, COD-09, BD-04, BD-10 DAT-001)
 
-- [ ] 12.1 En `app/services/invoice_service.py`: `EDITABLE_STATUSES`, `PREVALIDATABLE_STATUSES`, `is_editable()`, `ensure_can_accept()`, `next_clickbalance_status()`, `review_invoice()` y `validation_summary()` (delega en `calculate_score`). Reescribir `routers/invoices.py` para usarlos, sin reglas propias.
-- [ ] 12.2 Quitar `db.commit()` de `run_validation` y de cualquier otro servicio. El router de validación y el seed confirman la transacción; `get_db` revierte ante excepción.
-- [ ] 12.3 UUID duplicado en `run_validation`:
+- [x] 12.1 En `app/services/invoice_service.py`: `EDITABLE_STATUSES`, `PREVALIDATABLE_STATUSES`, `is_editable()`, `ensure_can_accept()`, `next_clickbalance_status()`, `review_invoice()` y `validation_summary()` (delega en `calculate_score`). Reescribir `routers/invoices.py` para usarlos, sin reglas propias.
+- [x] 12.2 Quitar `db.commit()` de `run_validation` y de cualquier otro servicio. El router de validación y el seed confirman la transacción; `get_db` revierte ante excepción.
+- [x] 12.3 UUID duplicado en `run_validation`:
   - comprobar antes de asignar; si es duplicado, FIN-004 `FAIL`, UUID detectado en `metadata_json` e `invoices.uuid` sin asignar;
   - en el router, capturar `IntegrityError` de `uq_invoices_uuid` → rollback → `DuplicateInvoiceError` (409).
-- [ ] 12.4 En `create_invoice`, capturar `IntegrityError` de `uq_invoices_supplier_number` → rollback → 409 "Ya existe una factura con ese número para el proveedor".
-- [ ] 12.5 DAT-001 usa `to_business(invoice.created_at).day`.
-- [ ] 12.6 Repositorio:
+- [x] 12.4 En `create_invoice`, capturar `IntegrityError` de `uq_invoices_supplier_number` → rollback → 409 "Ya existe una factura con ese número para el proveedor".
+- [x] 12.5 DAT-001 usa `to_business(invoice.created_at).day`.
+- [x] 12.6 Repositorio:
   - `search_invoices(db, user, q, status, page, per_page=25) -> Page`, con `join(Supplier)`, `contains_eager`, `ilike` con escape de `%`, `_` y `\`, y `count()`;
   - `status_counts()` y `total_amount()` agregados en SQL;
   - paginación de `/admin/audit` a 50 por página.
   
   Actualizar `invoices/list.html`, `dashboard.html` y `admin/audit.html` con controles de paginación.
-- [ ] 12.7 Pruebas de flujo:
+- [x] 12.7 Pruebas de flujo:
   - aceptar con bloqueo `CRITICAL` → 409 sin revisión registrada (servicio y HTTP);
   - resumen del detalle = `calculate_score`;
   - búsqueda por razón social;
@@ -245,7 +245,7 @@
   - KPIs del PROVIDER exactos;
   - fallo inyectado tras `run_validation` → sin estado persistido;
   - 600 entradas de auditoría → la última página es accesible.
-- [ ] 12.8 Pruebas del motor:
+- [x] 12.8 Pruebas del motor:
   - DAT-001 el 20 de agosto a las 23:00 CST → `PASS`;
   - el 21 de agosto a las 00:30 CST → `WARNING`;
   - con `BUSINESS_TIMEZONE=UTC` → `WARNING`;

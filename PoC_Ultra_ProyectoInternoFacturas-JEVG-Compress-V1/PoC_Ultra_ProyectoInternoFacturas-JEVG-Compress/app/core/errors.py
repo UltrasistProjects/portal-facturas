@@ -17,3 +17,9 @@ class InvalidTransitionError(BusinessRuleError, ValueError):
 
 class DuplicateInvoiceError(BusinessRuleError):
     """La factura viola una restriccion de unicidad fiscal (UUID o numero por proveedor)."""
+
+
+class InvalidInputError(BusinessRuleError):
+    """Dato de entrada invalido para la operacion (p. ej. una decision de revision desconocida)."""
+
+    status_code = 400

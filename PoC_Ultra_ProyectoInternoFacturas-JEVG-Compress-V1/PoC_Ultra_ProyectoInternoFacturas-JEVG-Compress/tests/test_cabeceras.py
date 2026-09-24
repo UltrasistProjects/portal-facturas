@@ -56,7 +56,7 @@ def test_error_500_con_cabeceras_y_referencia(monkeypatch):
     def boom(*_args, **_kwargs):
         raise RuntimeError("fallo")
 
-    monkeypatch.setattr(dashboard, "visible_invoices", boom)
+    monkeypatch.setattr(dashboard, "status_counts", boom)
     with TestClient(app, raise_server_exceptions=False) as client:
         login(client)
         response = client.get("/", headers={"X-Request-ID": "soporte-500-abc"})

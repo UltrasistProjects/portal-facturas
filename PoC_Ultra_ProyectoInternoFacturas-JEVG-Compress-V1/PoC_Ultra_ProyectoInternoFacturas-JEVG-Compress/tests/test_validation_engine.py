@@ -15,7 +15,8 @@ def result(status, severity):
 
 
 def test_regla_fecha_despues_del_20_es_warning():
-    invoice = SimpleNamespace(created_at=datetime(2026, 8, 21, tzinfo=timezone.utc))
+    # 21 de agosto 06:00 en Ciudad de Mexico (el corte se evalua en la zona de negocio).
+    invoice = SimpleNamespace(created_at=datetime(2026, 8, 21, 12, 0, tzinfo=timezone.utc))
     check = date_rules(invoice)[0]
     assert check.status == "WARNING"
     assert "siguiente ciclo" in check.message

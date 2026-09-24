@@ -2,12 +2,13 @@ from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import RedirectResponse
 from pydantic import ValidationError
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app.core.constants import BUSINESS_RULES, Role
 from app.core.database import get_db
 from app.core.security import hash_password, require_roles, validate_csrf
 from app.models import AuditLog, Supplier, User
+from app.repositories.pagination import paginate
 from app.routers.common import templates
 from app.schemas import UserCreate, validation_message
 from app.services.audit_service import audit
@@ -78,10 +79,15 @@ async def toggle_user(
     return RedirectResponse("/admin/users", status_code=303)
 
 
+AUDIT_ENTRIES_PER_PAGE = 50
+
+
 @router.get("/audit")
-def audit_log(request: Request, db: Session = Depends(get_db), user=Depends(require_roles(Role.ADMIN))):
-    entries = list(db.scalars(select(AuditLog).order_by(AuditLog.timestamp.desc()).limit(500)))
-    return templates.TemplateResponse(request, "admin/audit.html", {"user": user, "entries": entries})
+def audit_log(request: Request, page: int = 1, db: Session = Depends(get_db), user=Depends(require_roles(Role.ADMIN))):
+    stmt = select(AuditLog).options(joinedload(AuditLog.user)).order_by(AuditLog.timestamp.desc(), AuditLog.id.desc())
+    result = paginate(db, stmt, page, AUDIT_ENTRIES_PER_PAGE)
+    context = {"user": user, "entries": result.items, "page": result, "base_query": ""}
+    return templates.TemplateResponse(request, "admin/audit.html", context)
 
 
 @router.get("/rules")

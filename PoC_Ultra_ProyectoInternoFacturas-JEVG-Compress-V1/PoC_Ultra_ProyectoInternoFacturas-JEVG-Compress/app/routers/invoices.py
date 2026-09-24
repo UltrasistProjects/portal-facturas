@@ -1,21 +1,35 @@
 from decimal import Decimal
+from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, RedirectResponse
 from pydantic import ValidationError
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.constants import ContractStatus, DocumentType, InvoiceStatus, ProcessingStatus, Role, SupplierStatus
 from app.core.database import get_db
+from app.core.errors import DuplicateInvoiceError
 from app.core.security import get_current_user, require_roles, validate_csrf
-from app.models import Contract, Document, Invoice, Review, Supplier, ValidationResult
-from app.repositories.invoice_repository import get_visible_invoice, visible_invoices
+from app.models import Contract, Document, Invoice, Supplier, ValidationResult
+from app.repositories.invoice_repository import get_visible_invoice, search_invoices
 from app.routers.common import templates
 from app.schemas import InvoiceCreate, validation_message
 from app.services.audit_service import audit
 from app.services.file_service import LocalFileStorage, safe_download_name
-from app.services.invoice_service import internal_folio, provisional_folio, transition_invoice
+from app.services.invoice_service import (
+    ensure_editable,
+    ensure_prevalidatable,
+    internal_folio,
+    is_editable,
+    next_clickbalance_status,
+    provisional_folio,
+    review_invoice,
+    transition_invoice,
+    validation_summary,
+    violates,
+)
 from app.services.pdf_service import analyze_pdf
 from app.services.reconciliation_service import reconcile_amount
 from app.services.validation_engine import run_validation
@@ -33,22 +47,24 @@ def _invoice_or_404(db: Session, invoice_id: int, user):
 
 @router.get("")
 def invoice_list(
-    request: Request, q: str = "", status: str = "", db: Session = Depends(get_db), user=Depends(get_current_user)
+    request: Request,
+    q: str = "",
+    status: str = "",
+    page: int = 1,
+    db: Session = Depends(get_db),
+    user=Depends(get_current_user),
 ):
-    rows = visible_invoices(db, user)
-    if q:
-        rows = [
-            i
-            for i in rows
-            if q.lower() in f"{i.internal_folio} {i.invoice_number} {i.project_name} {i.supplier.business_name}".lower()
-        ]
-    if status:
-        rows = [i for i in rows if i.status.value == status]
-    return templates.TemplateResponse(
-        request,
-        "invoices/list.html",
-        {"user": user, "invoices": rows, "q": q, "selected_status": status, "statuses": InvoiceStatus},
-    )
+    result = search_invoices(db, user, q, status, page)
+    context = {
+        "user": user,
+        "invoices": result.items,
+        "page": result,
+        "base_query": urlencode({"q": q, "status": status}),
+        "q": q,
+        "selected_status": status,
+        "statuses": InvoiceStatus,
+    }
+    return templates.TemplateResponse(request, "invoices/list.html", context)
 
 
 def _new_invoice_page(request: Request, db: Session, user, error: str | None = None, status_code: int = 200):
@@ -114,7 +130,14 @@ async def create_invoice(
         total=Decimal("0"),
     )
     db.add(invoice)
-    db.flush()
+    try:
+        db.flush()
+    except IntegrityError as exc:
+        db.rollback()
+        if violates(exc, "invoices.invoice_number"):
+            message = "Ya existe una factura con ese numero para el proveedor"
+            return _new_invoice_page(request, db, user, message, 409)
+        raise
     invoice.internal_folio = internal_folio(invoice.id, invoice.created_at)
     audit(db, "INVOICE_CREATED", "Invoice", invoice.id, user.id, new={"folio": invoice.internal_folio})
     db.commit()
@@ -140,12 +163,7 @@ def invoice_detail(invoice_id: int, request: Request, db: Session = Depends(get_
         if invoice.contract
         else None
     )
-    summary = {
-        "pass": sum(v.status == "PASS" for v in validations),
-        "warnings": sum(v.status == "WARNING" for v in validations),
-        "errors": sum(v.status == "FAIL" for v in validations),
-        "blockers": sum(v.status == "FAIL" and v.severity == "CRITICAL" for v in validations),
-    }
+    summary = validation_summary(validations)
     return templates.TemplateResponse(
         request,
         "invoices/detail.html",
@@ -163,11 +181,7 @@ def invoice_detail(invoice_id: int, request: Request, db: Session = Depends(get_
 @router.get("/{invoice_id}/documents")
 def documents_page(invoice_id: int, request: Request, db: Session = Depends(get_db), user=Depends(get_current_user)):
     invoice = _invoice_or_404(db, invoice_id, user)
-    if user.role == Role.PROVIDER and invoice.status not in {
-        InvoiceStatus.DRAFT,
-        InvoiceStatus.REQUIRES_CORRECTION,
-        InvoiceStatus.VALIDATION_FAILED,
-    }:
+    if user.role == Role.PROVIDER and not is_editable(invoice):
         return RedirectResponse(f"/invoices/{invoice.id}", status_code=303)
     return templates.TemplateResponse(
         request, "invoices/documents.html", {"user": user, "invoice": invoice, "document_types": DocumentType}
@@ -185,8 +199,7 @@ async def upload_document(
 ):
     await validate_csrf(request)
     invoice = _invoice_or_404(db, invoice_id, user)
-    if invoice.status not in {InvoiceStatus.DRAFT, InvoiceStatus.REQUIRES_CORRECTION, InvoiceStatus.VALIDATION_FAILED}:
-        raise HTTPException(409, "El expediente no admite cambios en su estado actual")
+    ensure_editable(invoice)
     if document_type not in {x.value for x in DocumentType}:
         raise HTTPException(400, "Tipo documental invalido")
     try:
@@ -264,14 +277,16 @@ async def validate_invoice(
 ):
     await validate_csrf(request)
     invoice = _invoice_or_404(db, invoice_id, user)
-    if invoice.status not in {
-        InvoiceStatus.DRAFT,
-        InvoiceStatus.UPLOADED,
-        InvoiceStatus.REQUIRES_CORRECTION,
-        InvoiceStatus.VALIDATION_FAILED,
-    }:
-        raise HTTPException(409, "La factura no puede prevalidarse en este estado")
+    ensure_prevalidatable(invoice)
     run_validation(db, invoice, user.id)
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        # Carrera: otra validacion asigno el mismo UUID despues de la comprobacion previa. Nada se persiste.
+        db.rollback()
+        if violates(exc, "invoices.uuid"):
+            raise DuplicateInvoiceError("El CFDI ya esta registrado en otra factura") from exc
+        raise
     return RedirectResponse(f"/invoices/{invoice.id}", status_code=303)
 
 
@@ -312,25 +327,7 @@ async def review_action(
 ):
     await validate_csrf(request)
     invoice = _invoice_or_404(db, invoice_id, user)
-    if decision == "COMMENT":
-        db.add(Review(invoice_id=invoice.id, reviewer_id=user.id, decision="COMMENT", comments=comments))
-        audit(db, "COMMENT_ADDED", "Invoice", invoice.id, user.id, new={"comments": comments})
-        db.commit()
-        return RedirectResponse(f"/invoices/{invoice.id}", status_code=303)
-    targets = {
-        "ACCEPTED": InvoiceStatus.ACCEPTED,
-        "REJECTED": InvoiceStatus.REJECTED,
-        "REQUIRES_CORRECTION": InvoiceStatus.REQUIRES_CORRECTION,
-    }
-    if decision not in targets:
-        raise HTTPException(400, "Decision invalida")
-    blockers = any(v.status == "FAIL" and v.severity == "CRITICAL" for v in invoice.validations)
-    if decision == "ACCEPTED" and blockers:
-        raise HTTPException(409, "No se puede aceptar con bloqueos criticos")
-    transition_invoice(db, invoice, targets[decision], user.id)
-    invoice.comments = comments
-    db.add(Review(invoice_id=invoice.id, reviewer_id=user.id, decision=decision, comments=comments))
-    audit(db, decision, "Invoice", invoice.id, user.id, new={"comments": comments})
+    review_invoice(db, invoice, decision, comments, user.id)
     db.commit()
     return RedirectResponse(f"/invoices/{invoice.id}", status_code=303)
 
@@ -344,11 +341,6 @@ async def clickbalance(
 ):
     await validate_csrf(request)
     invoice = _invoice_or_404(db, invoice_id, user)
-    target = (
-        InvoiceStatus.READY_FOR_CLICKBALANCE
-        if invoice.status == InvoiceStatus.ACCEPTED
-        else InvoiceStatus.UPLOADED_TO_CLICKBALANCE
-    )
-    transition_invoice(db, invoice, target, user.id)
+    transition_invoice(db, invoice, next_clickbalance_status(invoice), user.id)
     db.commit()
     return RedirectResponse(f"/invoices/{invoice.id}", status_code=303)

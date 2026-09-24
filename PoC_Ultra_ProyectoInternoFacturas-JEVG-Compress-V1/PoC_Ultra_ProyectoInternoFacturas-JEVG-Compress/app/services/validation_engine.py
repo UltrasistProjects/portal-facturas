@@ -35,7 +35,16 @@ def _json_safe(value):
     return value
 
 
+def uuid_owner(db: Session, uuid: str | None, invoice_id: int) -> int | None:
+    """Id de otra factura que ya tiene ese UUID fiscal, si existe."""
+    if not uuid:
+        return None
+    return db.scalar(select(Invoice.id).where(and_(Invoice.uuid == uuid, Invoice.id != invoice_id)))
+
+
 def run_validation(db: Session, invoice: Invoice, user_id: int | None = None) -> dict:
+    """Ejecuta las reglas y deja la factura en PREVALIDATED o REQUIRES_CORRECTION. No hace commit: el llamador
+    confirma la transaccion (y traduce una carrera sobre uq_invoices_uuid a 409)."""
     if invoice.status in {InvoiceStatus.DRAFT, InvoiceStatus.REQUIRES_CORRECTION}:
         transition_invoice(db, invoice, InvoiceStatus.UPLOADED, user_id)
     transition_invoice(db, invoice, InvoiceStatus.VALIDATING, user_id)
@@ -43,13 +52,16 @@ def run_validation(db: Session, invoice: Invoice, user_id: int | None = None) ->
     documents = [d for d in invoice.documents if d.is_current]
     types = {d.document_type for d in documents}
     xml_document = next((d for d in documents if d.document_type == DocumentType.INVOICE_XML.value), None)
-    xml_data, xml_error = None, None
+    xml_data, xml_error, duplicate_uuid = None, None, False
     if xml_document:
         try:
             xml_data = parse_cfdi(LocalFileStorage().resolve(xml_document.path))
             xml_document.processing_status = ProcessingStatus.PROCESSED
             xml_document.metadata_json = _json_safe(xml_data)
-            invoice.uuid = xml_data.get("uuid")
+            # Se verifica antes de asignar: un UUID ajeno violaria uq_invoices_uuid. El detectado queda en
+            # metadata_json del XML y FIN-004 lo reporta como bloqueo.
+            duplicate_uuid = uuid_owner(db, xml_data.get("uuid"), invoice.id) is not None
+            invoice.uuid = None if duplicate_uuid else xml_data.get("uuid")
             invoice.invoice_date = (
                 datetime.fromisoformat(xml_data["date"]).date() if xml_data.get("date") else invoice.invoice_date
             )
@@ -68,10 +80,6 @@ def run_validation(db: Session, invoice: Invoice, user_id: int | None = None) ->
         invoice.supplier, [d for d in db.scalars(select(Document).where(Document.supplier_id == invoice.supplier_id))]
     )
     descriptions = [c.get("description") or "" for c in (xml_data or {}).get("concepts", [])]
-    duplicate_uuid = bool(
-        invoice.uuid
-        and db.scalar(select(Invoice.id).where(and_(Invoice.uuid == invoice.uuid, Invoice.id != invoice.id)))
-    )
     duplicate_number = bool(
         db.scalar(
             select(Invoice.id).where(
@@ -118,5 +126,4 @@ def run_validation(db: Session, invoice: Invoice, user_id: int | None = None) ->
     )
     transition_invoice(db, invoice, target, user_id)
     audit(db, "VALIDATION_COMPLETED", "Invoice", invoice.id, user_id, new=summary)
-    db.commit()
     return {**summary, "results": results, "xml": xml_data}
