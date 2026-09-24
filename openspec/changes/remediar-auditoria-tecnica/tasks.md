@@ -82,19 +82,19 @@
 
 ## 6. Fase 1 — Cabeceras de seguridad y correlación de peticiones (SEC-05, COD-05 parcial)
 
-- [ ] 6.1 Crear `app/core/middleware.py` con `SecurityHeadersMiddleware`, un middleware ASGI puro: CSP como constante única, `X-Frame-Options: DENY`, `nosniff`, `Referrer-Policy: same-origin`, y HSTS sólo si `scope["scheme"] == "https"`.
-- [ ] 6.2 Añadir `RequestContextMiddleware`, también ASGI puro:
+- [x] 6.1 Crear `app/core/middleware.py` con `SecurityHeadersMiddleware`, un middleware ASGI puro: CSP como constante única, `X-Frame-Options: DENY`, `nosniff`, `Referrer-Policy: same-origin`, y HSTS sólo si `scope["scheme"] == "https"`.
+- [x] 6.2 Añadir `RequestContextMiddleware`, también ASGI puro:
   - valida un `X-Request-ID` entrante (8 a 64 caracteres `[A-Za-z0-9-]`) o genera uno nuevo;
   - lo guarda en `scope["state"]` y en un `ContextVar`;
   - lo devuelve en la cabecera de respuesta.
-- [ ] 6.3 El handler de 500 añade explícitamente las cabeceras de seguridad (helper compartido) y pasa `request_id` a `error.html`, que lo muestra.
-- [ ] 6.4 Pruebas:
+- [x] 6.3 El handler de 500 añade explícitamente las cabeceras de seguridad (helper compartido) y pasa `request_id` a `error.html`, que lo muestra.
+- [x] 6.4 Pruebas:
   - cabeceras en `/login`, `/static/css/app.css` y un 404;
   - sin HSTS por HTTP y con HSTS usando `base_url="https://testserver"`;
   - `X-Request-ID` válido reutilizado e inválido reemplazado;
   - la página 500 incluye cabeceras y `request_id`;
   - no hay `CORSMiddleware` registrado.
-- [ ] 6.5 Verificación manual con `run_local`: recorrer login, tablero, listado, detalle, documentos, revisión y las tres vistas de administración con la consola del navegador abierta, y confirmar que no hay violaciones de CSP.
+- [x] 6.5 Verificación manual con `run_local`: recorrer login, tablero, listado, detalle, documentos, revisión y las tres vistas de administración con la consola del navegador abierta, y confirmar que no hay violaciones de CSP.
 
 ## 7. Fase 1 — Login, contraseñas y validación de altas (SEC-04, SEC-08, COD-03a)
 

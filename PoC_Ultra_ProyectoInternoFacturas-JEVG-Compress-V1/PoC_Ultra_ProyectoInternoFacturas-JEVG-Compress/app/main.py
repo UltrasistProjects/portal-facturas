@@ -10,6 +10,12 @@ from app.core.config import BASE_DIR, settings
 from app.core.database import SessionLocal
 from app.core.errors import BusinessRuleError
 from app.core.logging_config import configure_logging
+from app.core.middleware import (
+    RequestContextMiddleware,
+    SecurityHeadersMiddleware,
+    request_id_var,
+    security_headers,
+)
 from app.core.startup import run_startup_checks
 from app.routers import admin, auth, contracts, dashboard, invoices, suppliers
 
@@ -37,6 +43,9 @@ app.add_middleware(
     https_only=settings.session_https_only,
     max_age=8 * 60 * 60,
 )
+# add_middleware envuelve por fuera: RequestContext queda como el mas externo de los middlewares de usuario.
+app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(RequestContextMiddleware)
 app.mount("/static", StaticFiles(directory=BASE_DIR / "app" / "static"), name="static")
 for router in (auth.router, dashboard.router, invoices.router, suppliers.router, contracts.router, admin.router):
     app.include_router(router)
@@ -52,9 +61,8 @@ def render_error(request: Request, status_code: int, message: str):
         return JSONResponse({"detail": message}, status_code=status_code)
     from app.routers.common import templates
 
-    return templates.TemplateResponse(
-        request, "error.html", {"status_code": status_code, "message": message}, status_code=status_code
-    )
+    context = {"status_code": status_code, "message": message, "request_id": getattr(request.state, "request_id", None)}
+    return templates.TemplateResponse(request, "error.html", context, status_code=status_code)
 
 
 @app.exception_handler(HTTPException)
@@ -71,12 +79,16 @@ async def business_rule_handler(request: Request, exc: BusinessRuleError):
 
 @app.exception_handler(Exception)
 async def unexpected_error(request: Request, exc: Exception):
-    logger.exception("Unhandled application error")
-    from app.routers.common import templates
-
-    return templates.TemplateResponse(
-        request,
-        "error.html",
-        {"status_code": 500, "message": "Ocurrio un error interno. Consulte el log local."},
-        status_code=500,
-    )
+    # Starlette ejecuta este handler en ServerErrorMiddleware, por fuera de los middlewares de usuario:
+    # las cabeceras de seguridad y el request_id se agregan aqui explicitamente.
+    request_id = getattr(request.state, "request_id", None)
+    token = request_id_var.set(request_id)
+    try:
+        logger.exception("Unhandled application error")
+    finally:
+        request_id_var.reset(token)
+    response = render_error(request, 500, "Ocurrio un error interno. Informe la referencia al soporte.")
+    response.headers.update(security_headers(request.url.scheme))
+    if request_id:
+        response.headers["X-Request-ID"] = request_id
+    return response
