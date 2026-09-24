@@ -7,8 +7,8 @@ from typing import Any
 
 from sqlalchemy import Boolean, CheckConstraint, Date, ForeignKey, Index, String, Text, UniqueConstraint, event
 from sqlalchemy import Enum as SAEnum
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, Session, mapped_column, relationship
-from sqlalchemy.types import JSON
 
 from app.core.constants import (
     ContractStatus,
@@ -24,7 +24,7 @@ from app.core.constants import (
 )
 from app.core.database import Base
 from app.core.errors import BusinessRuleError
-from app.core.types import Money, ScaledDecimal, UTCDateTime
+from app.core.types import ExactNumeric, Money, UTCDateTime
 
 
 def now_utc() -> datetime:
@@ -78,7 +78,7 @@ class Supplier(Base):
 class Contract(Base):
     __tablename__ = "contracts"
     __table_args__ = (
-        CheckConstraint("authorized_amount_cents > 0", name="ck_contracts_authorized_amount_positive"),
+        CheckConstraint("authorized_amount > 0", name="ck_contracts_authorized_amount_positive"),
         CheckConstraint("end_date >= start_date", name="ck_contracts_valid_period"),
     )
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -86,8 +86,7 @@ class Contract(Base):
     project_name: Mapped[str] = mapped_column(String(200))
     project_leader: Mapped[str] = mapped_column(String(150))
     authorized_technology: Mapped[str] = mapped_column(String(250))
-    # Columna fisica en centavos; el atributo sigue siendo un Decimal en pesos.
-    authorized_amount: Mapped[Decimal] = mapped_column("authorized_amount_cents", Money())
+    authorized_amount: Mapped[Decimal] = mapped_column(Money())
     currency: Mapped[str] = mapped_column(String(3), default="MXN")
     start_date: Mapped[date] = mapped_column(Date)
     end_date: Mapped[date] = mapped_column(Date)
@@ -108,11 +107,11 @@ class ContractAmendment(Base):
     """Cambio del monto autorizado. El monto solo se modifica mediante una enmienda auditada."""
 
     __tablename__ = "contract_amendments"
-    __table_args__ = (CheckConstraint("new_amount_cents > 0", name="ck_contract_amendments_new_amount_positive"),)
+    __table_args__ = (CheckConstraint("new_amount > 0", name="ck_contract_amendments_new_amount_positive"),)
     id: Mapped[int] = mapped_column(primary_key=True)
     contract_id: Mapped[int] = mapped_column(restrict("contracts.id"), index=True)
-    previous_amount: Mapped[Decimal] = mapped_column("previous_amount_cents", Money())
-    new_amount: Mapped[Decimal] = mapped_column("new_amount_cents", Money())
+    previous_amount: Mapped[Decimal] = mapped_column(Money())
+    new_amount: Mapped[Decimal] = mapped_column(Money())
     reason: Mapped[str] = mapped_column(Text)
     created_by: Mapped[int] = mapped_column(restrict("users.id"), index=True)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=now_utc)
@@ -128,9 +127,9 @@ class Invoice(Base):
         # La BD es la autoridad sobre duplicados fiscales; FIN-004/FIN-005 solo dan retroalimentacion.
         UniqueConstraint("uuid", name="uq_invoices_uuid"),
         UniqueConstraint("supplier_id", "invoice_number", name="uq_invoices_supplier_number"),
-        CheckConstraint("subtotal_cents >= 0", name="ck_invoices_subtotal_non_negative"),
-        CheckConstraint("tax_cents >= 0", name="ck_invoices_tax_non_negative"),
-        CheckConstraint("total_cents >= 0", name="ck_invoices_total_non_negative"),
+        CheckConstraint("subtotal >= 0", name="ck_invoices_subtotal_non_negative"),
+        CheckConstraint("tax >= 0", name="ck_invoices_tax_non_negative"),
+        CheckConstraint("total >= 0", name="ck_invoices_total_non_negative"),
         CheckConstraint(
             "validation_score IS NULL OR validation_score BETWEEN 0 AND 100", name="ck_invoices_score_range"
         ),
@@ -147,9 +146,9 @@ class Invoice(Base):
     purchase_order_number: Mapped[str | None] = mapped_column(String(100))
     project_name: Mapped[str] = mapped_column(String(200))
     project_leader: Mapped[str | None] = mapped_column(String(150))
-    subtotal: Mapped[Decimal] = mapped_column("subtotal_cents", Money(), default=Decimal("0"))
-    tax: Mapped[Decimal] = mapped_column("tax_cents", Money(), default=Decimal("0"))
-    total: Mapped[Decimal] = mapped_column("total_cents", Money(), default=Decimal("0"))
+    subtotal: Mapped[Decimal] = mapped_column(Money(), default=Decimal("0"))
+    tax: Mapped[Decimal] = mapped_column(Money(), default=Decimal("0"))
+    total: Mapped[Decimal] = mapped_column(Money(), default=Decimal("0"))
     currency: Mapped[str] = mapped_column(String(3), default="MXN")
     status: Mapped[InvoiceStatus] = mapped_column(enum_column(InvoiceStatus), default=InvoiceStatus.DRAFT, index=True)
     validation_score: Mapped[int | None]
@@ -198,7 +197,7 @@ class Document(Base):
     )
     page_count: Mapped[int | None]
     document_date: Mapped[date | None] = mapped_column(Date)
-    metadata_json: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+    metadata_json: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     is_current: Mapped[bool] = mapped_column(Boolean, default=True)
     replaced_document_id: Mapped[int | None] = mapped_column(restrict("documents.id"), index=True)
     invoice: Mapped[Invoice | None] = relationship(back_populates="documents", foreign_keys=[invoice_id])
@@ -207,9 +206,7 @@ class Document(Base):
 class ValidationResult(Base):
     __tablename__ = "validation_results"
     __table_args__ = (
-        CheckConstraint(
-            "confidence_bp IS NULL OR confidence_bp BETWEEN 0 AND 10000", name="ck_validation_results_confidence"
-        ),
+        CheckConstraint("confidence IS NULL OR confidence BETWEEN 0 AND 1", name="ck_validation_results_confidence"),
     )
     id: Mapped[int] = mapped_column(primary_key=True)
     invoice_id: Mapped[int] = mapped_column(restrict("invoices.id"), index=True)
@@ -219,12 +216,11 @@ class ValidationResult(Base):
     severity: Mapped[Severity] = mapped_column(enum_column(Severity))
     expected_value: Mapped[str | None] = mapped_column(Text)
     detected_value: Mapped[str | None] = mapped_column(Text)
-    # Diezmilesimas (basis points): 0.9300 se guarda como 9300.
-    confidence: Mapped[Decimal | None] = mapped_column("confidence_bp", ScaledDecimal(4))
+    confidence: Mapped[Decimal | None] = mapped_column(ExactNumeric(5, 4))
     message: Mapped[str] = mapped_column(Text)
     source_document: Mapped[str | None] = mapped_column(String(255))
     source_reference: Mapped[str | None] = mapped_column(String(255))
-    evidence_json: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+    evidence_json: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=now_utc)
     invoice: Mapped[Invoice] = relationship(back_populates="validations")
 
@@ -236,8 +232,8 @@ class AuditLog(Base):
     action: Mapped[str] = mapped_column(String(80), index=True)
     entity: Mapped[str] = mapped_column(String(80))
     entity_id: Mapped[str | None] = mapped_column(String(80))
-    old_value: Mapped[dict[str, Any] | None] = mapped_column(JSON)
-    new_value: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+    old_value: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    new_value: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     timestamp: Mapped[datetime] = mapped_column(UTCDateTime, default=now_utc, index=True)
     ip_address: Mapped[str | None] = mapped_column(String(50))
     user: Mapped[User | None] = relationship()

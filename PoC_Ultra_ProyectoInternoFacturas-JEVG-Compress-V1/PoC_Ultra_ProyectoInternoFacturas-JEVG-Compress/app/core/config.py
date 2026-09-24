@@ -11,6 +11,8 @@ BASE_DIR = Path(__file__).resolve().parents[2]
 
 MIN_SECRET_KEY_LENGTH = 32
 SECRET_KEY_HINT = 'Genere una con: python -c "import secrets; print(secrets.token_urlsafe(64))"'
+DATABASE_URL_PREFIX = "postgresql+psycopg://"
+DATABASE_URL_HINT = "Ejecute python scripts/create_env.py para completar el .env."
 
 
 class Settings(BaseSettings):
@@ -18,7 +20,7 @@ class Settings(BaseSettings):
     app_env: Literal["development", "test", "production"] = "development"
     debug: bool = False
     secret_key: str = Field(default="", validate_default=True)
-    database_url: str = "sqlite:///./data/invoice_portal.db"
+    database_url: str = Field(default="", validate_default=True)
     storage_path: Path = Path("storage")
     log_dir: Path = Path("logs")
     backup_dir: Path = Path("backups")
@@ -84,23 +86,18 @@ class Settings(BaseSettings):
 
     @field_validator("database_url")
     @classmethod
-    def anchored_sqlite_url(cls, value: str) -> str:
-        prefix = "sqlite:///"
-        if not value.startswith(prefix):
-            return value
-        path = value.removeprefix(prefix)
-        if not path or path == ":memory:" or Path(path).is_absolute():
-            return value
-        return f"{prefix}{(BASE_DIR / path).resolve().as_posix()}"
-
-    @property
-    def sqlite_path(self) -> Path | None:
-        """Archivo de la BD si es SQLite en disco; None para otros motores o :memory:."""
-        prefix = "sqlite:///"
-        path = self.database_url.removeprefix(prefix)
-        if not self.database_url.startswith(prefix) or not path or path == ":memory:":
-            return None
-        return Path(path)
+    def postgresql_url(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError(f"DATABASE_URL es obligatoria. {DATABASE_URL_HINT}")
+        if value.startswith("sqlite"):
+            raise ValueError(
+                "SQLite ya no es compatible: DATABASE_URL debe apuntar a PostgreSQL. "
+                "python scripts/create_env.py actualiza el .env y reemplaza la URL de SQLite."
+            )
+        if not value.startswith(DATABASE_URL_PREFIX):
+            raise ValueError(f"DATABASE_URL debe usar el esquema {DATABASE_URL_PREFIX}. {DATABASE_URL_HINT}")
+        return value
 
     @model_validator(mode="after")
     def derived_defaults(self):

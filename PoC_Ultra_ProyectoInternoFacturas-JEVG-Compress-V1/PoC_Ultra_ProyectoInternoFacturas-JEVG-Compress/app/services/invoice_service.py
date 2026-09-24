@@ -40,9 +40,9 @@ def internal_folio(invoice_id: int, created_at: datetime) -> str:
     return f"FAC-{to_business(created_at).year}-{invoice_id:05d}"
 
 
-def violates(exc: IntegrityError, constraint_columns: str) -> bool:
-    """True si el IntegrityError corresponde a la restriccion sobre esas columnas (mensaje de SQLite)."""
-    return constraint_columns in str(exc.orig)
+def violates(exc: IntegrityError, constraint_name: str) -> bool:
+    """True si el IntegrityError proviene de la restriccion con ese nombre (psycopg lo expone en diag)."""
+    return getattr(getattr(exc.orig, "diag", None), "constraint_name", None) == constraint_name
 
 
 def is_editable(invoice: Invoice) -> bool:

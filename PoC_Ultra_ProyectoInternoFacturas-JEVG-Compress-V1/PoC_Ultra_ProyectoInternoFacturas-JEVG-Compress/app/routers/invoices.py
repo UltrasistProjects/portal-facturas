@@ -136,7 +136,7 @@ async def create_invoice(
         db.flush()
     except IntegrityError as exc:
         db.rollback()
-        if violates(exc, "invoices.invoice_number"):
+        if violates(exc, "uq_invoices_supplier_number"):
             message = "Ya existe una factura con ese numero para el proveedor"
             return _new_invoice_page(request, db, user, message, 409)
         raise
@@ -297,7 +297,7 @@ async def validate_invoice(
     except IntegrityError as exc:
         # Carrera: otra validacion asigno el mismo UUID despues de la comprobacion previa. Nada se persiste.
         db.rollback()
-        if violates(exc, "invoices.uuid"):
+        if violates(exc, "uq_invoices_uuid"):
             raise DuplicateInvoiceError("El CFDI ya esta registrado en otra factura") from exc
         raise
     return RedirectResponse(f"/invoices/{invoice.id}", status_code=303)
