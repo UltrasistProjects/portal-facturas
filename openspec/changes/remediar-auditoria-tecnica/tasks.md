@@ -157,18 +157,18 @@
 
 ## 10. Fase 2 — Respaldo, restauración y reinicio seguro (BD-08)
 
-- [ ] 10.1 Crear `scripts/backup.py`:
+- [x] 10.1 Crear `scripts/backup.py`:
   - copia la BD con `sqlite3.Connection.backup()` y archiva `storage/` en ZIP;
   - escribe `manifest.json` (revisión Alembic, fecha UTC, SHA-256) en `backups/<AAAAMMDD-HHMMSS>/`;
   - aplica la retención `BACKUP_RETENTION`.
-- [ ] 10.2 Crear `scripts/restore_backup.py`: verifica los SHA-256, exige `--yes`, respalda el estado actual y restaura la BD y `storage/`.
-- [ ] 10.3 Modificar `scripts/reset_demo.py`:
+- [x] 10.2 Crear `scripts/restore_backup.py`: verifica los SHA-256, exige `--yes`, respalda el estado actual y restaura la BD y `storage/`.
+- [x] 10.3 Modificar `scripts/reset_demo.py`:
   - detectar datos no-demo (usuarios fuera de `@poc.local`, facturas sin `DEMO_SEEDED`);
   - pedir confirmación si hay terminal; sin terminal y sin `--yes`, abortar;
   - respaldar antes de borrar.
-- [ ] 10.4 `run_local.{sh,ps1,bat}` ejecutan `create_env` → `init_db` → uvicorn, sin `reset_demo`. Actualizar `ejecucion.txt` y la sección de arranque del README.
-- [ ] 10.5 Añadir `backups/` a `.gitignore`. Documentar en el README el procedimiento de respaldo y restauración, incluida la necesidad de detener la aplicación y la conservación fiscal de 5 años.
-- [ ] 10.6 Pruebas:
+- [x] 10.4 `run_local.{sh,ps1,bat}` ejecutan `create_env` → `init_db` → uvicorn, sin `reset_demo`. Actualizar `ejecucion.txt` y la sección de arranque del README.
+- [x] 10.5 Añadir `backups/` a `.gitignore`. Documentar en el README el procedimiento de respaldo y restauración, incluida la necesidad de detener la aplicación y la conservación fiscal de 5 años.
+- [x] 10.6 Pruebas:
   - respaldo con una conexión de escritura abierta → `integrity_check` = `ok` y contiene las filas confirmadas;
   - retención de 14;
   - restauración con un manifiesto alterado → aborta sin cambios;

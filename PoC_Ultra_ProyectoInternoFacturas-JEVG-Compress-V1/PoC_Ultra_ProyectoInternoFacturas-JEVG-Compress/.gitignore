@@ -13,6 +13,7 @@ storage/temp/*
 !storage/**/.gitkeep
 logs/*
 !logs/.gitkeep
+backups/
 *.log
 .idea/
 .vscode/

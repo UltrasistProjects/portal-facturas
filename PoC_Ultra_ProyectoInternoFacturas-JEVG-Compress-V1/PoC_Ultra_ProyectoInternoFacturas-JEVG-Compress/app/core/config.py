@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     database_url: str = "sqlite:///./data/invoice_portal.db"
     storage_path: Path = Path("storage")
     log_dir: Path = Path("logs")
+    backup_dir: Path = Path("backups")
     max_upload_mb: int = 20
     # None significa "derivar de app_env": Secure fuera de development.
     session_https_only: bool | None = None
@@ -76,7 +77,7 @@ class Settings(BaseSettings):
             raise ValueError(f"BUSINESS_TIMEZONE desconocida: {value!r} (ejemplo: America/Mexico_City)") from exc
         return value
 
-    @field_validator("storage_path", "log_dir")
+    @field_validator("storage_path", "log_dir", "backup_dir")
     @classmethod
     def anchored_path(cls, value: Path) -> Path:
         return (value if value.is_absolute() else BASE_DIR / value).resolve()
@@ -91,6 +92,15 @@ class Settings(BaseSettings):
         if not path or path == ":memory:" or Path(path).is_absolute():
             return value
         return f"{prefix}{(BASE_DIR / path).resolve().as_posix()}"
+
+    @property
+    def sqlite_path(self) -> Path | None:
+        """Archivo de la BD si es SQLite en disco; None para otros motores o :memory:."""
+        prefix = "sqlite:///"
+        path = self.database_url.removeprefix(prefix)
+        if not self.database_url.startswith(prefix) or not path or path == ":memory:":
+            return None
+        return Path(path)
 
     @model_validator(mode="after")
     def derived_defaults(self):

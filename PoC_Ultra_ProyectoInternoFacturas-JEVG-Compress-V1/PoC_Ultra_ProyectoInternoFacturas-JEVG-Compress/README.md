@@ -29,11 +29,11 @@ python -m venv .venv
 python -m pip install --upgrade pip
 pip install --require-hashes -r requirements.lock
 python scripts/create_env.py
-python scripts/reset_demo.py
+python scripts/init_db.py
 uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
-También puede ejecutar `scripts\create_venv.ps1` y después `run_local.ps1`. El script `run_local` reconstruye intencionalmente la demo antes de iniciar; para conservar cambios, arranque directamente con Uvicorn.
+También puede ejecutar `scripts\create_venv.ps1` y después `run_local.ps1`. `run_local` crea `.env` si no existe, aplica las migraciones y siembra la demo sólo si la base está vacía. **Conserva los datos entre arranques.**
 
 En CMD use `.venv\Scripts\activate` y `run_local.bat`.
 
@@ -45,7 +45,7 @@ source .venv/bin/activate
 python -m pip install --upgrade pip
 pip install --require-hashes -r requirements.lock
 python scripts/create_env.py
-python scripts/reset_demo.py
+python scripts/init_db.py
 uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
@@ -71,13 +71,33 @@ No reutilice estas contraseñas fuera de la PoC.
 
 ## Base de datos, migraciones y demo
 
-- SQLite: `data/invoice_portal.db` (ignorada por Git).
-- Crear tablas directamente: `python scripts/init_db.py`.
+- SQLite: `data/invoice_portal.db` (ignorada por Git). Opera en modo WAL, así que junto a ella aparecen `invoice_portal.db-wal` y `invoice_portal.db-shm`.
+- Aplicar migraciones y sembrar sólo si la base está vacía: `python scripts/init_db.py`.
 - Aplicar migraciones: `alembic upgrade head`.
 - Cargar seed sobre una base vacía: `python scripts/seed_db.py`.
 - Reconstruir base y archivos demo: `python scripts/reset_demo.py`.
 
-`reset_demo.py` valida que las rutas estén dentro del workspace, elimina sólo la SQLite configurada y el contenido generado de `storage/invoices`, `storage/suppliers` y `storage/temp`, aplica Alembic y vuelve a crear el seed.
+`reset_demo.py` borra datos, así que actúa con cuidado:
+
+- no se ejecuta con `APP_ENV=production`;
+- valida que la BD y `storage/` estén dentro del workspace;
+- si detecta datos que no son demo (usuarios fuera de `@poc.local` o facturas no sembradas), pide escribir `REINICIAR`; sin terminal interactiva exige `--yes`;
+- antes de borrar genera un respaldo en `backups/`;
+- elimina la BD con sus archivos `-wal`/`-shm` y el contenido de `storage/`, aplica las migraciones y vuelve a sembrar.
+
+## Respaldo y restauración
+
+Los documentos fiscales deben conservarse 5 años. Respalde la BD **y** `storage/`; uno sin el otro no sirve.
+
+- **Respaldo:** `python scripts/backup.py`. Puede ejecutarse con la aplicación en marcha, porque usa la API de respaldo en línea de SQLite (consistente también con WAL).
+  - Crea `backups/<AAAAMMDD-HHMMSS>/` con la BD, `storage.zip` y `manifest.json` (revisión Alembic, fecha UTC y SHA-256 de cada artefacto).
+  - Conserva los `BACKUP_RETENTION` respaldos más recientes (14 por defecto) en `BACKUP_DIR` (`./backups`).
+- **Restauración:**
+  1. Detenga la aplicación.
+  2. Ejecute `python scripts/restore_backup.py backups/<AAAAMMDD-HHMMSS> --yes`.
+  3. El script verifica los SHA-256 del manifiesto y aborta si no coinciden. Luego respalda el estado actual y reemplaza la BD y `storage/`.
+  4. Arranque la aplicación.
+- Programe `backup.py` (Programador de tareas de Windows o cron) y copie `backups/` fuera del equipo. Un respaldo en el mismo disco no protege contra la pérdida del disco.
 
 ## Pruebas
 

@@ -1,6 +1,7 @@
 .venv\Scripts\Activate.ps1
-Copy-Item .env.example .env
-python scripts\reset_demo.py
+python scripts\create_env.py
+python scripts\init_db.py
 uvicorn app.main:app --reload
 
-uvicorn app.main:app --reload
+# Reconstruir la demo desde cero (respalda antes y pide confirmacion si hay datos no-demo):
+python scripts\reset_demo.py
