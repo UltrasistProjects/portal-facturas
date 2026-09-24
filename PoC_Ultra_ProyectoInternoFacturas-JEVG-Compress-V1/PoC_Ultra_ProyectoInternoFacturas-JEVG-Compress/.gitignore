@@ -6,6 +6,7 @@ __pycache__/
 .coverage
 htmlcov/
 data/*.db
+data/*.db-*
 data/*.sqlite*
 storage/invoices/*
 storage/suppliers/*
@@ -14,6 +15,8 @@ storage/temp/*
 logs/*
 !logs/.gitkeep
 backups/
+dist/
+Microsoft/
 *.log
 .idea/
 .vscode/

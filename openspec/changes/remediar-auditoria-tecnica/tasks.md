@@ -306,10 +306,10 @@
 
 ## 16. Fase 2 — Distribución limpia y repositorio (SEC-09)
 
-- [ ] 16.1 Crear `scripts/package_release.py`: usa `git ls-files` si hay Git y, si no, una lista de exclusión explícita; verifica el ZIP después de generarlo; si detecta `.env`, `data/*.db*`, `logs/*`, `storage/**`, `backups/`, `.venv/`, cachés o `Microsoft/`, elimina el ZIP y falla.
-- [ ] 16.2 Añadir `Microsoft/` y `data/*.db-*` a `.gitignore`.
-- [ ] 16.3 `git rm` de `Microsoft/Windows/PowerShell/ModuleAnalysisCache` (PoC) y de `PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1.zip` (raíz del repo). No reescribir el historial: queda como pregunta abierta para el dueño del repositorio.
-- [ ] 16.4 Pruebas: sobre un árbol de prueba con `.env`, BD, logs y `storage/`, el paquete los excluye; al forzar la inclusión de `.env`, el script falla y borra el ZIP.
+- [x] 16.1 Crear `scripts/package_release.py`: usa `git ls-files` si hay Git y, si no, una lista de exclusión explícita; verifica el ZIP después de generarlo; si detecta `.env`, `data/*.db*`, `logs/*`, `storage/**`, `backups/`, `.venv/`, cachés o `Microsoft/`, elimina el ZIP y falla.
+- [x] 16.2 Añadir `Microsoft/` y `data/*.db-*` a `.gitignore`.
+- [x] 16.3 `git rm` de `Microsoft/Windows/PowerShell/ModuleAnalysisCache` (PoC) y de `PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1.zip` (raíz del repo). No reescribir el historial: queda como pregunta abierta para el dueño del repositorio.
+- [x] 16.4 Pruebas: sobre un árbol de prueba con `.env`, BD, logs y `storage/`, el paquete los excluye; al forzar la inclusión de `.env`, el script falla y borra el ZIP.
 
 ## 17. Cobertura, CI y documentación final (COD-07, SEC-11, SEC-10)
 
