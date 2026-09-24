@@ -1,0 +1,28 @@
+# Solo la base de datos corre en un contenedor; la aplicacion sigue en el host.
+# Compose lee las variables de .env (el mismo archivo que usa la aplicacion): python scripts/create_env.py lo genera.
+#   docker compose up -d --wait db    arranca PostgreSQL y espera a que este "healthy"
+#   docker compose down               lo detiene conservando los datos (con -v tambien borra el volumen)
+name: portal-facturas
+
+services:
+  db:
+    # Version menor fija; se actualiza por PR.
+    image: postgres:18.6-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-portal}
+      POSTGRES_DB: ${POSTGRES_DB:-portal}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Defina POSTGRES_PASSWORD en .env (python scripts/create_env.py)}
+    # Solo en localhost: el 5432 y el 5433 suelen estar ocupados por otras instancias.
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-55432}:5432"
+    # Desde la 18, PGDATA vive en /var/lib/postgresql/18/docker: se monta el directorio padre.
+    volumes:
+      - pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      retries: 10
+    restart: unless-stopped
+
+volumes:
+  pgdata:

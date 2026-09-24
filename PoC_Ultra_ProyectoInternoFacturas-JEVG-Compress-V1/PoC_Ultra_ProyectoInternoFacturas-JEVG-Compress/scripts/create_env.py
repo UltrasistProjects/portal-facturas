@@ -1,27 +1,82 @@
-"""Crea .env a partir de .env.example con una SECRET_KEY aleatoria. Nunca sobrescribe un .env existente."""
+"""Crea .env a partir de .env.example, o completa uno existente, con SECRET_KEY, credenciales de PostgreSQL y
+DATABASE_URL.
+
+Ante un .env existente solo agrega las claves ausentes (o vacias) sin tocar los valores presentes, salvo un
+DATABASE_URL de SQLite, que se reemplaza por el de PostgreSQL avisandolo.
+"""
 
 import secrets
 from pathlib import Path
+from urllib.parse import quote
 
 ROOT = Path(__file__).resolve().parents[1]
 
+POSTGRES_DEFAULTS = {"POSTGRES_USER": "portal", "POSTGRES_DB": "portal", "POSTGRES_PORT": "55432"}
+SQLITE_WARNING = "AVISO: DATABASE_URL de SQLite reemplazada por la de PostgreSQL (SQLite ya no es compatible)."
 
-def create_env(root: Path = ROOT) -> bool:
+
+def parse_env(lines: list[str]) -> dict[str, str]:
+    """Valores de las lineas CLAVE=valor (la primera aparicion; se ignoran comentarios)."""
+    values: dict[str, str] = {}
+    for line in lines:
+        key, separator, value = line.partition("=")
+        key = key.strip()
+        if separator and key and not key.startswith("#"):
+            values.setdefault(key, value.strip().strip("'\""))
+    return values
+
+
+def _set(lines: list[str], key: str, value: str) -> None:
+    """Reemplaza la linea CLAVE= existente o agrega una al final."""
+    for index, line in enumerate(lines):
+        if "=" in line and line.partition("=")[0].strip() == key:
+            lines[index] = f"{key}={value}"
+            return
+    lines.append(f"{key}={value}")
+
+
+def database_url(values: dict[str, str]) -> str:
+    user, password, database = (
+        quote(values[key], safe="") for key in ("POSTGRES_USER", "POSTGRES_PASSWORD", "POSTGRES_DB")
+    )
+    return f"postgresql+psycopg://{user}:{password}@127.0.0.1:{values['POSTGRES_PORT']}/{database}"
+
+
+def create_env(root: Path = ROOT) -> list[str]:
+    """Crea o completa .env. Devuelve la descripcion de cada cambio; lista vacia si el archivo no cambio."""
     env_file = root / ".env"
-    if env_file.exists():
-        return False
-    lines = (root / ".env.example").read_text(encoding="utf-8").splitlines()
-    secret = f"SECRET_KEY={secrets.token_urlsafe(64)}"
-    if any(line.startswith("SECRET_KEY=") for line in lines):
-        lines = [secret if line.startswith("SECRET_KEY=") else line for line in lines]
-    else:
-        lines.append(secret)
-    env_file.write_text("\n".join(lines) + "\n", encoding="utf-8")
-    return True
+    created = not env_file.exists()
+    lines = (root / ".env.example" if created else env_file).read_text(encoding="utf-8").splitlines()
+    values = parse_env(lines)
+    changes = ["creado a partir de .env.example"] if created else []
+
+    def fill(key: str, value: str, description: str) -> None:
+        _set(lines, key, value)
+        values[key] = value
+        changes.append(description)
+
+    if not values.get("SECRET_KEY"):
+        fill("SECRET_KEY", secrets.token_urlsafe(64), "SECRET_KEY aleatoria generada")
+    for key, default in POSTGRES_DEFAULTS.items():
+        if not values.get(key):
+            fill(key, default, f"{key}={default} agregada")
+    if not values.get("POSTGRES_PASSWORD"):
+        # token_urlsafe solo usa [A-Za-z0-9_-]: es segura dentro de la URL.
+        fill("POSTGRES_PASSWORD", secrets.token_urlsafe(32), "POSTGRES_PASSWORD aleatoria generada")
+    url = values.get("DATABASE_URL", "")
+    if url.startswith("sqlite"):
+        fill("DATABASE_URL", database_url(values), SQLITE_WARNING)
+    elif not url:
+        fill("DATABASE_URL", database_url(values), "DATABASE_URL de PostgreSQL agregada")
+
+    if changes:
+        env_file.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return changes
 
 
 if __name__ == "__main__":
-    if create_env():
-        print(".env creado con una SECRET_KEY aleatoria.")
-    else:
-        print(".env ya existe; no se modifico.")
+    changes = create_env()
+    if not changes:
+        print(".env ya esta completo; no se modifico.")
+    for change in changes:
+        print(change if change.startswith("AVISO") else f".env: {change}")
