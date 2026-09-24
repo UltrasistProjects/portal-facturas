@@ -7,24 +7,53 @@ import tempfile
 from pathlib import Path
 
 import pytest
+from dotenv import dotenv_values
+from sqlalchemy import create_engine, text
+from sqlalchemy.engine import make_url
+from sqlalchemy.exc import OperationalError
+from sqlalchemy.pool import NullPool
+
+from scripts import pgtools
 
 ROOT = Path(__file__).resolve().parents[1]
 
-# La suite corre sobre una BD y un almacenamiento temporales. Las variables deben
-# definirse antes de importar `app`, porque la configuracion se lee al importar.
+# La suite corre sobre una base PostgreSQL temporal (portal_test_<aleatorio>) y un almacenamiento temporal. Las
+# variables deben definirse antes de importar `app`, porque la configuracion se lee al importar. La base se crea al
+# iniciar la sesion (fixture test_database) y se elimina al terminar, tambien si la sesion falla.
+try:
+    SERVER_URL = pgtools.server_url()
+    SERVER_ERROR = None
+except RuntimeError as exc:  # pytest_sessionstart cancela la sesion con este mensaje
+    SERVER_URL, SERVER_ERROR = pgtools.make_url("postgresql+psycopg://sin-servidor/postgres"), exc
+
+# Base de trabajo (la del .env o del entorno, nunca TEST_DATABASE_URL): la suite no debe tocarla.
+_work = os.environ.get("DATABASE_URL") or dotenv_values(ROOT / ".env").get("DATABASE_URL")
+WORK_URL = make_url(_work) if _work else None
+TEST_DATABASE = f"portal_test_{secrets.token_hex(6)}"
 TEST_ROOT = Path(tempfile.mkdtemp(prefix="portal_tests_"))
 os.environ.update(
     {
         "SECRET_KEY": secrets.token_urlsafe(64),
         "APP_ENV": "test",
         "DEBUG": "false",
-        "DATABASE_URL": f"sqlite:///{(TEST_ROOT / 'test.db').as_posix()}",
+        "DATABASE_URL": pgtools.url_string(pgtools.database_url(TEST_DATABASE, SERVER_URL)),
         "STORAGE_PATH": str(TEST_ROOT / "storage"),
         "LOG_DIR": str(TEST_ROOT / "logs"),
         # TestClient usa http://testserver; con cookie Secure no se enviaria la sesion.
         "SESSION_HTTPS_ONLY": "false",
     }
 )
+
+
+def pytest_sessionstart(session):
+    """Antes de recolectar las pruebas (que importan `app`): sin servidor alcanzable, la sesion no empieza."""
+    try:
+        if SERVER_ERROR is not None:
+            raise SERVER_ERROR
+        pgtools.check_server(SERVER_URL)
+    except RuntimeError as exc:
+        pytest.exit(f"Pruebas canceladas: {exc} O defina TEST_DATABASE_URL con un servidor alcanzable.", returncode=3)
+
 
 TEST_PASSWORDS = {
     "admin@poc.local": "Test#Admin2026",
@@ -34,11 +63,26 @@ TEST_PASSWORDS = {
 }
 
 
-def _workspace_snapshot() -> dict[str, str]:
+def _work_row_counts() -> dict[str, int] | None:
+    """Filas por tabla de la base de trabajo; None si no es alcanzable (p. ej. en un CI sin ella)."""
+    if WORK_URL is None:
+        return None
+    engine = create_engine(WORK_URL, poolclass=NullPool, connect_args={"connect_timeout": 5})
+    try:
+        with engine.connect() as connection:
+            tables = connection.scalars(
+                text("SELECT tablename FROM pg_tables WHERE schemaname = 'public' ORDER BY tablename")
+            ).all()
+            return {table: connection.scalar(text(f'SELECT count(*) FROM "{table}"')) for table in tables}
+    except OperationalError:
+        return None
+
+
+def _workspace_snapshot() -> dict:
     """Huella de los datos de trabajo del proyecto, que la suite no debe tocar."""
-    files = [p for p in (ROOT / "data").glob("*.db*") if p.is_file()]
-    files += [p for p in (ROOT / "storage").rglob("*") if p.is_file()]
-    return {str(p.relative_to(ROOT)): hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(files)}
+    files = [p for p in (ROOT / "storage").rglob("*") if p.is_file()]
+    storage = {str(p.relative_to(ROOT)): hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(files)}
+    return {"database": _work_row_counts(), "storage": storage}
 
 
 def alembic_config(database_url: str | None = None):
@@ -57,16 +101,20 @@ def test_database():
     before = _workspace_snapshot()
     from alembic import command
 
-    command.upgrade(alembic_config(), "head")
-    from scripts.seed_db import main as seed
-
-    seed(passwords=TEST_PASSWORDS)
-    yield
     from app.core.database import engine
 
-    engine.dispose()
-    shutil.rmtree(TEST_ROOT, ignore_errors=True)
-    assert _workspace_snapshot() == before, "La suite modifico data/ o storage/ del proyecto"
+    pgtools.create_database(TEST_DATABASE, SERVER_URL)
+    try:
+        command.upgrade(alembic_config(), "head")
+        from scripts.seed_db import main as seed
+
+        seed(passwords=TEST_PASSWORDS)
+        yield
+    finally:
+        engine.dispose()
+        pgtools.drop_database(TEST_DATABASE, SERVER_URL)
+        shutil.rmtree(TEST_ROOT, ignore_errors=True)
+    assert _workspace_snapshot() == before, "La suite modifico la base de trabajo o storage/ del proyecto"
 
 
 @pytest.fixture(autouse=True)

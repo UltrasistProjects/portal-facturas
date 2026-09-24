@@ -42,21 +42,55 @@ def new_invoice(db, **overrides) -> Invoice:
     return invoice
 
 
-def test_almacenamiento_exacto_en_centavos(db):
+def test_almacenamiento_exacto_en_numeric(db):
     invoice = new_invoice(db, subtotal=Decimal("100000.10"))
     db.flush()
     stored = db.execute(
-        text("SELECT subtotal_cents, typeof(subtotal_cents) FROM invoices WHERE id = :id"), {"id": invoice.id}
+        text("SELECT subtotal, pg_typeof(subtotal)::text FROM invoices WHERE id = :id"), {"id": invoice.id}
     )
-    assert stored.one() == (10000010, "integer")
+    assert stored.one() == (Decimal("100000.10"), "numeric")
     db.expire(invoice)
     assert invoice.subtotal == Decimal("100000.10")
 
 
+# (tabla, columna) -> tipo nativo esperado (information_schema).
+NATIVE_TYPES = {
+    **{("invoices", column): ("numeric", 16, 2) for column in ("subtotal", "tax", "total")},
+    ("contracts", "authorized_amount"): ("numeric", 16, 2),
+    ("contract_amendments", "previous_amount"): ("numeric", 16, 2),
+    ("contract_amendments", "new_amount"): ("numeric", 16, 2),
+    ("validation_results", "confidence"): ("numeric", 5, 4),
+    ("invoices", "created_at"): ("timestamp with time zone", None, None),
+    ("audit_logs", "timestamp"): ("timestamp with time zone", None, None),
+    ("documents", "metadata_json"): ("jsonb", None, None),
+    ("validation_results", "evidence_json"): ("jsonb", None, None),
+    ("audit_logs", "old_value"): ("jsonb", None, None),
+    ("audit_logs", "new_value"): ("jsonb", None, None),
+}
+
+
+def test_columnas_con_tipos_nativos_sin_sufijos(db):
+    rows = db.execute(
+        text(
+            "SELECT table_name, column_name, data_type, numeric_precision, numeric_scale "
+            "FROM information_schema.columns WHERE table_schema = 'public'"
+        )
+    ).all()
+    columns = {(table, column): (data_type, precision, scale) for table, column, data_type, precision, scale in rows}
+    assert {key: columns.get(key) for key in NATIVE_TYPES} == NATIVE_TYPES
+    assert [key for key in columns if key[1].endswith(("_cents", "_bp"))] == []
+    # Ninguna fecha-hora sin zona horaria.
+    assert [key for key, value in columns.items() if value[0] == "timestamp without time zone"] == []
+
+
 def test_precision_excesiva_rechazada(db):
+    stored_rounded = "SELECT count(*) FROM invoices WHERE total = 10.01"
+    before = db.scalar(text(stored_rounded))
     new_invoice(db, total=Decimal("10.005"))
     with pytest.raises(StatementError, match="mas de 2 decimales"):
         db.flush()
+    db.rollback()
+    assert db.scalar(text(stored_rounded)) == before  # PostgreSQL no llego a redondearlo a 10.01
 
 
 def test_suma_exacta_en_sql(db):
@@ -92,7 +126,7 @@ def test_uuid_unico_y_multiples_nulos(db):
     new_invoice(db, uuid="UUID-UNICO-1")
     db.flush()
     new_invoice(db, uuid="UUID-UNICO-1")
-    with pytest.raises(IntegrityError, match="invoices.uuid"):
+    with pytest.raises(IntegrityError, match='violates unique constraint "uq_invoices_uuid"'):
         db.flush()
 
 
@@ -103,7 +137,7 @@ def test_numero_unico_por_proveedor(db):
     new_invoice(db, invoice_number="NUMERO-X", supplier_id=other.id, contract_id=None)
     db.flush()  # otro proveedor: permitido
     new_invoice(db, invoice_number="NUMERO-X")
-    with pytest.raises(IntegrityError, match="invoices.supplier_id, invoices.invoice_number"):
+    with pytest.raises(IntegrityError, match='violates unique constraint "uq_invoices_supplier_number"'):
         db.flush()
 
 
@@ -111,20 +145,31 @@ def test_numero_unico_por_proveedor(db):
     "sql",
     [
         "UPDATE invoices SET status = 'APROBADA'",
-        "UPDATE invoices SET total_cents = -100",
+        "UPDATE invoices SET total = -1.00",
         "UPDATE invoices SET validation_score = 101",
         "UPDATE contracts SET end_date = '2025-01-01'",
-        "UPDATE contracts SET authorized_amount_cents = 0",
-        "UPDATE validation_results SET confidence_bp = 10001",
-        "UPDATE suppliers SET status = 'SUSPENDIDO'",
+        "UPDATE contracts SET authorized_amount = 0",
+        "UPDATE validation_results SET confidence = 1.0001",
+        "UPDATE suppliers SET status = 'BAJA'",
         "UPDATE users SET role = 'ROOT'",
         "UPDATE reviews SET decision = 'QUIZAS'",
         "UPDATE documents SET processing_status = 'RARO'",
     ],
 )
 def test_check_rechaza_valores_invalidos_por_sql_directo(db, sql):
-    with pytest.raises(IntegrityError, match="CHECK constraint failed"):
+    with pytest.raises(IntegrityError, match="violates check constraint"):
         db.execute(text(sql))
+
+
+def test_enmienda_con_monto_no_positivo_rechazada(db):
+    with pytest.raises(IntegrityError, match='violates check constraint "ck_contract_amendments_new_amount_positive"'):
+        db.execute(
+            text(
+                "INSERT INTO contract_amendments (contract_id, previous_amount, new_amount, reason, created_by, "
+                "created_at) SELECT c.id, c.authorized_amount, 0, 'prueba', u.id, now() "
+                "FROM contracts c CROSS JOIN users u LIMIT 1"
+            )
+        )
 
 
 def test_borrado_de_factura_por_orm_prohibido(db):
@@ -146,7 +191,7 @@ def test_quitar_documento_de_la_coleccion_no_lo_borra(db):
 
 def test_borrado_sql_de_factura_con_documentos(db):
     invoice = invoice_by_number("A-CORRECTA")
-    with pytest.raises(IntegrityError, match="FOREIGN KEY"):
+    with pytest.raises(IntegrityError, match='violates RESTRICT setting of foreign key constraint "fk_documents_'):
         db.execute(text("DELETE FROM invoices WHERE id = :id"), {"id": invoice.id})
 
 
@@ -155,8 +200,11 @@ def test_fechas_hora_en_utc(db):
     local = datetime(2026, 8, 20, 19, 0, tzinfo=ZoneInfo("America/Mexico_City"))
     invoice = new_invoice(db, created_at=local)
     db.flush()
-    raw = db.execute(text("SELECT created_at FROM invoices WHERE id = :id"), {"id": invoice.id}).scalar()
-    assert raw.startswith("2026-08-21 01:00:00")
+    raw = db.execute(
+        text("SELECT to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS') FROM invoices WHERE id = :id"),
+        {"id": invoice.id},
+    ).scalar()
+    assert raw == "2026-08-21 01:00:00"
     db.expire(invoice)
     assert invoice.created_at == datetime(2026, 8, 21, 1, 0, tzinfo=timezone.utc)
     assert invoice.created_at.tzinfo == timezone.utc
