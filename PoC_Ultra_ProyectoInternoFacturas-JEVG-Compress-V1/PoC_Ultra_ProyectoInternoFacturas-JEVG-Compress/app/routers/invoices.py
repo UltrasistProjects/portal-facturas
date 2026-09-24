@@ -251,7 +251,8 @@ def download_document(invoice_id: int, document_id: int, db: Session = Depends(g
     path = Path(doc.path)
     if not path.is_file():
         raise HTTPException(404, "Archivo no disponible")
-    return FileResponse(path, filename=safe_download_name(doc.original_filename), media_type=doc.mime_type)
+    # Nunca el MIME almacenado: la descarga no debe interpretarse en el navegador (junto con nosniff).
+    return FileResponse(path, filename=safe_download_name(doc.original_filename), media_type="application/octet-stream")
 
 
 @router.post("/{invoice_id}/validation")

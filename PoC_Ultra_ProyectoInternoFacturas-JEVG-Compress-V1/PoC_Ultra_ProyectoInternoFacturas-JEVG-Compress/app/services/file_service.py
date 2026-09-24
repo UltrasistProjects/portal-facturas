@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import codecs
 import hashlib
-import mimetypes
 import re
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from uuid import uuid4
@@ -11,16 +12,44 @@ from fastapi import UploadFile
 
 from app.core.config import settings
 
-ALLOWED_EXTENSIONS = {".xml", ".pdf", ".txt", ".png", ".jpg", ".jpeg"}
-ALLOWED_MIMES = {
-    "application/xml",
-    "text/xml",
-    "application/pdf",
-    "text/plain",
-    "image/png",
-    "image/jpeg",
-    "application/octet-stream",
+
+def _is_pdf(content: bytes) -> bool:
+    return content.startswith(b"%PDF-")
+
+
+def _is_png(content: bytes) -> bool:
+    return content.startswith(b"\x89PNG\r\n\x1a\n")
+
+
+def _is_jpeg(content: bytes) -> bool:
+    return content.startswith(b"\xff\xd8\xff")
+
+
+def _is_xml(content: bytes) -> bool:
+    return content.removeprefix(codecs.BOM_UTF8).lstrip().startswith(b"<")
+
+
+def _is_text(content: bytes) -> bool:
+    if b"\x00" in content:
+        return False
+    try:
+        content.decode("utf-8")
+    except UnicodeDecodeError:
+        return False
+    return True
+
+
+# Extension -> (MIME canonico, verificador de contenido, nombre para el mensaje). El Content-Type que declara el
+# cliente no se usa: la aceptacion y el MIME almacenado dependen del contenido verificado.
+FILE_TYPES: dict[str, tuple[str, Callable[[bytes], bool], str]] = {
+    ".pdf": ("application/pdf", _is_pdf, "un PDF"),
+    ".png": ("image/png", _is_png, "una imagen PNG"),
+    ".jpg": ("image/jpeg", _is_jpeg, "una imagen JPEG"),
+    ".jpeg": ("image/jpeg", _is_jpeg, "una imagen JPEG"),
+    ".xml": ("application/xml", _is_xml, "un XML"),
+    ".txt": ("text/plain", _is_text, "un texto UTF-8"),
 }
+ALLOWED_EXTENSIONS = set(FILE_TYPES)
 
 
 @dataclass
@@ -49,16 +78,14 @@ class LocalFileStorage:
         extension = Path(original).suffix.lower()
         if extension not in ALLOWED_EXTENSIONS:
             raise ValueError("Extension no permitida")
-        mime = (upload.content_type or mimetypes.guess_type(original)[0] or "application/octet-stream").lower()
-        if mime not in ALLOWED_MIMES:
-            raise ValueError("Tipo MIME no permitido")
+        mime, matches_content, description = FILE_TYPES[extension]
         content = await upload.read(settings.max_upload_mb * 1024 * 1024 + 1)
         if not content:
             raise ValueError("El archivo esta vacio")
         if len(content) > settings.max_upload_mb * 1024 * 1024:
             raise ValueError(f"El archivo excede {settings.max_upload_mb} MB")
-        if extension == ".xml" and not content.lstrip().startswith(b"<"):
-            raise ValueError("Contenido XML invalido")
+        if not matches_content(content):
+            raise ValueError(f"El contenido no corresponde a {description}")
         stored = f"{uuid4().hex}{extension}"
         folder = (self.root / scope / str(int(entity_id))).resolve()
         if self.root not in folder.parents:

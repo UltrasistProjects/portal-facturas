@@ -123,19 +123,19 @@
 
 ## 8. Fase 1 — Archivos subidos y descarga (SEC-06)
 
-- [ ] 8.1 En `app/services/file_service.py`:
+- [x] 8.1 En `app/services/file_service.py`:
   - tabla extensión → (firma o validador, MIME canónico): PDF, PNG, JPEG, XML con BOM opcional, y TXT UTF-8 sin NUL;
   - ignorar el `Content-Type` del cliente y almacenar el MIME canónico;
   - eliminar `application/octet-stream`.
-- [ ] 8.2 La descarga responde siempre con `media_type="application/octet-stream"` y `Content-Disposition: attachment`.
-- [ ] 8.3 Pruebas unitarias de `file_service`:
+- [x] 8.2 La descarga responde siempre con `media_type="application/octet-stream"` y `Content-Disposition: attachment`.
+- [x] 8.3 Pruebas unitarias de `file_service`:
   - `MZ` como `.pdf` → rechazado, sin archivo escrito;
   - PDF válido con `application/octet-stream` → aceptado con `application/pdf`;
   - JPEG como `.png`, TXT con NUL y `.html` → rechazados;
   - XML con BOM → aceptado;
   - vacío y tamaño `+1` byte → rechazados;
   - verificación de path traversal.
-- [ ] 8.4 Pruebas de endpoint:
+- [x] 8.4 Pruebas de endpoint:
   - `POST /invoices/{id}/documents` válido y rechazado;
   - carga en `UNDER_REVIEW` → 409;
   - descarga con `application/octet-stream`;
