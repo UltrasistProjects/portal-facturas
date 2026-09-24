@@ -1,4 +1,4 @@
-# Invoice Portal PoC
+# Invoice Portal PoCC
 
 Portal local de facturación y prevalidación de proveedores para ULTRASIST. Recibe expedientes, extrae CFDI 4.0, aplica reglas determinísticas, presenta una matriz de evidencia y soporta revisión administrativa con trazabilidad completa.
 
