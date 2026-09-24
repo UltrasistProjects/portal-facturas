@@ -72,7 +72,3 @@ La descarga de documentos SHALL responder siempre con `Content-Type: application
 - **WHEN** un registro de `documents` contiene `../../.env` como ruta
 - **THEN** la descarga responde HTTP 404 y no lee el archivo
 
-#### Scenario: Migración de rutas absolutas existentes
-- **WHEN** se migra una base que contiene `C:\Users\x\...\storage\suppliers\1\demo_962e8155a8.txt`
-- **THEN** la ruta queda almacenada como `suppliers/1/demo_962e8155a8.txt`
-

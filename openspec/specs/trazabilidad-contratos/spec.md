@@ -11,9 +11,9 @@ La tabla `contracts` SHALL registrar `created_at`, `created_by`, `updated_at` y 
 - **WHEN** un ADMIN crea un contrato
 - **THEN** el contrato guarda `created_at` en UTC, `created_by` con el id del ADMIN, y `updated_at`/`updated_by` con los mismos valores
 
-#### Scenario: Contratos preexistentes
-- **WHEN** se migra una base con contratos sin campos de auditoría
-- **THEN** `created_at` y `updated_at` toman la marca temporal de la migración, y `created_by`/`updated_by` quedan en `NULL`
+#### Scenario: Modificación de contrato
+- **WHEN** un ADMIN registra una enmienda del monto autorizado de un contrato
+- **THEN** `updated_at` avanza a la fecha de la enmienda y `updated_by` toma el id de ese ADMIN, sin alterar `created_at` ni `created_by`
 
 ### Requirement: Modificación versionada del monto autorizado
 El monto autorizado de un contrato SHALL modificarse únicamente mediante una enmienda registrada por un ADMIN. Cada enmienda guarda el contrato, el monto anterior, el monto nuevo, el motivo (obligatorio), el usuario y la marca temporal. Cada enmienda SHALL auditarse como `CONTRACT_AMOUNT_CHANGED`, con `old_value`/`new_value`. El historial de enmiendas SHALL ser visible para INTERNAL y ADMIN.

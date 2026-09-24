@@ -7,6 +7,11 @@ Configuración segura por entorno (`SECRET_KEY`, `DEBUG`, `APP_ENV`), rutas ancl
 ### Requirement: SECRET_KEY obligatoria y robusta
 El sistema SHALL negarse a arrancar si `SECRET_KEY` no está definida, si tiene menos de 32 caracteres o si comienza con el prefijo de placeholder `change-me`. La configuración MUST NOT contener ningún valor por defecto para `SECRET_KEY` ni en el código ni en `.env.example`.
 
+`scripts/create_env.py` SHALL:
+- generar `SECRET_KEY` y `POSTGRES_PASSWORD` aleatorias;
+- escribir `DATABASE_URL` con esas credenciales y `POSTGRES_PORT`;
+- ante un `.env` existente, añadir sólo las claves ausentes sin cambiar los valores presentes, salvo un `DATABASE_URL` de SQLite, que reemplaza avisándolo.
+
 #### Scenario: Arranque sin SECRET_KEY
 - **WHEN** la aplicación se inicia sin `SECRET_KEY` en el entorno ni en `.env`
 - **THEN** el arranque falla con un error de configuración que indica que `SECRET_KEY` es obligatoria y cómo generarla (`secrets.token_urlsafe(64)`)
@@ -21,11 +26,15 @@ El sistema SHALL negarse a arrancar si `SECRET_KEY` no está definida, si tiene 
 
 #### Scenario: Generación del .env local
 - **WHEN** un script de arranque local (`run_local.*`) se ejecuta y no existe `.env`
-- **THEN** se crea `.env` a partir de `.env.example` con una `SECRET_KEY` aleatoria generada con `secrets.token_urlsafe(64)`
+- **THEN** se crea `.env` a partir de `.env.example` con `SECRET_KEY` y `POSTGRES_PASSWORD` aleatorias y un `DATABASE_URL` coherente con ellas
 
-#### Scenario: .env existente no se sobrescribe
-- **WHEN** un script de arranque local se ejecuta y ya existe `.env`
-- **THEN** el archivo `.env` permanece sin cambios
+#### Scenario: .env existente se completa sin sobrescribir
+- **WHEN** existe un `.env` con `SECRET_KEY` propia, sin `POSTGRES_PASSWORD` y con `DATABASE_URL` de SQLite, y se ejecuta `scripts/create_env.py`
+- **THEN** `SECRET_KEY` y las demás claves conservan su valor, se añaden `POSTGRES_PASSWORD` y las claves de PostgreSQL ausentes, y `DATABASE_URL` se reemplaza por la de PostgreSQL con un aviso en consola
+
+#### Scenario: .env ya completo
+- **WHEN** existe un `.env` que ya contiene todas las claves y se ejecuta `scripts/create_env.py`
+- **THEN** el archivo permanece sin cambios
 
 ### Requirement: Modo debug desacoplado del manejo de errores
 El sistema MUST NOT pasar `debug=True` a `FastAPI(...)` bajo ninguna configuración. `DEBUG` SHALL valer `false` por defecto y su único efecto SHALL ser elevar el nivel de log a `DEBUG`.
@@ -65,13 +74,24 @@ Cuando `APP_ENV` sea `production`, el sistema SHALL abortar el arranque si detec
 - **THEN** la aplicación arranca normalmente
 
 ### Requirement: Rutas ancladas al directorio del proyecto
-Todas las rutas de la aplicación (`.env`, base de datos SQLite relativa, `storage/`, `logs/`, `app/static`, `app/templates`) SHALL resolverse contra la raíz del proyecto y MUST NOT depender del directorio de trabajo actual. Las rutas relativas provistas por configuración SHALL interpretarse relativas a la raíz del proyecto.
+Todas las rutas de la aplicación (`.env`, `storage/`, `logs/`, `backups/`, `app/static`, `app/templates`) SHALL resolverse contra la raíz del proyecto y MUST NOT depender del directorio de trabajo actual. Las rutas relativas provistas por configuración SHALL interpretarse relativas a la raíz del proyecto.
 
 #### Scenario: Arranque desde otro directorio
 - **WHEN** la aplicación se inicia con el directorio de trabajo fuera de la raíz del proyecto
-- **THEN** usa la misma base de datos, almacenamiento, logs y recursos estáticos que al iniciarse desde la raíz, y no crea una base de datos vacía nueva
+- **THEN** usa el mismo `.env`, almacenamiento, logs y recursos estáticos que al iniciarse desde la raíz, y no crea archivos en el directorio de trabajo
 
 #### Scenario: Ruta relativa en configuración
 - **WHEN** `STORAGE_PATH=./storage` y el directorio de trabajo es distinto de la raíz
 - **THEN** el almacenamiento resuelto es `<raíz del proyecto>/storage`
+
+### Requirement: Base de datos PostgreSQL obligatoria
+`DATABASE_URL` SHALL ser obligatoria y SHALL usar el esquema `postgresql+psycopg://`. Una URL ausente o de otro motor (en particular `sqlite:///`) MUST impedir el arranque, con un mensaje que remita a `scripts/create_env.py`.
+
+#### Scenario: URL de SQLite heredada
+- **WHEN** `.env` contiene `DATABASE_URL=sqlite:///./data/invoice_portal.db`
+- **THEN** el arranque falla indicando que SQLite ya no es compatible y que `python scripts/create_env.py` actualiza el `.env`
+
+#### Scenario: URL ausente
+- **WHEN** `DATABASE_URL` no está definida
+- **THEN** el arranque falla indicando que es obligatoria
 

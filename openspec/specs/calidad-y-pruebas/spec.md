@@ -5,11 +5,15 @@ Pruebas aisladas de los datos de trabajo, cobertura de los módulos de riesgo co
 
 ## Requirements
 ### Requirement: Pruebas aisladas de los datos de trabajo
-La suite de pruebas SHALL ejecutarse sobre una base de datos y un directorio de almacenamiento temporales creados por sesión de prueba, y MUST NOT leer, modificar ni borrar `data/invoice_portal.db` ni `storage/` del proyecto. Las pruebas MUST NOT depender de identificadores autoincrementales ni de folios del seed; SHALL localizar los datos por atributos de negocio.
+Cada sesión de pruebas SHALL crear una base de datos temporal `portal_test_<aleatorio>` en el servidor indicado por `TEST_DATABASE_URL` (o, si no existe, en el servidor de `DATABASE_URL`), aplicarle las migraciones y el seed, y eliminarla al terminar, también cuando la sesión falla. Usará además un directorio de almacenamiento temporal. La suite MUST NOT leer, modificar ni borrar la base de trabajo ni `storage/` del proyecto. Si el servidor no es alcanzable, la sesión SHALL fallar con un mensaje que indique cómo levantar el contenedor. Las pruebas MUST NOT depender de identificadores autoincrementales ni de folios del seed; SHALL localizar los datos por atributos de negocio.
 
 #### Scenario: Ejecutar pytest con una base de trabajo existente
-- **WHEN** existe `data/invoice_portal.db` con datos y se ejecuta `pytest`
-- **THEN** al terminar, el archivo conserva el mismo SHA-256 y `storage/` no cambió
+- **WHEN** la base de trabajo contiene datos y se ejecuta `pytest`
+- **THEN** al terminar, el número de filas de cada tabla de la base de trabajo es el mismo, `storage/` no cambió y no queda ninguna base `portal_test_*`
+
+#### Scenario: Servidor de pruebas no disponible
+- **WHEN** el contenedor `db` está detenido y no hay `TEST_DATABASE_URL` alcanzable
+- **THEN** `pytest` falla al iniciar la sesión con un mensaje que indica ejecutar `docker compose up -d --wait db`
 
 #### Scenario: Cambio de orden del seed
 - **WHEN** se reordenan los escenarios del seed
@@ -25,7 +29,8 @@ La suite SHALL incluir pruebas de:
 - el límite de DAT-001 en la zona horaria de negocio;
 - limitación de intentos de login, política de contraseñas y revocación de sesiones;
 - cabeceras de seguridad y ausencia de traceback;
-- migraciones hasta `head` sobre una base vacía y sobre una base con el esquema `0001`.
+- migraciones hasta `head` sobre una base PostgreSQL vacía, con `alembic check` sin diferencias;
+- respaldo y restauración con `pg_dump`/`pg_restore`.
 
 #### Scenario: Suite completa
 - **WHEN** se ejecuta `pytest`
@@ -50,7 +55,13 @@ El código de `app/`, `tests/`, `scripts/` y `alembic/` SHALL pasar `ruff check`
 - **THEN** `ruff check` falla con F401
 
 ### Requirement: Verificación automatizada y pipeline compartido
-La integración continua SHALL seguir siendo el pipeline compartido del equipo (`.github/workflows/calidad.yml`, SonarQube), sin workflows adicionales que dupliquen su lógica. `pytest` SHALL generar `coverage.xml` para ese pipeline. El proyecto SHALL incluir `scripts/check.py`, que ejecuta `ruff check`, `ruff format --check`, `alembic check`, `pytest` con umbral de cobertura y `pip-audit`, y termina con código distinto de cero si alguno falla.
+La integración continua SHALL seguir siendo el pipeline compartido del equipo (`.github/workflows/calidad.yml`, SonarQube), sin workflows adicionales que dupliquen su lógica. `pytest` SHALL generar `coverage.xml` para ese pipeline y requiere un PostgreSQL alcanzable. El proyecto SHALL incluir `scripts/check.py`, que ejecuta:
+- `ruff check` y `ruff format --check`;
+- `alembic check` sobre una base temporal del servidor de pruebas;
+- `pytest` con umbral de cobertura;
+- `pip-audit`.
+
+El script SHALL terminar con código distinto de cero si alguno falla.
 
 #### Scenario: Código sin formatear
 - **WHEN** se ejecuta `python scripts/check.py` con código sin formatear
@@ -59,4 +70,8 @@ La integración continua SHALL seguir siendo el pipeline compartido del equipo (
 #### Scenario: Reporte de cobertura para SonarQube
 - **WHEN** se ejecuta `pytest`
 - **THEN** se genera `coverage.xml` en la raíz de la PoC
+
+#### Scenario: Base temporal de alembic check
+- **WHEN** termina `scripts/check.py`
+- **THEN** no queda en el servidor la base temporal usada por `alembic check`
 
