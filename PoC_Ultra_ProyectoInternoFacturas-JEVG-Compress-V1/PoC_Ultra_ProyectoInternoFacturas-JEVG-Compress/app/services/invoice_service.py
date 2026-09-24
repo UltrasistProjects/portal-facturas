@@ -1,11 +1,23 @@
 from datetime import datetime, timezone
+from uuid import uuid4
 
 from sqlalchemy.orm import Session
 
 from app.core.constants import ALLOWED_TRANSITIONS, InvoiceStatus
 from app.core.errors import InvalidTransitionError
+from app.core.timeutils import to_business
 from app.models import Invoice
 from app.services.audit_service import audit
+
+
+def provisional_folio() -> str:
+    """Marcador unico mientras la BD asigna el id; se reemplaza en la misma transaccion (cabe en String(30))."""
+    return f"TMP-{uuid4().hex[:24]}"
+
+
+def internal_folio(invoice_id: int, created_at: datetime) -> str:
+    """Folio derivado del id asignado por la BD: sin carrera entre altas concurrentes (AUDITORIA COD-06)."""
+    return f"FAC-{to_business(created_at).year}-{invoice_id:05d}"
 
 
 def transition_invoice(db: Session, invoice: Invoice, target: InvoiceStatus, user_id: int | None = None) -> None:

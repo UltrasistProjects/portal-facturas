@@ -1,13 +1,10 @@
-import json
-from pathlib import Path
-
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import RedirectResponse
 from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.constants import Role
+from app.core.constants import BUSINESS_RULES, Role
 from app.core.database import get_db
 from app.core.security import hash_password, require_roles, validate_csrf
 from app.models import AuditLog, Supplier, User
@@ -89,5 +86,6 @@ def audit_log(request: Request, db: Session = Depends(get_db), user=Depends(requ
 
 @router.get("/rules")
 def rules(request: Request, user=Depends(require_roles(Role.ADMIN))):
-    rules_data = json.loads((Path(__file__).parents[1] / "rules" / "business_rules.json").read_text(encoding="utf-8"))
+    # Fuente unica: los mismos valores que aplica el motor de validacion (AUDITORIA COD-04).
+    rules_data = BUSINESS_RULES
     return templates.TemplateResponse(request, "admin/rules.html", {"user": user, "rules": rules_data})

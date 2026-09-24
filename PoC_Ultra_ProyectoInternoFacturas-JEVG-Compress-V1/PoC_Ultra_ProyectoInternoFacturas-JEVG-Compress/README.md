@@ -138,7 +138,7 @@ El proveedor sólo observa sus facturas. `INTERNAL` revisa y decide. `ADMIN` añ
 - `FIN-001..006`: límite autorizado, consistencia, moneda, UUID/número duplicados y diferencia absoluta/porcentual.
 - `SEM-001`: comparación semántica mediante adaptador; el mock reconoce Power Platform/Power Automate con confianza 0.93.
 
-`SEM-002..004` quedan reservadas como extensión. Las reglas centrales se documentan en `app/rules/business_rules.json` y sus valores tipados se cargan desde `core/constants.py`.
+`SEM-002..004` quedan reservadas como extensión. Los parámetros de negocio (receptor, método/forma de pago, usos CFDI y pesos del score) tienen una sola fuente, `BUSINESS_RULES` en `app/core/constants.py`, que usan tanto el motor como la vista `/admin/rules`.
 
 ### Cálculo del score
 

@@ -144,16 +144,16 @@
 
 ## 9. Fase 1 — Folio, reglas visibles y código muerto (COD-06, COD-04, COD-03b-d)
 
-- [ ] 9.1 Crear `app/core/timeutils.py` con `business_tz()`, `to_business()` y `business_now()` basados en `BUSINESS_TIMEZONE`.
-- [ ] 9.2 Folio en `create_invoice`: insertar con el marcador `TMP-<24 hex>`, hacer `flush()` y asignar `FAC-{to_business(created_at).year}-{id:05d}` en la misma transacción.
-- [ ] 9.3 `/admin/rules` renderiza `BUSINESS_RULES`, incluidos los pesos del score por severidad. Eliminar `app/rules/business_rules.json` y actualizar el texto de `admin/rules.html`.
-- [ ] 9.4 Eliminar los reexports `app/models/{audit,contract,document,invoice,review,supplier,user,validation}.py` y confirmar que nada los importa. Limpiar los imports sin usar señalados por `ruff`.
-- [ ] 9.5 Pruebas:
+- [x] 9.1 Crear `app/core/timeutils.py` con `business_tz()`, `to_business()` y `business_now()` basados en `BUSINESS_TIMEZONE`.
+- [x] 9.2 Folio en `create_invoice`: insertar con el marcador `TMP-<24 hex>`, hacer `flush()` y asignar `FAC-{to_business(created_at).year}-{id:05d}` en la misma transacción.
+- [x] 9.3 `/admin/rules` renderiza `BUSINESS_RULES`, incluidos los pesos del score por severidad. Eliminar `app/rules/business_rules.json` y actualizar el texto de `admin/rules.html`.
+- [x] 9.4 Eliminar los reexports `app/models/{audit,contract,document,invoice,review,supplier,user,validation}.py` y confirmar que nada los importa. Limpiar los imports sin usar señalados por `ruff`.
+- [x] 9.5 Pruebas:
   - formato del folio;
   - factura creada el 31 de diciembre a las 20:00 en la zona de negocio → `FAC-2026-`;
   - dos altas concurrentes (dos sesiones o hilos) → folios distintos, sin error;
   - `/admin/rules` muestra los pesos, y un `monkeypatch` de `BUSINESS_RULES["payment_form"]` se refleja en la vista y en XML-004.
-- [ ] 9.6 Checkpoint Fase 1: suite verde, `ruff` limpio, `alembic check` limpio, commit "fix: fase 1 de la auditoría".
+- [x] 9.6 Checkpoint Fase 1: suite verde, `ruff` limpio, `alembic check` limpio, commit "fix: fase 1 de la auditoría".
 
 ## 10. Fase 2 — Respaldo, restauración y reinicio seguro (BD-08)
 

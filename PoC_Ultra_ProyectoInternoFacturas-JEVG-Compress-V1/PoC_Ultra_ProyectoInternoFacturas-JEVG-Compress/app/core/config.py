@@ -1,6 +1,7 @@
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -64,6 +65,15 @@ class Settings(BaseSettings):
             raise ValueError(f"SECRET_KEY contiene el valor de ejemplo inseguro 'change-me...'. {SECRET_KEY_HINT}")
         if len(value) < MIN_SECRET_KEY_LENGTH:
             raise ValueError(f"SECRET_KEY debe tener al menos {MIN_SECRET_KEY_LENGTH} caracteres. {SECRET_KEY_HINT}")
+        return value
+
+    @field_validator("business_timezone")
+    @classmethod
+    def known_timezone(cls, value: str) -> str:
+        try:
+            ZoneInfo(value)
+        except (ZoneInfoNotFoundError, ValueError) as exc:
+            raise ValueError(f"BUSINESS_TIMEZONE desconocida: {value!r} (ejemplo: America/Mexico_City)") from exc
         return value
 
     @field_validator("storage_path", "log_dir")

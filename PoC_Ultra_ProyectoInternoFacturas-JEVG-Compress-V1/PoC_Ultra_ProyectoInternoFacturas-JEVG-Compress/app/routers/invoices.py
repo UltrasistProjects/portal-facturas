@@ -1,4 +1,3 @@
-from datetime import datetime
 from decimal import Decimal
 from pathlib import Path
 
@@ -17,7 +16,7 @@ from app.routers.common import templates
 from app.schemas import InvoiceCreate, validation_message
 from app.services.audit_service import audit
 from app.services.file_service import LocalFileStorage, safe_download_name
-from app.services.invoice_service import transition_invoice
+from app.services.invoice_service import internal_folio, provisional_folio, transition_invoice
 from app.services.pdf_service import analyze_pdf
 from app.services.reconciliation_service import reconcile_amount
 from app.services.validation_engine import run_validation
@@ -99,9 +98,8 @@ async def create_invoice(
     contract = db.get(Contract, contract_id)
     if not contract or contract.supplier_id != supplier_id:
         raise HTTPException(400, "Contrato no corresponde al proveedor")
-    count = db.scalar(select(Invoice.id).order_by(Invoice.id.desc()).limit(1)) or 0
     invoice = Invoice(
-        internal_folio=f"FAC-{datetime.now().year}-{count + 1:05d}",
+        internal_folio=provisional_folio(),
         supplier_id=supplier_id,
         uploaded_by=user.id,
         contract_id=contract_id,
@@ -116,6 +114,7 @@ async def create_invoice(
     )
     db.add(invoice)
     db.flush()
+    invoice.internal_folio = internal_folio(invoice.id, invoice.created_at)
     audit(db, "INVOICE_CREATED", "Invoice", invoice.id, user.id, new={"folio": invoice.internal_folio})
     db.commit()
     return RedirectResponse(f"/invoices/{invoice.id}/documents", status_code=303)

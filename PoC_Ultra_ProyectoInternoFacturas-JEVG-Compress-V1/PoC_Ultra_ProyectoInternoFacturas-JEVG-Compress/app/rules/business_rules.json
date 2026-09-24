@@ -1,8 +1,0 @@
-{
-  "receiver": {"business_name": "ULTRASIST", "rfc": "ULT940623AG0", "postal_code": "03930", "tax_regime": "601"},
-  "payment_method": "PPD",
-  "payment_form": "99",
-  "allowed_cfdi_uses": ["G03", "I04"],
-  "note": "Referencia editable para futura persistencia administrativa; la PoC carga sus equivalentes tipados desde core.constants."
-}
-
