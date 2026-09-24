@@ -53,7 +53,7 @@ El proyecto SHALL incluir un script de empaquetado que genere un ZIP sólo con a
 - **THEN** el script termina con error y elimina el ZIP generado
 
 ### Requirement: Dependencias auditadas y reproducibles
-El proyecto SHALL mantener un `requirements.lock` universal (válido en Linux, macOS y Windows) con versiones exactas y hashes de todas las dependencias, incluidas las transitivas, y fijar `starlette` explícitamente. Las dependencias de sólo prueba (`httpx`, `pytest*`, `ruff`, `pip-audit`, `uv`) SHALL estar únicamente en `requirements-dev.txt`. La integración continua SHALL ejecutar `pip-audit` y fallar ante vulnerabilidades conocidas que no estén explícitamente excluidas y justificadas.
+El proyecto SHALL mantener un `requirements.lock` universal (válido en Linux, macOS y Windows) con versiones exactas y hashes de todas las dependencias, incluidas las transitivas, y fijar `starlette` explícitamente. Las dependencias de sólo prueba (`httpx`, `pytest*`, `ruff`, `pip-audit`, `uv`) SHALL estar únicamente en `requirements-dev.txt`. `scripts/check.py` SHALL ejecutar `pip-audit` sobre el lock y fallar ante vulnerabilidades conocidas que no estén explícitamente excluidas y justificadas.
 
 #### Scenario: Instalación reproducible
 - **WHEN** se instala con `pip install --require-hashes -r requirements.lock` en dos fechas distintas
@@ -61,4 +61,4 @@ El proyecto SHALL mantener un `requirements.lock` universal (válido en Linux, m
 
 #### Scenario: Vulnerabilidad conocida
 - **WHEN** una dependencia bloqueada tiene un aviso de seguridad publicado
-- **THEN** el paso `pip-audit` de CI falla e identifica el paquete y el aviso
+- **THEN** el paso `pip-audit` de `scripts/check.py` falla e identifica el paquete y el aviso

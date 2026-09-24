@@ -45,9 +45,13 @@ El código de `app/`, `tests/`, `scripts/` y `alembic/` SHALL pasar `ruff check`
 - **WHEN** un módulo importa un nombre que no usa
 - **THEN** `ruff check` falla con F401
 
-### Requirement: Integración continua
-El repositorio SHALL incluir un workflow de GitHub Actions que, en cada push y pull request, ejecute sobre el proyecto de la PoC: `ruff check`, `ruff format --check`, `alembic check`, `pytest` con umbral de cobertura y `pip-audit`. Cualquier paso fallido SHALL marcar la ejecución como fallida.
+### Requirement: Verificación automatizada y pipeline compartido
+La integración continua SHALL seguir siendo el pipeline compartido del equipo (`.github/workflows/calidad.yml`, SonarQube), sin workflows adicionales que dupliquen su lógica. `pytest` SHALL generar `coverage.xml` para ese pipeline. El proyecto SHALL incluir `scripts/check.py`, que ejecuta `ruff check`, `ruff format --check`, `alembic check`, `pytest` con umbral de cobertura y `pip-audit`, y termina con código distinto de cero si alguno falla.
 
-#### Scenario: Pull request con formato incorrecto
-- **WHEN** se abre un pull request con código sin formatear
-- **THEN** el workflow falla en el paso `ruff format --check`
+#### Scenario: Código sin formatear
+- **WHEN** se ejecuta `python scripts/check.py` con código sin formatear
+- **THEN** el paso `ruff format --check` falla y el script termina con código distinto de cero
+
+#### Scenario: Reporte de cobertura para SonarQube
+- **WHEN** se ejecuta `pytest`
+- **THEN** se genera `coverage.xml` en la raíz de la PoC

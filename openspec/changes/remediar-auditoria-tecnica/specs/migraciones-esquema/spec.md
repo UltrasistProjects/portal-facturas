@@ -19,11 +19,11 @@ Ninguna revisión MUST invocar `drop_all`. El `downgrade` de `0001_initial` SHAL
 - **THEN** la operación falla con `NotImplementedError` antes de modificar cualquier tabla
 
 ### Requirement: Una revisión por cambio de modelo
-Todo cambio en los modelos ORM SHALL acompañarse de una revisión Alembic nueva. Las revisiones ya publicadas MUST NOT editarse. La integración continua SHALL ejecutar `alembic check` y fallar si los modelos difieren del esquema producido por las migraciones.
+Todo cambio en los modelos ORM SHALL acompañarse de una revisión Alembic nueva. Las revisiones ya publicadas MUST NOT editarse. `scripts/check.py` SHALL ejecutar `alembic check` y fallar si los modelos difieren del esquema producido por las migraciones.
 
 #### Scenario: Modelo modificado sin migración
 - **WHEN** se añade una columna a un modelo sin crear una revisión
-- **THEN** `alembic check` falla en CI
+- **THEN** `alembic check` falla en `scripts/check.py`
 
 ### Requirement: Migración de datos segura y verificada
 La revisión que introduce los cambios de este remedio SHALL verificar precondiciones antes de modificar datos: ausencia de filas huérfanas (`PRAGMA foreign_key_check`), ausencia de `uuid` duplicados, ausencia de `(supplier_id, invoice_number)` duplicados y ausencia de valores fuera de las enumeraciones. Si alguna falla, SHALL abortar con un informe de las filas afectadas y sin modificar la base. Las revisiones SHALL usar operaciones batch compatibles con SQLite.

@@ -314,7 +314,7 @@
 ## 17. Cobertura, CI y documentación final (COD-07, SEC-11, SEC-10)
 
 - [x] 17.1 Medir la cobertura de `app/`. Si no llega a 80 %, añadir pruebas de las rutas "no configurado" de los adaptadores Azure y de las ramas pendientes. Fijar `--cov-fail-under` en `pyproject.toml` con el valor medido redondeado hacia abajo (≥ 80).
-- [ ] 17.2 **Pendiente de decisión.** El repositorio ya tiene `.github/workflows/calidad.yml`, que invoca el pipeline compartido de SonarQube e indica "No duplicar lógica aquí". Como alternativa se implementó `scripts/check.py`, que ejecuta en un solo comando ruff, el formato, `alembic check`, pytest con umbral (genera `coverage.xml` para Sonar) y pip-audit. Tarea original: crear `.github/workflows/poc-ci.yml` (raíz del repo): push y pull request, Python 3.12, `working-directory` en la raíz de la PoC, `SECRET_KEY` generada en el job, instalación desde `requirements.lock` y dev. Pasos: `ruff check`, `ruff format --check`, `alembic check`, `pytest` (con umbral) y `pip-audit -r requirements.lock`.
+- [x] 17.2 CI: se conserva el pipeline compartido del equipo (`.github/workflows/calidad.yml`, SonarQube), por decisión del equipo; no se crea `poc-ci.yml`. `pytest` genera el `coverage.xml` que consume, y `scripts/check.py` ejecuta localmente ruff, formato, `alembic check`, pytest con umbral y pip-audit.
 - [x] 17.3 Actualizar el README:
   - variables de entorno nuevas, credenciales demo y arranque sin reset;
   - respaldo y restauración, y empaquetado;

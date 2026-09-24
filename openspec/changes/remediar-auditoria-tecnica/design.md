@@ -88,7 +88,7 @@ El `TypeDecorator` aísla la decisión. Si se adopta PostgreSQL, una migración 
    - `0005_trazabilidad_contratos` (Fase 2): campos de auditoría y tabla `contract_amendments`.
    - `0006_user_sessions` (Fase 2): tabla `user_sessions`.
 
-Regla de proceso: una revisión nueva por cada cambio de modelo, sin editar revisiones publicadas. `alembic check` corre en CI.
+Regla de proceso: una revisión nueva por cada cambio de modelo, sin editar revisiones publicadas. `alembic check` corre en `scripts/check.py`.
 
 *Alternativa:* dejar que `reset_demo` recree todo, ya que los datos son demo. Se descarta porque la BD de trabajo de los desarrolladores y cualquier piloto necesitan migración sin pérdida (spec `migraciones-esquema`).
 
@@ -239,7 +239,7 @@ Los scripts de soporte se escriben en Python, así sirven igual en Windows y Lin
   - escribe en `settings.storage_path` y no en `ROOT/storage`;
   - genera sus archivos intermedios (`_seed_N.xml`, PDF demo) en un directorio temporal, sin reescribir `data/demo_documents/factura_demo.pdf`, que está versionado.
 - **Reloj inyectable:** `login_throttle` y `session_service` reciben un reloj (`now: Callable[[], datetime]`) para probar ventanas y expiraciones sin esperar.
-- **Workflow `.github/workflows/poc-ci.yml`** en la raíz del repositorio, con `defaults.run.working-directory` apuntando a la raíz de la PoC y Python 3.12. Pasos: instalar desde el lock y dev, `ruff check`, `ruff format --check`, `alembic check`, `pytest` y `pip-audit -r requirements.lock`.
+- **CI:** se conserva el pipeline compartido del equipo (`.github/workflows/calidad.yml`, SonarQube), que indica no duplicar lógica en el repositorio; no se crea un workflow propio (decisión del equipo, 2026-09-24). `pytest` genera el `coverage.xml` que consume. Las verificaciones completas (`ruff check`, `ruff format --check`, `alembic check` sobre una BD temporal, `pytest` con umbral y `pip-audit -r requirements.lock`) se ejecutan con `python scripts/check.py`.
 
 ### D21. Retiro del ZIP y del caché de PowerShell
 `git rm` de `PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1.zip` y de `Microsoft/Windows/PowerShell/ModuleAnalysisCache`. Se añaden `Microsoft/`, `backups/` y `data/*.db-*` a `.gitignore`. Los paquetes se generan bajo demanda con `package_release.py` y no se versionan. Los datos del ZIP son sintéticos y su `SECRET_KEY` es el placeholder que este cambio invalida, así que el impacto residual del historial es bajo.

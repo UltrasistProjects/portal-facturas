@@ -18,7 +18,7 @@ La Auditoría Técnica del 2026-09-22 (`docs/AUDITORIA_TECNICA_PortalFacturas_20
 - **BREAKING** Política de contraseñas en el servidor (ERS RF-06) y `EmailStr` en altas. El alta de facturas usa el esquema `InvoiceCreate`.
 - El folio interno se deriva del `id` asignado, sin carrera. Se añaden los índices faltantes en FKs y en el ordenamiento del listado.
 - **BREAKING** `/admin/rules` muestra las reglas que el motor realmente aplica (incluidos los pesos del score) y se elimina `business_rules.json`.
-- Las pruebas usan una BD temporal aislada y dejan de destruir la BD de trabajo. Se añaden `ruff`, `ruff format` y `pytest-cov` con umbral, en CI.
+- Las pruebas usan una BD temporal aislada y dejan de destruir la BD de trabajo. Se añaden `ruff`, `ruff format` y `pytest-cov` con umbral, ejecutables con `scripts/check.py`; el CI sigue siendo el pipeline compartido del equipo.
 
 **Fase 2: cambios estructurales (BD-02..05, BD-08..12, COD-01, COD-02, COD-05, COD-07, COD-09, COD-10, SEC-07, SEC-09)**
 - **BREAKING** (esquema) Los montos y la confianza se almacenan como enteros escalados exactos (centavos / diezmilésimas). La aplicación sigue operando con `Decimal`.
@@ -52,7 +52,7 @@ La Auditoría Técnica del 2026-09-22 (`docs/AUDITORIA_TECNICA_PortalFacturas_20
 - `motor-validacion`: fuente única de reglas de negocio visible para el administrador, reglas de calendario en zona horaria de negocio y detección de duplicados coherente con la unicidad de la BD.
 - `observabilidad`: log estructurado con correlación por petición y registro de eventos técnicos del flujo.
 - `respaldo-y-distribucion`: respaldo y restauración, reinicio de demo seguro, empaquetado limpio y dependencias auditadas con lock file.
-- `calidad-y-pruebas`: pruebas aisladas de la BD de trabajo, cobertura de módulos de riesgo con umbral, lint y formato en CI.
+- `calidad-y-pruebas`: pruebas aisladas de la BD de trabajo, cobertura de módulos de riesgo con umbral, lint y formato automatizados.
 
 ### Modified Capabilities
 _Ninguna._ `openspec/specs/` está vacío; todas las capacidades se especifican por primera vez.
@@ -63,5 +63,5 @@ _Ninguna._ `openspec/specs/` está vacío; todas las capacidades se especifican 
 - **Esquema de BD:** columnas monetarias renombradas a `*_cents` y `confidence` → `confidence_bp`; nuevas tablas `user_sessions`, `login_attempts` y `contract_amendments`; nuevas columnas de auditoría en `contracts`; índices y restricciones `UNIQUE`/`CHECK`. Requiere migración de datos, que aborta si encuentra huérfanos o duplicados en lugar de corregirlos en silencio.
 - **Dependencias:** se añaden `tzdata` (zonas horarias en Windows) y, en dev, `ruff`, `pytest-cov`, `pip-audit` y `uv` (para el lock universal). `httpx` se mueve a dev. Se fija `starlette`. Se genera `requirements.lock`.
 - **Operación:** `.env` requiere `SECRET_KEY`. Los arranques locales ya no borran la BD. Aparecen los archivos `-wal`/`-shm` junto a la BD. Nuevo directorio `backups/` (ignorado por Git). Las sesiones activas se invalidan al desplegar.
-- **Repositorio:** se retira `PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1.zip` (contiene `.env`, BD, logs y `storage/`) y `Microsoft/…/ModuleAnalysisCache`. Se añade un workflow de GitHub Actions.
+- **Repositorio:** se retira `PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1.zip` (contiene `.env`, BD, logs y `storage/`) y `Microsoft/…/ModuleAnalysisCache`. No se añaden workflows: se conserva `.github/workflows/calidad.yml`.
 - **Usuarios demo:** las contraseñas demo cambian para cumplir la política (RF-06) y no figurar en la lista de contraseñas comunes. Se actualiza el README.
