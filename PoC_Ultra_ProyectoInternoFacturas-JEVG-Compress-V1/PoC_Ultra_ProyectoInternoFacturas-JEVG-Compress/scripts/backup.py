@@ -1,13 +1,13 @@
 """Respaldo consistente de la BD y de storage/, con manifiesto SHA-256 y retencion (AUDITORIA BD-08).
 
-La BD se copia con la API de respaldo en linea de SQLite: es consistente aunque la aplicacion este atendiendo
-peticiones y con WAL activo. Uso: python scripts/backup.py
+La BD se vuelca con pg_dump en formato custom, dentro del contenedor `db` (misma version que el servidor; ver
+scripts/pgtools.py). El volcado es una instantanea transaccional: es consistente aunque la aplicacion este atendiendo
+peticiones. Uso: python scripts/backup.py
 """
 
 import hashlib
 import json
 import shutil
-import sqlite3
 import sys
 import zipfile
 from datetime import datetime, timezone
@@ -16,15 +16,15 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+from sqlalchemy import create_engine, text
+from sqlalchemy.engine import URL, make_url
+from sqlalchemy.pool import NullPool
+
 from app.core.config import settings
+from scripts import pgtools
 
 MANIFEST = "manifest.json"
 STORAGE_ARCHIVE = "storage.zip"
-
-
-def sqlite_files(db_path: Path) -> tuple[Path, Path, Path]:
-    """La BD y sus archivos asociados en modo WAL: se borran o reemplazan siempre juntos."""
-    return db_path, db_path.with_name(f"{db_path.name}-wal"), db_path.with_name(f"{db_path.name}-shm")
 
 
 def sha256(path: Path) -> str:
@@ -35,13 +35,15 @@ def sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def alembic_revision(db_path: Path) -> str | None:
-    with sqlite3.connect(db_path) as connection:
-        try:
-            row = connection.execute("SELECT version_num FROM alembic_version").fetchone()
-        except sqlite3.OperationalError:
-            return None
-    return row[0] if row else None
+def alembic_revision(database: URL) -> str | None:
+    engine = create_engine(database, poolclass=NullPool)
+    try:
+        with engine.connect() as connection:
+            if connection.scalar(text("SELECT to_regclass('public.alembic_version')")) is None:
+                return None
+            return connection.scalar(text("SELECT version_num FROM alembic_version"))
+    finally:
+        engine.dispose()
 
 
 def _new_backup_dir(backups: Path, now: datetime) -> Path:
@@ -51,19 +53,6 @@ def _new_backup_dir(backups: Path, now: datetime) -> Path:
         target, suffix = backups / f"{stamp}-{suffix}", suffix + 1
     target.mkdir(parents=True)
     return target
-
-
-def _copy_database(db_path: Path, destination: Path) -> None:
-    source = sqlite3.connect(db_path)
-    target = sqlite3.connect(destination)
-    try:
-        with target:
-            source.backup(target)
-        # El respaldo debe ser un unico archivo autocontenido, sin -wal/-shm.
-        target.execute("PRAGMA journal_mode=DELETE")
-    finally:
-        target.close()
-        source.close()
 
 
 def _archive_storage(storage: Path, destination: Path) -> int:
@@ -87,33 +76,39 @@ def prune(backups: Path, retention: int) -> list[Path]:
 
 
 def create_backup(
-    db_path: Path, storage: Path, backups: Path, retention: int | None, now: datetime | None = None
+    database: URL, storage: Path, backups: Path, retention: int | None, now: datetime | None = None
 ) -> Path:
-    """Crea backups/<AAAAMMDD-HHMMSS>/ con la BD, storage.zip y manifest.json. retention=None no poda."""
+    """Crea backups/<AAAAMMDD-HHMMSS>/ con el volcado, storage.zip y manifest.json. retention=None no poda."""
     now = now or datetime.now(timezone.utc)
     target = _new_backup_dir(backups, now)
-    database_copy = target / db_path.name
-    _copy_database(db_path, database_copy)
-    files = _archive_storage(storage, target / STORAGE_ARCHIVE)
-    manifest = {
-        "created_at": now.isoformat(),
-        "alembic_revision": alembic_revision(database_copy),
-        "database": {"file": database_copy.name, "sha256": sha256(database_copy)},
-        "storage": {"file": STORAGE_ARCHIVE, "sha256": sha256(target / STORAGE_ARCHIVE), "files": files},
-    }
-    (target / MANIFEST).write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+    try:
+        dump = target / f"{database.database}.dump"
+        pgtools.dump(database, dump)
+        pgtools.list_dump(dump, database)  # el volcado debe poder leerse antes de darlo por bueno
+        files = _archive_storage(storage, target / STORAGE_ARCHIVE)
+        manifest = {
+            "created_at": now.isoformat(),
+            "alembic_revision": alembic_revision(database),
+            "server_version": pgtools.server_version(database),
+            "database": {"file": dump.name, "format": "pg_dump custom", "sha256": sha256(dump)},
+            "storage": {"file": STORAGE_ARCHIVE, "sha256": sha256(target / STORAGE_ARCHIVE), "files": files},
+        }
+        (target / MANIFEST).write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+    except BaseException:
+        shutil.rmtree(target, ignore_errors=True)  # sin manifiesto no es un respaldo: no se deja a medias
+        raise
     if retention is not None:
         prune(backups, retention)
     return target
 
 
 def main() -> None:
-    db_path = settings.sqlite_path
-    if db_path is None:
-        raise SystemExit("El respaldo solo admite SQLite en disco.")
-    if not db_path.exists():
-        raise SystemExit(f"No existe la base de datos {db_path}.")
-    target = create_backup(db_path, settings.storage_path, settings.backup_dir, settings.backup_retention)
+    database = make_url(settings.database_url)
+    try:
+        pgtools.check_database(database)
+        target = create_backup(database, settings.storage_path, settings.backup_dir, settings.backup_retention)
+    except RuntimeError as exc:
+        raise SystemExit(f"Respaldo fallido: {exc}") from exc
     print(f"Respaldo creado en {target}")
 
 
