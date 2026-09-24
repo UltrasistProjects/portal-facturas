@@ -77,6 +77,14 @@ No reutilice estas contraseñas fuera de la PoC.
 - Cargar seed sobre una base vacía: `python scripts/seed_db.py`.
 - Reconstruir base y archivos demo: `python scripts/reset_demo.py`.
 
+**Migraciones.**
+
+- Cada revisión de `alembic/versions/` describe su cambio de forma explícita. `0001_initial` es el snapshot del esquema original y ningún `downgrade` borra todo: los que perderían datos lanzan `NotImplementedError` (restaure un respaldo).
+- **Regla:** todo cambio en `app/models` requiere una revisión nueva. Nunca edite una revisión publicada. `alembic check` (incluido en `scripts/check.py`) falla si modelos y migraciones difieren.
+- `0004_integridad_datos` convierte montos a centavos y rutas de documentos a relativas. Antes de tocar nada verifica precondiciones: huérfanos, UUID o números de factura duplicados, valores fuera de catálogo, montos con más de 2 decimales y rutas no convertibles. Si alguna falla, aborta sin cambios y lista las filas.
+  - Una BD sembrada con la versión anterior del seed **tiene UUID duplicados** entre escenarios demo y no migrará.
+  - Si es sólo demo, recréela con `python scripts/reset_demo.py`, que respalda antes de borrar.
+
 `reset_demo.py` borra datos, así que actúa con cuidado:
 
 - no se ejecuta con `APP_ENV=production`;
@@ -103,12 +111,21 @@ Los documentos fiscales deben conservarse 5 años. Respalde la BD **y** `storage
 
 ```powershell
 pip install -r requirements-dev.txt
-pytest
+pytest                      # pruebas con umbral de cobertura (pyproject.toml) y coverage.xml para SonarQube
+python scripts/check.py     # ruff, formato, alembic check, pytest y pip-audit (--skip-audit sin conexión)
 ```
 
-La suite crea una BD SQLite y un `storage/` temporales por sesión. No lee ni modifica `data/invoice_portal.db` ni `storage/` del proyecto.
+La suite crea una BD SQLite y un `storage/` temporales por sesión. No lee ni modifica `data/invoice_portal.db` ni `storage/` del proyecto. La cobertura mínima de `app/` es del 93 % (`--cov-fail-under`).
 
-La suite cubre login válido/inválido, CSRF, RBAC, aislamiento entre proveedores, parser CFDI, XML corrupto, RFC receptor, Método/Forma de pago extraídos, regla de fecha, montos con `Decimal`, UUID duplicado, score y transiciones inválidas.
+Cubre:
+
+- login, CSRF, limitación de intentos y política de contraseñas;
+- sesiones revocables, RBAC y aislamiento entre proveedores;
+- carga y descarga de documentos (firmas de contenido, tamaño, path traversal);
+- parser CFDI y reglas XML/FIN/DAT, incluido el límite del día 20 en hora local;
+- dinero exacto, restricciones de la BD y migraciones desde el esquema original con datos heredados;
+- cabeceras de seguridad, errores sin traza y log JSON sin datos sensibles;
+- respaldo, restauración, reinicio de demo y empaquetado.
 
 ## Dependencias
 
@@ -135,9 +152,9 @@ app/
     ai/          interfaz, mock y adaptadores Azure
   templates/     interfaz Jinja server-rendered
   static/        CSS y JavaScript Vanilla
-alembic/         migración inicial
+alembic/         migraciones explícitas (una revisión por cambio de modelo)
 data/            SQLite generada y documentos sintéticos versionados
-scripts/         inicialización, seed, reset y creación de .venv
+scripts/         .env, BD, seed, reset, respaldo/restauración, empaquetado y check
 storage/         uploads segregados por proveedor/factura
 tests/           pruebas críticas automatizadas
 ```
@@ -166,18 +183,54 @@ Cada regla evaluada aporta al denominador según severidad: `CRITICAL=35`, `ERRO
 
 ## Archivos y seguridad de PoC
 
-- Passwords Argon2 mediante `pwdlib`.
-- Sesión firmada, cookie HttpOnly de Starlette, SameSite Lax y HTTPS configurable.
-- CSRF por token de sesión y operaciones mutables sólo por POST.
-- UUID interno para uploads, nombre original sólo como metadata, SHA-256, extensión/MIME/tamaño y path traversal validados.
-- PDFs validados con PyMuPDF; un PDF sin texto se marca para OCR y no inventa contenido.
-- Autorización por rol y por pertenencia del objeto/documento.
-- Errores sin stack trace en UI; detalle técnico en `logs/app.log`.
-- Versiones sustituidas quedan en DB con `is_current=false` y referencia al documento anterior.
+- **Contraseñas:** Argon2 mediante `pwdlib`. Política en el servidor (ERS RF-06): 8 a 128 caracteres, con letra, número y carácter especial, y sin contraseñas comunes.
+- **Login:** limitado por correo (bloqueo de `min(60, 2^(n-5))` minutos tras 5 fallos consecutivos) y por IP (20 fallos en 15 minutos). Responde 429 sin evaluar la contraseña.
+- **Sesiones:** revocables del lado del servidor (`user_sessions`). La cookie firmada sólo lleva un identificador opaco y el token CSRF. Expiran tras 60 minutos de inactividad u 8 horas de duración, y se revocan al cerrar sesión o al deshabilitar al usuario.
+- **CSRF:** token de sesión en todas las operaciones mutables, que sólo aceptan POST.
+- **Cabeceras:** CSP `default-src 'self'`, `X-Frame-Options: DENY`, `nosniff` y `Referrer-Policy`, más HSTS sobre HTTPS. **No agregue scripts ni estilos en línea:** la CSP los bloquea; use archivos bajo `app/static/`.
+- **Cargas:**
+  - UUID interno como nombre de almacenamiento y SHA-256;
+  - verificación del contenido contra la extensión (firmas PDF, PNG y JPEG; XML; texto UTF-8);
+  - MIME derivado por el servidor, límite de tamaño y control de path traversal;
+  - descarga siempre como `application/octet-stream` y adjunto.
+- **PDFs:** se validan con PyMuPDF; un PDF sin texto se marca para OCR y no inventa contenido.
+- **Autorización:** por rol y por pertenencia del objeto o documento.
+- **Errores:** sin traza en la interfaz (la página muestra una referencia `request_id`); el detalle técnico queda en `logs/app.log` como JSON. Los errores de negocio responden 409.
+- **Evidencia fiscal:**
+  - no se permite el borrado físico de facturas;
+  - las versiones sustituidas quedan con `is_current=false` y referencia al documento anterior;
+  - el monto autorizado de un contrato sólo cambia mediante enmiendas auditadas.
 
 `SECRET_KEY` es obligatoria (mínimo 32 caracteres; se rechaza el valor de ejemplo `change-me...`). `scripts/create_env.py` la genera al crear `.env`. `DEBUG` sólo sube el nivel de log; nunca muestra trazas al usuario.
 
 Para producción use `APP_ENV=production`: la aplicación no arranca sin `SESSION_HTTPS_ONLY=true` ni con cuentas demo activas. Añada además políticas de retención, escaneo antimalware y gestión de secretos.
+
+**Detrás de un proxy inverso**, arranque uvicorn con `--proxy-headers --forwarded-allow-ips=<IP del proxy>`. Sin eso, todas las peticiones parecen venir del proxy: el límite de login por IP se vuelve global y HSTS no se emite.
+
+**Cifrado en reposo (requisito de infraestructura).** La BD SQLite y `storage/` guardan en claro RFC, razones sociales, montos, datos bancarios y documentos. Con datos reales, cifre el volumen (BitLocker o LUKS) o migre a un motor con TDE (Azure SQL o PostgreSQL gestionado). Restrinja también el acceso a `backups/`.
+
+### Variables de entorno
+
+| Variable | Por defecto | Descripción |
+|---|---|---|
+| `SECRET_KEY` | *(obligatoria)* | Firma de la cookie de sesión; mínimo 32 caracteres. |
+| `APP_ENV` | `development` | `development`, `test` o `production`. Gobierna los valores por defecto y las verificaciones de arranque. |
+| `DEBUG` | `false` | Sólo eleva el nivel de log. |
+| `SESSION_HTTPS_ONLY` | según `APP_ENV` | Cookie `Secure`; `true` fuera de `development`. |
+| `DATABASE_URL`, `STORAGE_PATH`, `LOG_DIR`, `BACKUP_DIR` | `./data/...`, `./storage`, `./logs`, `./backups` | Las rutas relativas se resuelven contra la raíz del proyecto, no contra el directorio de trabajo. |
+| `BUSINESS_TIMEZONE` | `America/Mexico_City` | Zona de las reglas de calendario (corte del día 20) y del año del folio. |
+| `BACKUP_RETENTION` | `14` | Respaldos que conserva `scripts/backup.py`. |
+| `MAX_UPLOAD_MB` | `20` | Tamaño máximo por archivo. |
+
+## Empaquetado para distribución
+
+`python scripts/package_release.py` genera `dist/<proyecto>-<fecha>.zip`:
+
+- Con Git, incluye sólo los archivos versionados; sin Git, recorre el árbol aplicando una lista de exclusión.
+- Nunca incluye `.env`, la BD (ni sus `-wal`/`-shm`), `logs/`, `storage/`, `backups/`, `.venv/` ni cachés.
+- Al terminar verifica el ZIP: si contiene algo prohibido, lo elimina y falla.
+
+No distribuya copias comprimidas a mano del directorio de trabajo.
 
 ## AI Mock Mode
 
@@ -204,7 +257,7 @@ Complete las variables Azure en `.env`, implemente la llamada HTTP/SDK dentro de
 
 El seed crea 4 usuarios, 2 proveedores, 2 contratos, expedientes Anexo A, 10 facturas y Audit Log. Incluye: borrador, correcta, prevalidada, en revisión, aceptada, rechazada, corrección, excedente, RFC incorrecto, semántico y estados manuales de ClickBalance.
 
-Los XML bajo `data/demo_documents/` son estructuralmente útiles para el parser, pero **no están timbrados ni son fiscalmente válidos**. El seed genera además un PDF sintético con PyMuPDF.
+Los XML bajo `data/demo_documents/` son estructuralmente útiles para el parser, pero **no están timbrados ni son fiscalmente válidos**. El seed asigna a cada factura demo un UUID fiscal distinto y usa el PDF sintético versionado `data/demo_documents/factura_demo.pdf` (si faltara, lo genera en un directorio temporal sin modificar el repositorio).
 
 ## Limitaciones y fuera de alcance
 
@@ -218,4 +271,4 @@ Los XML bajo `data/demo_documents/` son estructuralmente útiles para el parser,
 
 ## Próximos pasos para producción
 
-PostgreSQL/Azure SQL, Azure Blob con malware scanning, secretos administrados, Entra ID/External ID, CSP y assets locales, rate limiting, cifrado/retención documental, workers para OCR, migraciones explícitas por cambio, observabilidad, pruebas E2E, accesibilidad formal y un workflow de excepciones con doble aprobación.
+PostgreSQL/Azure SQL (los montos en centavos se convierten a `NUMERIC` con una migración), Azure Blob con malware scanning, secretos administrados, Entra ID/External ID, cifrado y retención documental, workers para OCR, agregación centralizada del log JSON, pruebas E2E, accesibilidad formal y un workflow de excepciones con doble aprobación.

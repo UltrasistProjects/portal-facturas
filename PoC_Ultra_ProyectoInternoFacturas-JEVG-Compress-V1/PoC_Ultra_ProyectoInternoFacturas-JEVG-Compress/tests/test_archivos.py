@@ -10,7 +10,7 @@ from app.core.config import settings
 from app.core.database import SessionLocal
 from app.models import Document
 from app.services.file_service import LocalFileStorage
-from tests.conftest import ROOT, csrf, invoice_by_number, login
+from tests.conftest import ROOT, csrf, invoice_by_number, login, supplier_by_email
 
 PDF = b"%PDF-1.7\n1 0 obj\n<<>>\nendobj\n%%EOF\n"
 PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 16
@@ -190,3 +190,53 @@ def test_documento_de_otra_factura(client):
     document_b = first_document(invoice_by_number("ACEPTADA-001"))
     login(client)
     assert client.get(f"/invoices/{invoice_a.id}/documents/{document_b.id}/download").status_code == 404
+
+
+# --- Expediente del proveedor (Anexo A) -------------------------------------------------------------------
+
+
+def post_supplier_document(client, supplier_id, content, filename, document_type="TAX_STATUS"):
+    token = csrf(client, "/")
+    return client.post(
+        f"/suppliers/{supplier_id}/documents",
+        data={"document_type": document_type, "document_date": "2026-09-01", "csrf_token": token},
+        files={"upload": (filename, content, "application/octet-stream")},
+        follow_redirects=False,
+    )
+
+
+def test_reemplazo_de_documento_del_expediente(client):
+    supplier = supplier_by_email("proveedor1@poc.local")
+    login(client, "proveedor1@poc.local")
+    assert post_supplier_document(client, supplier.id, PDF, "constancia.pdf").status_code == 303
+    with SessionLocal() as db:
+        current = db.scalar(
+            select(Document).where(
+                Document.supplier_id == supplier.id,
+                Document.invoice_id.is_(None),
+                Document.document_type == "TAX_STATUS",
+                Document.is_current.is_(True),
+            )
+        )
+        previous = db.get(Document, current.replaced_document_id)
+    assert current.mime_type == "application/pdf"
+    assert current.path.startswith(f"suppliers/{supplier.id}/")
+    assert previous is not None and previous.is_current is False
+
+
+def test_expediente_rechaza_tipo_invalido_y_contenido_falso(client):
+    supplier = supplier_by_email("proveedor1@poc.local")
+    login(client, "proveedor1@poc.local")
+    assert post_supplier_document(client, supplier.id, PDF, "x.pdf", document_type="OTRO").status_code == 400
+    response = post_supplier_document(client, supplier.id, b"MZ\x90\x00", "x.pdf")
+    assert response.status_code == 400
+    assert "El contenido no corresponde a un PDF" in response.text
+
+
+def test_expediente_ajeno_o_internal_responde_403(client):
+    supplier = supplier_by_email("proveedor1@poc.local")
+    login(client, "proveedor2@poc.local")
+    assert post_supplier_document(client, supplier.id, PDF, "x.pdf").status_code == 403
+    client.post("/logout", data={"csrf_token": csrf(client, "/")})
+    login(client, "pmo@poc.local")
+    assert post_supplier_document(client, supplier.id, PDF, "x.pdf").status_code == 403

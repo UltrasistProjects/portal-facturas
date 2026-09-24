@@ -313,16 +313,16 @@
 
 ## 17. Cobertura, CI y documentación final (COD-07, SEC-11, SEC-10)
 
-- [ ] 17.1 Medir la cobertura de `app/`. Si no llega a 80 %, añadir pruebas de las rutas "no configurado" de los adaptadores Azure y de las ramas pendientes. Fijar `--cov-fail-under` en `pyproject.toml` con el valor medido redondeado hacia abajo (≥ 80).
-- [ ] 17.2 Crear `.github/workflows/poc-ci.yml` (raíz del repo): push y pull request, Python 3.12, `working-directory` en la raíz de la PoC, `SECRET_KEY` generada en el job, instalación desde `requirements.lock` y dev. Pasos: `ruff check`, `ruff format --check`, `alembic check`, `pytest` (con umbral) y `pip-audit -r requirements.lock`.
-- [ ] 17.3 Actualizar el README:
+- [x] 17.1 Medir la cobertura de `app/`. Si no llega a 80 %, añadir pruebas de las rutas "no configurado" de los adaptadores Azure y de las ramas pendientes. Fijar `--cov-fail-under` en `pyproject.toml` con el valor medido redondeado hacia abajo (≥ 80).
+- [ ] 17.2 **Pendiente de decisión.** El repositorio ya tiene `.github/workflows/calidad.yml`, que invoca el pipeline compartido de SonarQube e indica "No duplicar lógica aquí". Como alternativa se implementó `scripts/check.py`, que ejecuta en un solo comando ruff, el formato, `alembic check`, pytest con umbral (genera `coverage.xml` para Sonar) y pip-audit. Tarea original: crear `.github/workflows/poc-ci.yml` (raíz del repo): push y pull request, Python 3.12, `working-directory` en la raíz de la PoC, `SECRET_KEY` generada en el job, instalación desde `requirements.lock` y dev. Pasos: `ruff check`, `ruff format --check`, `alembic check`, `pytest` (con umbral) y `pip-audit -r requirements.lock`.
+- [x] 17.3 Actualizar el README:
   - variables de entorno nuevas, credenciales demo y arranque sin reset;
   - respaldo y restauración, y empaquetado;
   - política CSP (sin scripts ni estilos en línea) y `--proxy-headers` detrás de un proxy;
   - cifrado en reposo como requisito de infraestructura (SEC-10);
   - regla de una migración por cambio de modelo;
   - corregir la afirmación "Errores sin stack trace", que ahora es verdadera.
-- [ ] 17.4 Verificación final:
+- [x] 17.4 Verificación final:
   - `openspec validate remediar-auditoria-tecnica`, suite completa con umbral, `ruff`, `alembic check` y `pip-audit`;
   - prueba de humo con `run_local`: login con los tres roles, alta de factura, carga de documentos, prevalidación, revisión, enmienda de contrato y descarga, sin errores de CSP en la consola.
-- [ ] 17.5 Checkpoint Fase 2: commit "fix: fase 2 de la auditoría" y resumen de trazabilidad hallazgo → tarea para el PR, incluidas las preguntas abiertas de `design.md`.
+- [x] 17.5 Checkpoint Fase 2: commit "fix: fase 2 de la auditoría" y resumen de trazabilidad hallazgo → tarea para el PR, incluidas las preguntas abiertas de `design.md`.
