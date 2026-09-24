@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import RedirectResponse
 from sqlalchemy import select
@@ -25,9 +26,18 @@ async def login(request: Request, email: str = Form(...), password: str = Form(.
     await validate_csrf(request)
     user = db.scalar(select(User).where(User.email == email.lower().strip()))
     if not user or not user.is_active or not verify_password(password, user.password_hash):
-        audit(db, "LOGIN_FAILED", "User", user.id if user else None, new={"email": email.lower().strip()}, ip=request.client.host if request.client else None)
+        audit(
+            db,
+            "LOGIN_FAILED",
+            "User",
+            user.id if user else None,
+            new={"email": email.lower().strip()},
+            ip=request.client.host if request.client else None,
+        )
         db.commit()
-        return templates.TemplateResponse(request, "auth/login.html", {"error": "Credenciales invalidas o usuario deshabilitado"}, status_code=400)
+        return templates.TemplateResponse(
+            request, "auth/login.html", {"error": "Credenciales invalidas o usuario deshabilitado"}, status_code=400
+        )
     request.session.clear()
     request.session["user_id"] = user.id
     user.last_login_at = datetime.now(timezone.utc)
@@ -45,4 +55,3 @@ async def logout(request: Request, db: Session = Depends(get_db)):
         db.commit()
     request.session.clear()
     return RedirectResponse("/login", status_code=303)
-

@@ -1,5 +1,6 @@
 from pathlib import Path
 from typing import Any
+
 import fitz
 
 
@@ -16,4 +17,3 @@ def analyze_pdf(path: Path) -> dict[str, Any]:
             }
     except Exception as exc:
         raise ValueError("El PDF no puede abrirse o esta danado") from exc
-

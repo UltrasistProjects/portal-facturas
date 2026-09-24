@@ -14,5 +14,6 @@ class Reconciliation:
 def reconcile_amount(authorized: Decimal, invoiced: Decimal) -> Reconciliation:
     difference = invoiced - authorized
     percentage = (difference / authorized * Decimal("100")) if authorized else Decimal("0")
-    return Reconciliation(authorized, invoiced, difference, percentage.quantize(Decimal("0.01")), "PASS" if difference <= 0 else "FAIL")
-
+    return Reconciliation(
+        authorized, invoiced, difference, percentage.quantize(Decimal("0.01")), "PASS" if difference <= 0 else "FAIL"
+    )

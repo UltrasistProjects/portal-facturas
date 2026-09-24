@@ -1,9 +1,9 @@
 from app.core.config import settings
 from app.services.ai.base import DocumentAnalyzer
-from app.services.ai.mock_analyzer import LocalMockAnalyzer
-from app.services.ai.document_intelligence import AzureDocumentIntelligenceAnalyzer
 from app.services.ai.content_understanding import AzureContentUnderstandingAnalyzer
+from app.services.ai.document_intelligence import AzureDocumentIntelligenceAnalyzer
 from app.services.ai.foundry import AzureFoundryAnalyzer
+from app.services.ai.mock_analyzer import LocalMockAnalyzer
 
 
 def get_document_analyzer() -> DocumentAnalyzer:
@@ -19,4 +19,3 @@ def get_document_analyzer() -> DocumentAnalyzer:
 
 
 __all__ = ["get_document_analyzer", "DocumentAnalyzer"]
-

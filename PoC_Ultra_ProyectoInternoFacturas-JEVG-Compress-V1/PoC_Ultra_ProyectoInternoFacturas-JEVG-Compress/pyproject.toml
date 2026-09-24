@@ -6,6 +6,14 @@ extend-exclude = ["app/static/vendor"]
 [tool.ruff.lint]
 select = ["E", "F", "W", "I"]
 
+[tool.ruff.lint.per-file-ignores]
+# Los scripts agregan la raiz del proyecto a sys.path antes de importar `app`.
+"scripts/*" = ["E402"]
+
+[tool.ruff.lint.isort]
+# Sin esto, el directorio alembic/ del proyecto hace que ruff trate al paquete como propio.
+known-third-party = ["alembic"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "--cov=app --cov-report=term-missing:skip-covered --cov-report=xml"

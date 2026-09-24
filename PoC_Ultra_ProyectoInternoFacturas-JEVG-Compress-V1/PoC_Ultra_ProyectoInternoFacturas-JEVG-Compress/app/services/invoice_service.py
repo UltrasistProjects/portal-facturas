@@ -1,5 +1,7 @@
 from datetime import datetime, timezone
+
 from sqlalchemy.orm import Session
+
 from app.core.constants import ALLOWED_TRANSITIONS, InvoiceStatus
 from app.models import Invoice
 from app.services.audit_service import audit
@@ -17,4 +19,3 @@ def transition_invoice(db: Session, invoice: Invoice, target: InvoiceStatus, use
         invoice.reviewed_at = now
         invoice.reviewed_by = user_id
     audit(db, "STATUS_CHANGED", "Invoice", invoice.id, user_id, {"status": old.value}, {"status": target.value})
-

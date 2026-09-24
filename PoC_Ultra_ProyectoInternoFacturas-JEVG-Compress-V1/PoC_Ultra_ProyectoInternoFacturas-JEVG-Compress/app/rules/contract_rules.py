@@ -1,6 +1,7 @@
 import re
 import unicodedata
 from datetime import date
+
 from app.rules.base import outcome
 
 
@@ -23,7 +24,36 @@ def contract_rules(invoice, contract, descriptions: list[str]):
     local_match = bool(overlap) and invoice.service_period[:2] in normalized
     return [
         outcome("CON-001", "CON", exists, "CRITICAL", "Contrato correspondiente disponible", "Contrato no disponible"),
-        outcome("CON-002", "CON", project, "ERROR", "Proyecto coincide", "Proyecto no coincide", contract.project_name if contract else None, invoice.project_name),
-        outcome("CON-003", "CON", period_ok, "ERROR", "Periodo dentro de vigencia", "Periodo fuera de vigencia", f"{contract.start_date} a {contract.end_date}" if contract else None, invoice.service_period),
-        outcome("CON-004", "CON", local_match if descriptions else None, "WARNING", "Mes y tecnologia detectados por heuristica", "Coincidencia local ambigua; delegada a SEM-001", contract.authorized_technology if contract else None, " | ".join(descriptions), warning=True, evidence={"matched_tokens": sorted(overlap)}),
+        outcome(
+            "CON-002",
+            "CON",
+            project,
+            "ERROR",
+            "Proyecto coincide",
+            "Proyecto no coincide",
+            contract.project_name if contract else None,
+            invoice.project_name,
+        ),
+        outcome(
+            "CON-003",
+            "CON",
+            period_ok,
+            "ERROR",
+            "Periodo dentro de vigencia",
+            "Periodo fuera de vigencia",
+            f"{contract.start_date} a {contract.end_date}" if contract else None,
+            invoice.service_period,
+        ),
+        outcome(
+            "CON-004",
+            "CON",
+            local_match if descriptions else None,
+            "WARNING",
+            "Mes y tecnologia detectados por heuristica",
+            "Coincidencia local ambigua; delegada a SEM-001",
+            contract.authorized_technology if contract else None,
+            " | ".join(descriptions),
+            warning=True,
+            evidence={"matched_tokens": sorted(overlap)},
+        ),
     ]

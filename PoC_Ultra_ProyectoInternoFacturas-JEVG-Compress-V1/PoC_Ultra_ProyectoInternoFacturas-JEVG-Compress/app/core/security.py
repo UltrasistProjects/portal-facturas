@@ -37,6 +37,7 @@ async def validate_csrf(request: Request) -> None:
 
 def get_current_user(request: Request, db: Annotated[Session, Depends(get_db)]):
     from app.models import User
+
     user_id = request.session.get("user_id")
     user = db.get(User, user_id) if user_id else None
     if not user or not user.is_active:
@@ -49,5 +50,5 @@ def require_roles(*roles: Role):
         if user.role not in roles:
             raise HTTPException(status_code=403, detail="No cuenta con permisos")
         return user
-    return dependency
 
+    return dependency

@@ -168,4 +168,3 @@ class Review(Base):
 
 
 __all__ = ["User", "Supplier", "Contract", "Invoice", "Document", "ValidationResult", "AuditLog", "Review"]
-

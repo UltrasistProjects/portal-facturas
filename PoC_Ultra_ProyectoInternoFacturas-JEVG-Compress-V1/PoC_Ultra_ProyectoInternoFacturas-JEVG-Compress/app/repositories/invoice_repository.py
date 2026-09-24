@@ -1,5 +1,6 @@
 from sqlalchemy import select
 from sqlalchemy.orm import Session
+
 from app.models import Invoice
 
 
@@ -15,4 +16,3 @@ def get_visible_invoice(db: Session, invoice_id: int, user) -> Invoice | None:
     if invoice and user.role.value == "PROVIDER" and invoice.supplier_id != user.supplier_id:
         return None
     return invoice
-

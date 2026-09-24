@@ -1,6 +1,8 @@
 from datetime import datetime, timezone
 from types import SimpleNamespace
+
 import pytest
+
 from app.core.constants import InvoiceStatus
 from app.rules.date_rules import date_rules
 from app.schemas import ValidationOutcome
@@ -29,7 +31,9 @@ def test_score_explicable_y_bloqueo():
 
 def test_transicion_invalida_rechazada():
     class FakeDB:
-        def add(self, value): pass
-    invoice = SimpleNamespace(status=InvoiceStatus.DRAFT, id=1, submitted_at=None, reviewed_at=None, reviewed_by=None)
-    with pytest.raises(ValueError): transition_invoice(FakeDB(), invoice, InvoiceStatus.ACCEPTED, 1)
+        def add(self, value):
+            pass
 
+    invoice = SimpleNamespace(status=InvoiceStatus.DRAFT, id=1, submitted_at=None, reviewed_at=None, reviewed_by=None)
+    with pytest.raises(ValueError):
+        transition_invoice(FakeDB(), invoice, InvoiceStatus.ACCEPTED, 1)

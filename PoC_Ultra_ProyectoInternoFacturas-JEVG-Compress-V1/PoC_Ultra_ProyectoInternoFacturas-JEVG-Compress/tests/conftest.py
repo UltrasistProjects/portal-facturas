@@ -13,14 +13,16 @@ ROOT = Path(__file__).resolve().parents[1]
 # La suite corre sobre una BD y un almacenamiento temporales. Las variables deben
 # definirse antes de importar `app`, porque la configuracion se lee al importar.
 TEST_ROOT = Path(tempfile.mkdtemp(prefix="portal_tests_"))
-os.environ.update({
-    "SECRET_KEY": secrets.token_urlsafe(64),
-    "APP_ENV": "test",
-    "DEBUG": "false",
-    "DATABASE_URL": f"sqlite:///{(TEST_ROOT / 'test.db').as_posix()}",
-    "STORAGE_PATH": str(TEST_ROOT / "storage"),
-    "LOG_DIR": str(TEST_ROOT / "logs"),
-})
+os.environ.update(
+    {
+        "SECRET_KEY": secrets.token_urlsafe(64),
+        "APP_ENV": "test",
+        "DEBUG": "false",
+        "DATABASE_URL": f"sqlite:///{(TEST_ROOT / 'test.db').as_posix()}",
+        "STORAGE_PATH": str(TEST_ROOT / "storage"),
+        "LOG_DIR": str(TEST_ROOT / "logs"),
+    }
+)
 
 TEST_PASSWORDS = {
     "admin@poc.local": "Test#Admin2026",
@@ -76,8 +78,9 @@ def csrf(client, path: str = "/login") -> str:
 
 def login(client, email="admin@poc.local", password=None):
     password = TEST_PASSWORDS[email] if password is None else password
-    return client.post("/login", data={"email": email, "password": password, "csrf_token": csrf(client)},
-                       follow_redirects=False)
+    return client.post(
+        "/login", data={"email": email, "password": password, "csrf_token": csrf(client)}, follow_redirects=False
+    )
 
 
 def invoice_by_number(invoice_number: str):

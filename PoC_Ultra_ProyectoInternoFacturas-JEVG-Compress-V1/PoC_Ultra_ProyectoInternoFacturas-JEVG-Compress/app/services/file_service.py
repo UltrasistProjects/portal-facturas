@@ -12,7 +12,15 @@ from fastapi import UploadFile
 from app.core.config import settings
 
 ALLOWED_EXTENSIONS = {".xml", ".pdf", ".txt", ".png", ".jpg", ".jpeg"}
-ALLOWED_MIMES = {"application/xml", "text/xml", "application/pdf", "text/plain", "image/png", "image/jpeg", "application/octet-stream"}
+ALLOWED_MIMES = {
+    "application/xml",
+    "text/xml",
+    "application/pdf",
+    "text/plain",
+    "image/png",
+    "image/jpeg",
+    "application/octet-stream",
+}
 
 
 @dataclass

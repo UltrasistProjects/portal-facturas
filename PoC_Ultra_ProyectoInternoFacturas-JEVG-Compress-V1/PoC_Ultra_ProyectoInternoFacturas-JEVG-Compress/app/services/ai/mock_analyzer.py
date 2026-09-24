@@ -1,11 +1,13 @@
 from pathlib import Path
 from typing import Any
+
 from app.rules.contract_rules import normalize_text
 from app.services.ai.base import DocumentAnalyzer
 
 
 class LocalMockAnalyzer(DocumentAnalyzer):
     """Analizador local determinista: nunca realiza llamadas de red."""
+
     def health_check(self) -> dict[str, Any]:
         return {"available": True, "provider": "mock", "external_calls": False}
 
@@ -21,8 +23,14 @@ class LocalMockAnalyzer(DocumentAnalyzer):
         overlap = set(exp.split()) & set(det.split())
         matched = power_match or bool(overlap)
         confidence = 0.93 if power_match else (0.82 if matched else 0.35)
-        return {"result": "MATCH" if matched else "AMBIGUOUS", "confidence": confidence,
-                "explanation": "Coincidencia semantica mock determinista; requiere criterio humano si es ambigua.",
-                "expected": expected, "detected": detected,
-                "evidence": [{"source": "Contrato/metadata", "value": expected}, {"source": "CFDI.xml/Conceptos", "value": detected}]}
-
+        return {
+            "result": "MATCH" if matched else "AMBIGUOUS",
+            "confidence": confidence,
+            "explanation": "Coincidencia semantica mock determinista; requiere criterio humano si es ambigua.",
+            "expected": expected,
+            "detected": detected,
+            "evidence": [
+                {"source": "Contrato/metadata", "value": expected},
+                {"source": "CFDI.xml/Conceptos", "value": detected},
+            ],
+        }

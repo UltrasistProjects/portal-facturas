@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 from datetime import datetime
-from pathlib import Path
 from decimal import Decimal
+from pathlib import Path
+
 from sqlalchemy import and_, delete, select
 from sqlalchemy.orm import Session
 
@@ -48,7 +49,9 @@ def run_validation(db: Session, invoice: Invoice, user_id: int | None = None) ->
             xml_document.processing_status = "PROCESSED"
             xml_document.metadata_json = _json_safe(xml_data)
             invoice.uuid = xml_data.get("uuid")
-            invoice.invoice_date = datetime.fromisoformat(xml_data["date"]).date() if xml_data.get("date") else invoice.invoice_date
+            invoice.invoice_date = (
+                datetime.fromisoformat(xml_data["date"]).date() if xml_data.get("date") else invoice.invoice_date
+            )
             invoice.subtotal = xml_data.get("subtotal") or invoice.subtotal
             invoice.tax = xml_data.get("tax") or invoice.tax
             invoice.total = xml_data.get("total") or invoice.total
@@ -58,10 +61,25 @@ def run_validation(db: Session, invoice: Invoice, user_id: int | None = None) ->
             xml_document.processing_status = "FAILED"
     processable = all(d.processing_status != "FAILED" for d in documents)
     contract = invoice.contract
-    requirements = supplier_requirement_status(invoice.supplier, [d for d in db.scalars(select(Document).where(Document.supplier_id == invoice.supplier_id))])
+    requirements = supplier_requirement_status(
+        invoice.supplier, [d for d in db.scalars(select(Document).where(Document.supplier_id == invoice.supplier_id))]
+    )
     descriptions = [c.get("description") or "" for c in (xml_data or {}).get("concepts", [])]
-    duplicate_uuid = bool(invoice.uuid and db.scalar(select(Invoice.id).where(and_(Invoice.uuid == invoice.uuid, Invoice.id != invoice.id))))
-    duplicate_number = bool(db.scalar(select(Invoice.id).where(and_(Invoice.supplier_id == invoice.supplier_id, Invoice.invoice_number == invoice.invoice_number, Invoice.id != invoice.id))))
+    duplicate_uuid = bool(
+        invoice.uuid
+        and db.scalar(select(Invoice.id).where(and_(Invoice.uuid == invoice.uuid, Invoice.id != invoice.id)))
+    )
+    duplicate_number = bool(
+        db.scalar(
+            select(Invoice.id).where(
+                and_(
+                    Invoice.supplier_id == invoice.supplier_id,
+                    Invoice.invoice_number == invoice.invoice_number,
+                    Invoice.id != invoice.id,
+                )
+            )
+        )
+    )
     results = []
     results += document_rules(types, processable, bool(contract))
     results += xml_rules(xml_data, xml_error)
@@ -74,13 +92,27 @@ def run_validation(db: Session, invoice: Invoice, user_id: int | None = None) ->
     results += semantic_outcomes(semantic)
     db.execute(delete(ValidationResult).where(ValidationResult.invoice_id == invoice.id))
     for result in results:
-        db.add(ValidationResult(invoice_id=invoice.id, rule_code=result.rule_code, category=result.category,
-            status=result.status, severity=result.severity, expected_value=result.expected_value,
-            detected_value=result.detected_value, confidence=result.confidence, message=result.message,
-            source_document=result.source_document, source_reference=result.source_reference, evidence_json=result.evidence))
+        db.add(
+            ValidationResult(
+                invoice_id=invoice.id,
+                rule_code=result.rule_code,
+                category=result.category,
+                status=result.status,
+                severity=result.severity,
+                expected_value=result.expected_value,
+                detected_value=result.detected_value,
+                confidence=result.confidence,
+                message=result.message,
+                source_document=result.source_document,
+                source_reference=result.source_reference,
+                evidence_json=result.evidence,
+            )
+        )
     summary = calculate_score(results)
     invoice.validation_score = summary["score"]
-    target = InvoiceStatus.REQUIRES_CORRECTION if summary["blockers"] or summary["errors"] else InvoiceStatus.PREVALIDATED
+    target = (
+        InvoiceStatus.REQUIRES_CORRECTION if summary["blockers"] or summary["errors"] else InvoiceStatus.PREVALIDATED
+    )
     transition_invoice(db, invoice, target, user_id)
     audit(db, "VALIDATION_COMPLETED", "Invoice", invoice.id, user_id, new=summary)
     db.commit()
