@@ -292,12 +292,12 @@
 
 ## 15. Fase 2 — Observabilidad (COD-05)
 
-- [ ] 15.1 En `app/core/logging_config.py`: `JsonFormatter` (`timestamp` UTC, `level`, `logger`, `message`, `request_id` y `user_id` desde `ContextVar`, más los campos `extra`) con rotación de 2 MB × 3 en `settings.log_dir`. `get_current_user` fija `user_id` en el contexto.
-- [ ] 15.2 Emitir eventos, sin RFC, nombres de archivo ni secretos:
+- [x] 15.1 En `app/core/logging_config.py`: `JsonFormatter` (`timestamp` UTC, `level`, `logger`, `message`, `request_id` y `user_id` desde `ContextVar`, más los campos `extra`) con rotación de 2 MB × 3 en `settings.log_dir`. `get_current_user` fija `user_id` en el contexto.
+- [x] 15.2 Emitir eventos, sin RFC, nombres de archivo ni secretos:
   - `document.uploaded`, `validation.started` y `validation.completed` (con `duration_ms`, `score`, `blockers` y `status`), `review.decided`;
   - `xml.parse_failed` y `pdf.analysis_failed`, registrando el detalle técnico **antes** de relanzar el mensaje genérico;
   - `login.locked`.
-- [ ] 15.3 Pruebas:
+- [x] 15.3 Pruebas:
   - las líneas del log son JSON con `request_id` y `user_id`;
   - la línea de arranque tiene `request_id = null`;
   - eventos de validación con `duration_ms`;

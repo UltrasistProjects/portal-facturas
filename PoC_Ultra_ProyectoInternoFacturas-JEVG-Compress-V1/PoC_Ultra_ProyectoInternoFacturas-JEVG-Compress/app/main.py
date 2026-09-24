@@ -13,7 +13,7 @@ from app.core.logging_config import configure_logging
 from app.core.middleware import (
     RequestContextMiddleware,
     SecurityHeadersMiddleware,
-    request_id_var,
+    request_scope,
     security_headers,
 )
 from app.core.startup import run_startup_checks
@@ -82,11 +82,8 @@ async def unexpected_error(request: Request, exc: Exception):
     # Starlette ejecuta este handler en ServerErrorMiddleware, por fuera de los middlewares de usuario:
     # las cabeceras de seguridad y el request_id se agregan aqui explicitamente.
     request_id = getattr(request.state, "request_id", None)
-    token = request_id_var.set(request_id)
-    try:
+    with request_scope(request_id, getattr(request.state, "user_id", None)):
         logger.exception("Unhandled application error")
-    finally:
-        request_id_var.reset(token)
     response = render_error(request, 500, "Ocurrio un error interno. Informe la referencia al soporte.")
     response.headers.update(security_headers(request.url.scheme))
     if request_id:

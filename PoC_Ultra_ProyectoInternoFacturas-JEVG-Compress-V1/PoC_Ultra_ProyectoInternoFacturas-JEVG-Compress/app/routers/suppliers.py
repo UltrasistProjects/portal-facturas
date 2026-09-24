@@ -13,7 +13,7 @@ from app.models import Document, Supplier
 from app.routers.common import templates
 from app.schemas import SupplierCreate, validation_message
 from app.services.audit_service import audit
-from app.services.file_service import LocalFileStorage
+from app.services.file_service import LocalFileStorage, log_upload
 from app.services.supplier_service import supplier_requirement_status
 
 router = APIRouter(prefix="/suppliers")
@@ -123,6 +123,7 @@ async def upload_supplier_document(
     )
     db.add(document)
     db.flush()
+    log_upload(document_type, stored, supplier_id=supplier.id)
     audit(
         db,
         "SUPPLIER_DOCUMENT_REPLACED" if previous else "SUPPLIER_DOCUMENT_UPLOADED",

@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.core.constants import Role
 from app.core.database import get_db
+from app.core.middleware import bind_user
 
 password_hash = PasswordHash.recommended()
 
@@ -45,6 +46,8 @@ def get_current_user(request: Request, db: Annotated[Session, Depends(get_db)]):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Autenticacion requerida")
     if session_service.touch(user_session):
         db.commit()  # renovacion por actividad; no hay otros cambios pendientes a esta altura
+    request.state.user_id = user.id
+    bind_user(user.id)
     return user
 
 

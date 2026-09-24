@@ -2,6 +2,8 @@
 
 import re
 import uuid
+from collections.abc import Iterator
+from contextlib import contextmanager
 from contextvars import ContextVar
 
 from starlette.datastructures import Headers, MutableHeaders
@@ -22,7 +24,30 @@ SECURITY_HEADERS = {
 STRICT_TRANSPORT_SECURITY = "max-age=31536000"
 
 REQUEST_ID_PATTERN = re.compile(r"[A-Za-z0-9-]{8,64}")
-request_id_var: ContextVar[str | None] = ContextVar("request_id", default=None)
+
+# Contexto de la peticion para el log. Es un dict mutable: los endpoints y dependencias sincronos corren en un
+# threadpool con una copia del contexto, y solo compartiendo la misma referencia el user_id llega de vuelta.
+_request_context: ContextVar[dict | None] = ContextVar("request_context", default=None)
+
+
+def request_context() -> dict:
+    return _request_context.get() or {}
+
+
+def bind_user(user_id: int) -> None:
+    context = _request_context.get()
+    if context is not None:
+        context["user_id"] = user_id
+
+
+@contextmanager
+def request_scope(request_id: str | None, user_id: int | None = None) -> Iterator[dict]:
+    context = {"request_id": request_id, "user_id": user_id}
+    token = _request_context.set(context)
+    try:
+        yield context
+    finally:
+        _request_context.reset(token)
 
 
 def security_headers(scheme: str) -> dict[str, str]:
@@ -72,8 +97,5 @@ class RequestContextMiddleware:
                 MutableHeaders(scope=message)["X-Request-ID"] = request_id
             await send(message)
 
-        token = request_id_var.set(request_id)
-        try:
+        with request_scope(request_id):
             await self.app(scope, receive, send_with_request_id)
-        finally:
-            request_id_var.reset(token)

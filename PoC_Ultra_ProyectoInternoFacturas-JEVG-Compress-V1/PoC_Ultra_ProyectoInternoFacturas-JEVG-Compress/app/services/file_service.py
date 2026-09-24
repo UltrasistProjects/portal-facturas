@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import codecs
 import hashlib
+import logging
 import re
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -11,6 +12,8 @@ from uuid import uuid4
 from fastapi import UploadFile
 
 from app.core.config import settings
+
+logger = logging.getLogger(__name__)
 
 
 def _is_pdf(content: bytes) -> bool:
@@ -114,6 +117,20 @@ class LocalFileStorage:
             hashlib.sha256(content).hexdigest(),
             self.relative_path(destination),
         )
+
+
+def log_upload(document_type: str, stored: StoredFile, **owner) -> None:
+    """Evento document.uploaded sin nombre original ni contenido: solo tipo, extension y tamano."""
+    logger.info(
+        "document.uploaded",
+        extra={
+            "event": "document.uploaded",
+            **owner,
+            "document_type": document_type,
+            "extension": stored.path.suffix,
+            "size_bytes": stored.file_size,
+        },
+    )
 
 
 def safe_download_name(name: str) -> str:

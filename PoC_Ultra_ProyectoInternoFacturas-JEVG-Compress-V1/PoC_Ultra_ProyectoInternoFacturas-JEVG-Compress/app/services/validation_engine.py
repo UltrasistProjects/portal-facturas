@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+import time
 from datetime import datetime
 from decimal import Decimal
 
@@ -23,6 +25,8 @@ from app.services.invoice_service import transition_invoice
 from app.services.supplier_service import supplier_requirement_status
 from app.services.validation_score_service import calculate_score
 from app.services.xml_service import XMLParseError, parse_cfdi
+
+logger = logging.getLogger(__name__)
 
 
 def _json_safe(value):
@@ -49,6 +53,8 @@ def run_validation(db: Session, invoice: Invoice, user_id: int | None = None) ->
         transition_invoice(db, invoice, InvoiceStatus.UPLOADED, user_id)
     transition_invoice(db, invoice, InvoiceStatus.VALIDATING, user_id)
     audit(db, "VALIDATION_STARTED", "Invoice", invoice.id, user_id)
+    started = time.perf_counter()
+    logger.info("validation.started", extra={"event": "validation.started", "invoice_id": invoice.id})
     documents = [d for d in invoice.documents if d.is_current]
     types = {d.document_type for d in documents}
     xml_document = next((d for d in documents if d.document_type == DocumentType.INVOICE_XML.value), None)
@@ -72,6 +78,15 @@ def run_validation(db: Session, invoice: Invoice, user_id: int | None = None) ->
             invoice.total = to_money(xml_data.get("total") or invoice.total)
             invoice.currency = xml_data.get("currency") or invoice.currency
         except (XMLParseError, ValueError) as exc:
+            logger.warning(
+                "xml.parse_failed",
+                extra={
+                    "event": "xml.parse_failed",
+                    "invoice_id": invoice.id,
+                    "error_type": type(exc).__name__,
+                    "error": str(exc),
+                },
+            )
             xml_error = str(exc)
             xml_document.processing_status = ProcessingStatus.FAILED
     processable = all(d.processing_status != ProcessingStatus.FAILED for d in documents)
@@ -126,4 +141,15 @@ def run_validation(db: Session, invoice: Invoice, user_id: int | None = None) ->
     )
     transition_invoice(db, invoice, target, user_id)
     audit(db, "VALIDATION_COMPLETED", "Invoice", invoice.id, user_id, new=summary)
+    logger.info(
+        "validation.completed",
+        extra={
+            "event": "validation.completed",
+            "invoice_id": invoice.id,
+            "duration_ms": round((time.perf_counter() - started) * 1000, 1),
+            "score": summary["score"],
+            "blockers": summary["blockers"],
+            "status": target.value,
+        },
+    )
     return {**summary, "results": results, "xml": xml_data}

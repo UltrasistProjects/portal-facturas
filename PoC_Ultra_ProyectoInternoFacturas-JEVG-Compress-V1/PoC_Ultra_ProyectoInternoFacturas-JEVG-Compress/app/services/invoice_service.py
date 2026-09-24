@@ -3,6 +3,7 @@
 Ningun servicio hace commit: el limite transaccional pertenece al endpoint (AUDITORIA COD-09).
 """
 
+import logging
 from collections.abc import Iterable
 from datetime import datetime, timezone
 from uuid import uuid4
@@ -16,6 +17,8 @@ from app.core.timeutils import to_business
 from app.models import Invoice, Review
 from app.services.audit_service import audit
 from app.services.validation_score_service import calculate_score
+
+logger = logging.getLogger(__name__)
 
 # Estados en los que el expediente admite cambios de documentos.
 EDITABLE_STATUSES = frozenset({InvoiceStatus.DRAFT, InvoiceStatus.REQUIRES_CORRECTION, InvoiceStatus.VALIDATION_FAILED})
@@ -96,6 +99,7 @@ def review_invoice(db: Session, invoice: Invoice, decision: str, comments: str, 
             Review(invoice_id=invoice.id, reviewer_id=reviewer_id, decision=ReviewDecision.COMMENT, comments=comments)
         )
         audit(db, "COMMENT_ADDED", "Invoice", invoice.id, reviewer_id, new={"comments": comments})
+        logger.info("review.decided", extra={"event": "review.decided", "invoice_id": invoice.id, "decision": decision})
         return
     target = REVIEW_TARGETS.get(decision)
     if target is None:
@@ -106,3 +110,4 @@ def review_invoice(db: Session, invoice: Invoice, decision: str, comments: str, 
     invoice.comments = comments
     db.add(Review(invoice_id=invoice.id, reviewer_id=reviewer_id, decision=decision, comments=comments))
     audit(db, decision, "Invoice", invoice.id, reviewer_id, new={"comments": comments})
+    logger.info("review.decided", extra={"event": "review.decided", "invoice_id": invoice.id, "decision": decision})

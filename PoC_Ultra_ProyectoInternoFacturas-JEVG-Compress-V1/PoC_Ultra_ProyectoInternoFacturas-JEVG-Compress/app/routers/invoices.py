@@ -1,3 +1,4 @@
+import logging
 from decimal import Decimal
 from urllib.parse import urlencode
 
@@ -17,7 +18,7 @@ from app.repositories.invoice_repository import get_visible_invoice, search_invo
 from app.routers.common import templates
 from app.schemas import InvoiceCreate, validation_message
 from app.services.audit_service import audit
-from app.services.file_service import LocalFileStorage, safe_download_name
+from app.services.file_service import LocalFileStorage, log_upload, safe_download_name
 from app.services.invoice_service import (
     ensure_editable,
     ensure_prevalidatable,
@@ -36,6 +37,7 @@ from app.services.validation_engine import run_validation
 from app.services.xml_service import XMLParseError, parse_cfdi
 
 router = APIRouter(prefix="/invoices")
+logger = logging.getLogger(__name__)
 
 
 def _invoice_or_404(db: Session, invoice_id: int, user):
@@ -215,6 +217,16 @@ async def upload_document(
 
             metadata = _json_safe(parse_cfdi(stored.path))
     except (ValueError, XMLParseError) as exc:
+        if isinstance(exc, XMLParseError):
+            logger.warning(
+                "xml.parse_failed",
+                extra={
+                    "event": "xml.parse_failed",
+                    "invoice_id": invoice.id,
+                    "error_type": type(exc).__name__,
+                    "error": str(exc),
+                },
+            )
         return templates.TemplateResponse(
             request,
             "invoices/documents.html",
@@ -242,6 +254,7 @@ async def upload_document(
     )
     db.add(document)
     db.flush()
+    log_upload(document_type, stored, invoice_id=invoice.id)
     audit(
         db,
         "DOCUMENT_REPLACED" if previous else "DOCUMENT_UPLOADED",
