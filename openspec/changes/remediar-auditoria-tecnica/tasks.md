@@ -98,17 +98,17 @@
 
 ## 7. Fase 1 — Login, contraseñas y validación de altas (SEC-04, SEC-08, COD-03a)
 
-- [ ] 7.1 Crear el modelo `LoginAttempt` (`email`, `ip`, `result`, `attempted_at`, con índices `(email, attempted_at)` e `(ip, attempted_at)`) y la revisión `0003_login_attempts`.
-- [ ] 7.2 Crear `app/services/login_throttle.py` con reloj inyectable:
+- [x] 7.1 Crear el modelo `LoginAttempt` (`email`, `ip`, `result`, `attempted_at`, con índices `(email, attempted_at)` e `(ip, attempted_at)`) y la revisión `0003_login_attempts`.
+- [x] 7.2 Crear `app/services/login_throttle.py` con reloj inyectable:
   - `check_allowed(email, ip)`: `n` = fallos consecutivos desde el último éxito en 24 h; bloqueo de `min(60, 2^(n-5))` min desde el último fallo; límite por IP de 20 fallos en 15 min;
   - `record(result)`: los intentos rechazados por bloqueo se registran como `THROTTLED` y no cuentan como fallos;
   - purga de filas de más de 24 h;
   - `LOGIN_LOCKED` en auditoría y log `WARNING`.
-- [ ] 7.3 Integrar en `POST /login`: consultar el bloqueo **antes** de `verify_password` y responder 429 con un mensaje genérico idéntico para correos existentes e inexistentes.
-- [ ] 7.4 Crear `app/core/passwords.py` con `validate_password()` (8 a 128 caracteres, letra, dígito, especial, lista común) y `app/core/common_passwords.txt`, con fuente y licencia anotadas en la cabecera del archivo.
-- [ ] 7.5 Añadir `UserCreate` y `SupplierCreate` (con `EmailStr` y validación de contraseña) en `app/schemas/`. Usarlos en `admin.create_user` y `suppliers.create_supplier`, con re-render HTTP 400 y el motivo.
-- [ ] 7.6 Conectar `InvoiceCreate` a `POST /invoices/new`, con re-render HTTP 400 en `invoices/new.html` mostrando el error.
-- [ ] 7.7 Pruebas:
+- [x] 7.3 Integrar en `POST /login`: consultar el bloqueo **antes** de `verify_password` y responder 429 con un mensaje genérico idéntico para correos existentes e inexistentes.
+- [x] 7.4 Crear `app/core/passwords.py` con `validate_password()` (8 a 128 caracteres, letra, dígito, especial, lista común) y `app/core/common_passwords.txt`, con fuente y licencia anotadas en la cabecera del archivo.
+- [x] 7.5 Añadir `UserCreate` y `SupplierCreate` (con `EmailStr` y validación de contraseña) en `app/schemas/`. Usarlos en `admin.create_user` y `suppliers.create_supplier`, con re-render HTTP 400 y el motivo.
+- [x] 7.6 Conectar `InvoiceCreate` a `POST /invoices/new`, con re-render HTTP 400 en `invoices/new.html` mostrando el error.
+- [x] 7.7 Pruebas:
   - bloqueo tras 5 fallos, incluso con la contraseña correcta;
   - 7 fallos → bloqueo de 4 min;
   - correo inexistente → misma respuesta;

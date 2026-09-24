@@ -69,6 +69,21 @@ def test_database():
     assert _workspace_snapshot() == before, "La suite modifico data/ o storage/ del proyecto"
 
 
+@pytest.fixture(autouse=True)
+def reset_login_attempts():
+    """Todas las peticiones de TestClient vienen de la IP "testclient": sin limpiar, los fallos de login de unas
+    pruebas acercarian a otras al limite por IP."""
+    yield
+    from sqlalchemy import delete
+
+    from app.core.database import SessionLocal
+    from app.models import LoginAttempt
+
+    with SessionLocal() as db:
+        db.execute(delete(LoginAttempt))
+        db.commit()
+
+
 @pytest.fixture()
 def client():
     from fastapi.testclient import TestClient

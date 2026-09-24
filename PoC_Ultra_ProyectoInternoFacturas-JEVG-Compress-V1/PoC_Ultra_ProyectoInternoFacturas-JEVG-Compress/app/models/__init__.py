@@ -9,8 +9,9 @@ from sqlalchemy import Enum as SAEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.types import JSON
 
-from app.core.constants import InvoiceStatus, Role, SupplierType
+from app.core.constants import InvoiceStatus, LoginResult, Role, SupplierType
 from app.core.database import Base
+from app.core.types import UTCDateTime
 
 
 def now_utc() -> datetime:
@@ -157,6 +158,21 @@ class AuditLog(Base):
     user: Mapped[User | None] = relationship()
 
 
+class LoginAttempt(Base):
+    """Intento de inicio de sesion; base de la limitacion por correo y por IP (AUDITORIA SEC-04)."""
+
+    __tablename__ = "login_attempts"
+    __table_args__ = (
+        Index("ix_login_attempts_email_attempted_at", "email", "attempted_at"),
+        Index("ix_login_attempts_ip_attempted_at", "ip", "attempted_at"),
+    )
+    id: Mapped[int] = mapped_column(primary_key=True)
+    email: Mapped[str] = mapped_column(String(255))
+    ip: Mapped[str | None] = mapped_column(String(50))
+    result: Mapped[LoginResult] = mapped_column(SAEnum(LoginResult, native_enum=False, create_constraint=True))
+    attempted_at: Mapped[datetime] = mapped_column(UTCDateTime, default=now_utc)
+
+
 class Review(Base):
     __tablename__ = "reviews"
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -169,4 +185,14 @@ class Review(Base):
     reviewer: Mapped[User] = relationship()
 
 
-__all__ = ["User", "Supplier", "Contract", "Invoice", "Document", "ValidationResult", "AuditLog", "Review"]
+__all__ = [
+    "User",
+    "Supplier",
+    "Contract",
+    "Invoice",
+    "Document",
+    "ValidationResult",
+    "AuditLog",
+    "LoginAttempt",
+    "Review",
+]

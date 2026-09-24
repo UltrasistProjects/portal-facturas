@@ -4,6 +4,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, RedirectResponse
+from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -13,6 +14,7 @@ from app.core.security import get_current_user, require_roles, validate_csrf
 from app.models import Contract, Document, Invoice, Review, Supplier, ValidationResult
 from app.repositories.invoice_repository import get_visible_invoice, visible_invoices
 from app.routers.common import templates
+from app.schemas import InvoiceCreate, validation_message
 from app.services.audit_service import audit
 from app.services.file_service import LocalFileStorage, safe_download_name
 from app.services.invoice_service import transition_invoice
@@ -51,8 +53,7 @@ def invoice_list(
     )
 
 
-@router.get("/new")
-def new_invoice(request: Request, db: Session = Depends(get_db), user=Depends(get_current_user)):
+def _new_invoice_page(request: Request, db: Session, user, error: str | None = None, status_code: int = 200):
     if user.role == Role.PROVIDER:
         suppliers = [user.supplier]
     else:
@@ -60,9 +61,13 @@ def new_invoice(request: Request, db: Session = Depends(get_db), user=Depends(ge
             db.scalars(select(Supplier).where(Supplier.status == "ACTIVE").order_by(Supplier.business_name))
         )
     contracts = list(db.scalars(select(Contract).where(Contract.status == "ACTIVE")))
-    return templates.TemplateResponse(
-        request, "invoices/new.html", {"user": user, "suppliers": suppliers, "contracts": contracts}
-    )
+    context = {"user": user, "suppliers": suppliers, "contracts": contracts, "error": error}
+    return templates.TemplateResponse(request, "invoices/new.html", context, status_code=status_code)
+
+
+@router.get("/new")
+def new_invoice(request: Request, db: Session = Depends(get_db), user=Depends(get_current_user)):
+    return _new_invoice_page(request, db, user)
 
 
 @router.post("/new")
@@ -79,6 +84,16 @@ async def create_invoice(
     user=Depends(get_current_user),
 ):
     await validate_csrf(request)
+    try:
+        data = InvoiceCreate(
+            invoice_number=invoice_number,
+            service_period=service_period,
+            project_name=project_name,
+            purchase_order_number=purchase_order_number or None,
+            project_leader=project_leader or None,
+        )
+    except ValidationError as exc:
+        return _new_invoice_page(request, db, user, validation_message(exc), 400)
     if user.role == Role.PROVIDER and supplier_id != user.supplier_id:
         raise HTTPException(403, "No puede crear facturas para otro proveedor")
     contract = db.get(Contract, contract_id)
@@ -90,11 +105,11 @@ async def create_invoice(
         supplier_id=supplier_id,
         uploaded_by=user.id,
         contract_id=contract_id,
-        invoice_number=invoice_number.strip(),
-        service_period=service_period.strip(),
-        project_name=project_name.strip(),
-        purchase_order_number=purchase_order_number.strip() or None,
-        project_leader=project_leader.strip() or contract.project_leader,
+        invoice_number=data.invoice_number,
+        service_period=data.service_period,
+        project_name=data.project_name,
+        purchase_order_number=data.purchase_order_number or None,
+        project_leader=data.project_leader or contract.project_leader,
         subtotal=Decimal("0"),
         tax=Decimal("0"),
         total=Decimal("0"),

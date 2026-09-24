@@ -2,6 +2,7 @@ from datetime import date
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import RedirectResponse
+from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -10,6 +11,7 @@ from app.core.database import get_db
 from app.core.security import get_current_user, require_roles, validate_csrf
 from app.models import Document, Supplier
 from app.routers.common import templates
+from app.schemas import SupplierCreate, validation_message
 from app.services.audit_service import audit
 from app.services.file_service import LocalFileStorage
 from app.services.supplier_service import supplier_requirement_status
@@ -21,8 +23,13 @@ router = APIRouter(prefix="/suppliers")
 def list_suppliers(
     request: Request, db: Session = Depends(get_db), user=Depends(require_roles(Role.INTERNAL, Role.ADMIN))
 ):
+    return _suppliers_page(request, db, user)
+
+
+def _suppliers_page(request: Request, db: Session, user, error: str | None = None, status_code: int = 200):
     suppliers = list(db.scalars(select(Supplier).order_by(Supplier.business_name)))
-    return templates.TemplateResponse(request, "suppliers/list.html", {"user": user, "suppliers": suppliers})
+    context = {"user": user, "suppliers": suppliers, "error": error}
+    return templates.TemplateResponse(request, "suppliers/list.html", context, status_code=status_code)
 
 
 @router.post("")
@@ -36,11 +43,14 @@ async def create_supplier(
     user=Depends(require_roles(Role.ADMIN)),
 ):
     await validate_csrf(request)
+    try:
+        data = SupplierCreate(business_name=business_name, rfc=rfc, supplier_type=supplier_type, email=email)
+    except ValidationError as exc:
+        return _suppliers_page(request, db, user, validation_message(exc), 400)
+    if db.scalar(select(Supplier.id).where(Supplier.rfc == data.rfc)):
+        return _suppliers_page(request, db, user, "Ya existe un proveedor con ese RFC.", 409)
     supplier = Supplier(
-        business_name=business_name.strip(),
-        rfc=rfc.upper().strip(),
-        supplier_type=supplier_type,
-        email=email.lower().strip(),
+        business_name=data.business_name, rfc=data.rfc, supplier_type=data.supplier_type, email=data.email
     )
     db.add(supplier)
     db.flush()

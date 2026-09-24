@@ -3,6 +3,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import RedirectResponse
+from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -11,22 +12,25 @@ from app.core.database import get_db
 from app.core.security import hash_password, require_roles, validate_csrf
 from app.models import AuditLog, Supplier, User
 from app.routers.common import templates
+from app.schemas import UserCreate, validation_message
 from app.services.audit_service import audit
 
 router = APIRouter(prefix="/admin")
 
 
+def _users_page(request: Request, db: Session, user, error: str | None = None, status_code: int = 200):
+    context = {
+        "user": user,
+        "users": list(db.scalars(select(User).order_by(User.name))),
+        "suppliers": list(db.scalars(select(Supplier))),
+        "error": error,
+    }
+    return templates.TemplateResponse(request, "admin/users.html", context, status_code=status_code)
+
+
 @router.get("/users")
 def users(request: Request, db: Session = Depends(get_db), user=Depends(require_roles(Role.ADMIN))):
-    return templates.TemplateResponse(
-        request,
-        "admin/users.html",
-        {
-            "user": user,
-            "users": list(db.scalars(select(User).order_by(User.name))),
-            "suppliers": list(db.scalars(select(Supplier))),
-        },
-    )
+    return _users_page(request, db, user)
 
 
 @router.post("/users")
@@ -41,12 +45,18 @@ async def create_user(
     user=Depends(require_roles(Role.ADMIN)),
 ):
     await validate_csrf(request)
+    try:
+        data = UserCreate(name=name, email=email, password=password, role=role, supplier_id=supplier_id)
+    except ValidationError as exc:
+        return _users_page(request, db, user, validation_message(exc), 400)
+    if db.scalar(select(User.id).where(User.email == data.email)):
+        return _users_page(request, db, user, "Ya existe un usuario con ese correo.", 409)
     created = User(
-        name=name,
-        email=email.lower().strip(),
-        password_hash=hash_password(password),
-        role=role,
-        supplier_id=supplier_id if role == Role.PROVIDER else None,
+        name=data.name,
+        email=data.email,
+        password_hash=hash_password(data.password),
+        role=data.role,
+        supplier_id=data.supplier_id if data.role == Role.PROVIDER else None,
     )
     db.add(created)
     db.flush()
