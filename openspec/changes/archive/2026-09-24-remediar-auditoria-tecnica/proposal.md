@@ -1,6 +1,6 @@
 ## Why
 
-La Auditoría Técnica del 2026-09-22 (`docs/AUDITORIA_TECNICA_PortalFacturas_2026-09-22.docx`) concluye que el Portal Interno de Facturas tiene una arquitectura sólida pero **no es apto para recibir documentos fiscales reales**. Reporta 2 hallazgos críticos (sesiones forjables con `SECRET_KEY` pública y trazas expuestas por `DEBUG=true`), 5 altos (FKs no enforzadas, dinero en flotante, migraciones inexistentes, UUID fiscal sin unicidad, credenciales demo públicas) y 26 medios/bajos. El MVP del Portal de Proveedores (ERS v1.3, sprint al 2026-09-30) se construirá sobre esta base. Por eso conviene corregirla ahora, antes de que el modelo de datos y los flujos crezcan encima de estos defectos.
+La Auditoría Técnica del 2026-09-22 (`docs/superseded/AUDITORIA_TECNICA_PortalFacturas_2026-09-22.docx`) concluye que el Portal Interno de Facturas tiene una arquitectura sólida pero **no es apto para recibir documentos fiscales reales**. Reporta 2 hallazgos críticos (sesiones forjables con `SECRET_KEY` pública y trazas expuestas por `DEBUG=true`), 5 altos (FKs no enforzadas, dinero en flotante, migraciones inexistentes, UUID fiscal sin unicidad, credenciales demo públicas) y 26 medios/bajos. El MVP del Portal de Proveedores (ERS v1.3, sprint al 2026-09-30) se construirá sobre esta base. Por eso conviene corregirla ahora, antes de que el modelo de datos y los flujos crezcan encima de estos defectos.
 
 ## What Changes
 

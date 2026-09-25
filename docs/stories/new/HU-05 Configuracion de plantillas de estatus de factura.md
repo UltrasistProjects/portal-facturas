@@ -627,7 +627,7 @@ Los eventos de plantillas y notificaciones MUST NOT incluir el asunto, el cuerpo
 
 ## 12. Dependencias
 
-- **Depende de:** ninguna HU (`docs/DEPENDENCIAS_HUs.md`). Técnicamente, la revisión nueva va después de `0002_supplier_bulk_import`.
+- **Depende de:** ninguna HU (`docs/source-of-truth/DEPENDENCIAS_HUs.md`). Técnicamente, la revisión nueva va después de `0002_supplier_bulk_import`.
 - **Habilita** (con lo que cada HU recibe de esta):
 
 | HU | Qué recibe de HU-05 | Qué le toca decidir a esa HU |
