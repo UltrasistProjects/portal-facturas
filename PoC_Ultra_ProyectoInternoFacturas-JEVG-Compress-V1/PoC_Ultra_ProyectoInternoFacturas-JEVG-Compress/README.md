@@ -329,6 +329,30 @@ notification_service.notify(
 - Un error del servidor de correo **no** se propaga: el envío queda `FAILED` en la bitácora y en el log (`notification.failed`). No hay cola ni reintentos automáticos.
 - Lanza `NotificationDataError` si falta el correo del proveedor o una variable de la plantilla.
 
+### Conectar el servidor SMTP
+
+El `.env` trae un bloque comentado para el servidor de ULTRASIST. Para conectarlo:
+
+1. Pida a TI el servidor, el puerto y el tipo de conexión, la cuenta que envía (o si el servidor acepta relay por IP sin usuario) y la dirección de remitente autorizada.
+2. En `.env`, descomente y complete `MAIL_BACKEND=smtp`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURITY`, `SMTP_USERNAME`, `SMTP_PASSWORD` y `MAIL_FROM`. La contraseña sólo vive en `.env`: nunca se muestra en la pantalla ni se escribe en el log.
+3. Reinicie uvicorn: la configuración se lee al arrancar y `--reload` no vigila `.env`. Si falta `SMTP_HOST` o `MAIL_FROM`, la aplicación no arranca y lo indica.
+4. En **Administración › Notificaciones**, confirme en "Transporte" el servidor y el cifrado, y envíe un correo de prueba a su buzón. El resultado y, si falla, el error técnico aparecen en la pantalla y en "Últimos envíos".
+
+| Caso | Configuración |
+| --- | --- |
+| Puerto 587 con STARTTLS y usuario (lo más común; Microsoft 365: `smtp.office365.com`) | `SMTP_PORT=587`, `SMTP_SECURITY=starttls`, usuario y contraseña |
+| Puerto 465 con TLS directo | `SMTP_PORT=465`, `SMTP_SECURITY=ssl` |
+| Relay interno por IP, sin usuario | `SMTP_USERNAME` vacío; el transporte no inicia sesión |
+| Relay en el puerto 25 sin cifrar | `SMTP_SECURITY=none`: sólo en desarrollo, porque en `production` el arranque lo rechaza |
+
+Errores frecuentes al enviar la prueba:
+- `SMTPAuthenticationError`: usuario o contraseña incorrectos, o, en Microsoft 365, SMTP AUTH deshabilitado para ese buzón.
+- `SSLCertVerificationError`: el certificado del servidor lo firmó una autoridad interna de ULTRASIST. Agregue su certificado raíz al almacén del sistema, o defina `SSL_CERT_FILE` con un archivo `.pem` que la incluya. La verificación del certificado no se desactiva.
+- `SMTPRecipientsRefused` o `SMTPSenderRefused`: el servidor no permite enviar con ese `MAIL_FROM` o a ese destinatario.
+- `ConnectionRefusedError` o `TimeoutError`: servidor o puerto incorrectos, o un firewall de por medio.
+
+Los tres modos (STARTTLS con usuario, TLS directo y certificado no confiable) se verificaron contra un servidor SMTP real con autenticación y un certificado propio.
+
 ## Autorización y acceso de proveedores
 
 Un proveedor nace **"Registrado"** (carga masiva o formulario individual), sin usuario ni acceso al portal, y no puede facturar: SUP-001 exige el estatus operativo, que ahora se muestra como **"Autorizado"** (HU-02).
