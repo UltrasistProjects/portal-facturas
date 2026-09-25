@@ -1,29 +1,4 @@
-# observabilidad Specification
-
-## Purpose
-Log estructurado en JSON con correlación por petición y registro de los eventos técnicos del flujo, sin datos sensibles.
-## Requirements
-### Requirement: Log estructurado en JSON
-Cada línea del log de aplicación SHALL ser un objeto JSON válido con, al menos: `timestamp` (ISO 8601 UTC), `level`, `logger`, `message` y `request_id`. `user_id` SHALL incluirse cuando la petición está autenticada. Los atributos adicionales de cada evento SHALL emitirse como campos del objeto. El log SHALL conservar la rotación existente (2 MB × 3 archivos).
-
-#### Scenario: Línea de log de una petición autenticada
-- **WHEN** un usuario autenticado provoca un evento de log
-- **THEN** la línea es JSON parseable y contiene `request_id` y `user_id`
-
-#### Scenario: Evento fuera de petición
-- **WHEN** se registra el arranque de la aplicación
-- **THEN** la línea es JSON parseable y `request_id` es `null`
-
-### Requirement: Correlación por petición
-Un middleware SHALL asignar un `request_id` a cada petición y devolverlo en la cabecera `X-Request-ID`. Si la petición trae una cabecera `X-Request-ID` de 8 a 64 caracteres `[A-Za-z0-9-]`, SHALL reutilizarla; en caso contrario SHALL generar uno nuevo.
-
-#### Scenario: Cabecera de respuesta
-- **WHEN** se solicita cualquier ruta
-- **THEN** la respuesta incluye `X-Request-ID` y todas las líneas de log de esa petición tienen ese mismo `request_id`
-
-#### Scenario: Identificador entrante inválido
-- **WHEN** la petición trae `X-Request-ID: <script>`
-- **THEN** se ignora y se genera un identificador nuevo
+## MODIFIED Requirements
 
 ### Requirement: Registro de eventos técnicos del flujo
 El sistema SHALL registrar:
@@ -80,15 +55,3 @@ Los eventos de plantillas y notificaciones MUST NOT incluir el asunto, el cuerpo
 #### Scenario: Autorización masiva registrada
 - **WHEN** el Administrador autoriza 3 proveedores "Registrado" sin usuario y un proveedor ya autorizado, y los 3 correos de credenciales se envían
 - **THEN** el log contiene un evento `supplier.bulk_authorize` con `requested = 4`, `authorized = 3`, `existing_access = 0`, `skipped = 1`, `conflicts = 0`, `credentials_sent = 3`, `credentials_failed = 0` y `duration_ms`, sin correos ni contraseñas
-
-### Requirement: Sin datos sensibles en logs
-El log MUST NOT contener contraseñas, hashes, identificadores de sesión, tokens CSRF, `SECRET_KEY`, `SMTP_PASSWORD`, RFC, datos bancarios, contenido de archivos, nombres originales de archivo, ni el asunto, el cuerpo o los destinatarios de los correos.
-
-#### Scenario: Revisión del log tras el flujo completo
-- **WHEN** se ejecuta el flujo de login fallido, login exitoso, subida de documentos, validación y revisión, y se busca en el log `password`, `csrf`, `Admin123`, el RFC del proveedor y el RFC receptor
-- **THEN** no hay coincidencias
-
-#### Scenario: Revisión del log tras enviar correos
-- **WHEN** con `SMTP_PASSWORD` definida se guarda el buzón, se envía un correo de prueba y se envía un correo de evento, y se busca en el log la contraseña SMTP, las direcciones del buzón y de la prueba, y el asunto enviado
-- **THEN** no hay coincidencias
-

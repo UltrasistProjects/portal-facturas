@@ -13,7 +13,7 @@ class SupplierType(StrEnum):
 
 
 class SupplierStatus(StrEnum):
-    # Alta por carga masiva, aun sin acceso al portal: la autorizacion es posterior (HU-02).
+    # Alta (carga masiva o individual), aun sin acceso al portal: la autorizacion es posterior (HU-02).
     REGISTERED = "REGISTERED"
     ACTIVE = "ACTIVE"
     INACTIVE = "INACTIVE"
@@ -21,7 +21,8 @@ class SupplierStatus(StrEnum):
 
 SUPPLIER_STATUS_LABELS = {
     SupplierStatus.REGISTERED: "Registrado",
-    SupplierStatus.ACTIVE: "Activo",
+    # "Autorizado" (HU-02): el estatus operativo que exige SUP-001; se llega a el autorizando un proveedor Registrado.
+    SupplierStatus.ACTIVE: "Autorizado",
     SupplierStatus.INACTIVE: "Inactivo",
 }
 
@@ -215,12 +216,14 @@ SUPPLIER_REQUIREMENTS = {
 
 class NotificationEvent(StrEnum):
     """Eventos con plantilla de correo (HU-05). Independientes de InvoiceStatus: HU-20 y HU-14 los disparan y hacen
-    el mapeo desde sus estatus. Nombre, destinatario y variables viven en app/services/notification_templates.py."""
+    el mapeo desde sus estatus; HU-03 envia las credenciales del proveedor autorizado. Nombre, destinatario y
+    variables viven en app/services/notification_templates.py."""
 
     INVOICE_AUTHORIZED = "INVOICE_AUTHORIZED"
     INVOICE_REJECTED = "INVOICE_REJECTED"
     INVOICE_OBSERVATIONS = "INVOICE_OBSERVATIONS"
     INVOICE_CANCELLED = "INVOICE_CANCELLED"
+    SUPPLIER_CREDENTIALS = "SUPPLIER_CREDENTIALS"
 
 
 class Mailbox(StrEnum):

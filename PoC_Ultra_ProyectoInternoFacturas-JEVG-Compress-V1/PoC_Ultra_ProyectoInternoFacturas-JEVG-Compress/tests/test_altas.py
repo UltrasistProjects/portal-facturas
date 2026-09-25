@@ -1,11 +1,12 @@
 import pytest
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 
+from app.core.constants import SupplierStatus
 from app.core.database import SessionLocal
 from app.core.demo import DEMO_ACCOUNTS
 from app.core.passwords import generate_password, password_problems
 from app.core.security import verify_password
-from app.models import Contract, Invoice, Supplier, User
+from app.models import Contract, EmailDelivery, Invoice, Supplier, User
 from tests.conftest import csrf, login, supplier_by_email
 
 
@@ -106,6 +107,43 @@ def test_rfc_duplicado_responde_409(client):
     response = create_supplier(client, rfc="tic210101abc")
     assert response.status_code == 409
     assert "Ya existe un proveedor" in response.text
+
+
+def test_alta_individual_queda_registrada(client, restore_notification_recipients):
+    login(client)
+    response = create_supplier(client, rfc="SNU260101RG1", email="Registro.Individual@ServiciosNuevos.mx")
+    assert response.status_code == 200
+    with SessionLocal() as db:
+        supplier = db.scalar(select(Supplier).where(Supplier.rfc == "SNU260101RG1"))
+        try:
+            assert supplier.status == SupplierStatus.REGISTERED
+            assert supplier.email == "registro.individual@serviciosnuevos.mx"
+            assert db.scalar(select(User.id).where(User.supplier_id == supplier.id)) is None
+            assert db.scalar(select(func.count(EmailDelivery.id))) == 0
+            assert "Registrado" in client.get(f"/suppliers/{supplier.id}").text
+        finally:
+            db.delete(supplier)
+            db.commit()
+
+
+def test_alta_individual_con_correo_en_uso(client):
+    login(client)
+    assert create_supplier(client, rfc="SNU260101CU1", email="compartido@serviciosnuevos.mx").status_code == 200
+    assert create_user(client, email="usuario.existente@ultrasist.com.mx").status_code == 200
+    try:
+        for email in ("Compartido@ServiciosNuevos.mx", "usuario.existente@ultrasist.com.mx"):
+            response = create_supplier(client, rfc="SNU260101CU2", email=email)
+            assert response.status_code == 409
+            assert "El correo ya lo usa otro proveedor o usuario." in response.text
+        with SessionLocal() as db:
+            assert db.scalar(select(Supplier.id).where(Supplier.rfc == "SNU260101CU2")) is None
+    finally:
+        with SessionLocal() as db:
+            supplier_id = db.scalar(select(Supplier.id).where(Supplier.rfc == "SNU260101CU1"))
+            user_id = db.scalar(select(User.id).where(User.email == "usuario.existente@ultrasist.com.mx"))
+            db.execute(delete(User).where(User.id == user_id))
+            db.execute(delete(Supplier).where(Supplier.id == supplier_id))
+            db.commit()
 
 
 def test_periodo_invalido_en_alta_de_factura(client):

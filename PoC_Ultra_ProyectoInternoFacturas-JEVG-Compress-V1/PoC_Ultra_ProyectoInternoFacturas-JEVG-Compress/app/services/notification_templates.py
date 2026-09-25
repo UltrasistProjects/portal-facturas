@@ -1,9 +1,9 @@
-"""Plantillas de correo de los eventos de estatus de factura (HU-05).
+"""Plantillas de correo de los eventos de estatus de factura (HU-05) y de las credenciales del proveedor (HU-03).
 
 Catalogo de eventos y variables, textos predeterminados, validacion, vista previa, guardado con bloqueo optimista y
-composicion del correo para las HU que envian notificaciones (HU-20 y HU-14). El texto del Administrador nunca pasa
-por Jinja2: una expresion regular sustituye cada {{variable}} por su valor en una sola pasada (D2). Este modulo no
-envia correos ni registra en el log el texto de las plantillas o los valores de las variables.
+composicion del correo para las HU que envian notificaciones (HU-20, HU-14 y HU-03). El texto del Administrador
+nunca pasa por Jinja2: una expresion regular sustituye cada {{variable}} por su valor en una sola pasada (D2). Este
+modulo no envia correos ni registra en el log el texto de las plantillas o los valores de las variables.
 """
 
 import logging
@@ -65,6 +65,12 @@ VARIABLES = {
             "Fecha límite para aceptar la cancelación: fecha de la solicitud + 72 horas",
             "28/09/2026 10:30",
         ),
+        # Credenciales de acceso (HU-03). El ejemplo de la contrasena es ficticio: nunca se leen datos reales.
+        Variable("usuario", "Correo con el que el proveedor inicia sesión", "contacto@serviciosdelnorte.mx"),
+        Variable("contrasena_temporal", "Contraseña temporal generada al autorizar", "Ejemplo#Temporal2026"),
+        Variable(
+            "url_portal", "Dirección de inicio de sesión del portal", "https://proveedores.ultrasist.com.mx/login"
+        ),
     )
 }
 COMMON_VARIABLES = {"numero_factura", "folio_interno", "proveedor", "monto", "estatus", "fecha_estatus"}
@@ -125,7 +131,8 @@ SUPPLIER_DETAILS = (
     "{{observaciones}}\n\nFolio interno: {{folio_interno}}\nFecha: {{fecha_estatus}}\n\n" + SUPPLIER_FOOTER
 )
 
-# Textos predeterminados (HU, seccion 6.4). La migracion 0004 los copia; una prueba verifica que coinciden.
+# Textos predeterminados (HU, seccion 6.4). Las migraciones 0004 y 0006 (credenciales, HU-03) los copian; una
+# prueba verifica que coinciden.
 EVENTS: dict[NotificationEvent, EventSpec] = {
     spec.event: spec
     for spec in (
@@ -175,6 +182,22 @@ EVENTS: dict[NotificationEvent, EventSpec] = {
             "Folio interno: {{folio_interno}}\n"
             "Monto: {{monto}}\n"
             "Fecha de la solicitud: {{fecha_estatus}}\n\n" + RECEPTION_FOOTER,
+        ),
+        EventSpec(
+            NotificationEvent.SUPPLIER_CREDENTIALS,
+            "Credenciales de acceso",
+            SUPPLIER,
+            ("proveedor", "usuario", "contrasena_temporal", "url_portal"),
+            ("usuario", "contrasena_temporal", "url_portal"),
+            "Acceso al Portal de Proveedores ULTRASIST",
+            "{{proveedor}}:\n\n"
+            "Su registro como proveedor de ULTRASIST fue autorizado. Estos son sus datos para ingresar por primera vez "
+            "al Portal de Proveedores:\n\n"
+            "Portal: {{url_portal}}\n"
+            "Usuario: {{usuario}}\n"
+            "Contraseña temporal: {{contrasena_temporal}}\n\n"
+            "Por seguridad, no comparta esta contraseña y cámbiela al ingresar por primera vez.\n\n"
+            "Este es un mensaje automático del Portal de Proveedores ULTRASIST. No responda a este correo.",
         ),
     )
 }
@@ -313,6 +336,9 @@ def compose(
     fecha_estatus: datetime | None = None,
     observaciones: str | None = None,
     fecha_limite_cancelacion: datetime | None = None,
+    usuario: str | None = None,
+    contrasena_temporal: str | None = None,
+    url_portal: str | None = None,
 ) -> ComposedEmail:
     """Asunto y cuerpo del correo de `event` con la plantilla vigente (D10). Falla con NotificationDataError, sin
     componer nada, si falta el valor de una variable del evento o si una obligatoria llega vacia. Los valores de
@@ -329,6 +355,9 @@ def compose(
         "fecha_limite_cancelacion": (
             format_datetime(fecha_limite_cancelacion) if fecha_limite_cancelacion is not None else None
         ),
+        "usuario": usuario,
+        "contrasena_temporal": contrasena_temporal,
+        "url_portal": url_portal,
     }
     values: dict[str, str] = {}
     for name in spec.variables:

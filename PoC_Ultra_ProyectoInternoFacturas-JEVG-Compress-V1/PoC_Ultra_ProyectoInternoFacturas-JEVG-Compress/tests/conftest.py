@@ -227,3 +227,48 @@ def restore_notification_recipients():
         db.execute(update(NotificationCopy).values(addresses=[], updated_by=None))
         db.commit()
     shutil.rmtree(OUTBOX, ignore_errors=True)
+
+
+@pytest.fixture()
+def registered_suppliers():
+    """Fabrica de proveedores Registrado (HU-02). Al terminar borra sus usuarios, las sesiones y la auditoria de esos
+    usuarios, y a ellos mismos: la base de la sesion es compartida."""
+    from sqlalchemy import delete, select
+
+    from app.core.constants import SupplierStatus, SupplierType
+    from app.core.database import SessionLocal
+    from app.models import AuditLog, LoginAttempt, Supplier, User, UserSession
+
+    created: list[int] = []
+
+    def make(count: int = 1, **overrides) -> list[Supplier]:
+        rows = []
+        with SessionLocal() as db:
+            for _ in range(count):
+                token = secrets.token_hex(3).upper()
+                values = {
+                    "business_name": f"Proveedor Acceso {token} SA de CV",
+                    "rfc": f"HUA{token}A1",
+                    "supplier_type": SupplierType.PERSONA_MORAL,
+                    "email": f"acceso-{token.lower()}@proveedor.mx",
+                    "status": SupplierStatus.REGISTERED,
+                    **overrides,
+                }
+                supplier = Supplier(**values)
+                db.add(supplier)
+                db.flush()
+                rows.append(supplier)
+            db.commit()
+        created.extend(s.id for s in rows)
+        return rows
+
+    yield make
+    with SessionLocal() as db:
+        users = list(db.scalars(select(User).where(User.supplier_id.in_(created))))
+        user_ids = [u.id for u in users]
+        db.execute(delete(UserSession).where(UserSession.user_id.in_(user_ids)))
+        db.execute(delete(AuditLog).where(AuditLog.user_id.in_(user_ids)))
+        db.execute(delete(LoginAttempt).where(LoginAttempt.email.in_([u.email for u in users])))
+        db.execute(delete(User).where(User.id.in_(user_ids)))
+        db.execute(delete(Supplier).where(Supplier.id.in_(created)))
+        db.commit()

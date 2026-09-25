@@ -216,12 +216,12 @@ El Administrador define en **Administración › Archivos mínimos** (`/admin/re
 - **Vigencia:** la configuración se lee en cada prevalidación. Una factura que ya salió de los estados editables conserva sus resultados; una editable se evalúa con la configuración vigente al volver a prevalidarse.
 - **Concurrencia y auditoría:** el formulario lleva la huella `config_version`; si otro Administrador guardó antes, el guardado responde 409 sin cambios. Cada cambio queda en el Audit Log (`INVOICE_DOCUMENT_REQUIREMENTS_UPDATED`, `INVOICE_DOCUMENT_TYPE_CREATED`, `INVOICE_DOCUMENT_TYPE_UPDATED` e `INVOICE_DOCUMENT_TYPE_STATUS_CHANGED`) con los valores anterior y nuevo.
 
-**Probar con un proveedor internacional.** Los proveedores demo son nacionales y la autorización de proveedores (HU-02) aún no existe, así que un internacional se prepara así:
+**Probar con un proveedor internacional.** Los proveedores demo son nacionales; un internacional se prepara así:
 
 1. Como `ADMIN`, registrar el proveedor con la carga masiva (`/suppliers/import`), origen Internacional. Queda en estatus "Registrado".
-2. Activarlo en la base de datos: `docker compose exec db psql -U portal -d portal -c "UPDATE suppliers SET status = 'ACTIVE' WHERE foreign_tax_id = '<identificador>'"`.
-3. Crear su contrato en **Contratos** y un usuario `PROVIDER` asociado en **Usuarios**.
-4. Iniciar sesión con ese usuario, dar de alta una factura y abrir su carga documental: se ofrecen el Invoice y los soportes configurados, no el XML ni el PDF del CFDI.
+2. Autorizarlo desde **Proveedores** (filtro "Registrado", casilla y "Autorizar seleccionados"). Con el transporte `file`, sus credenciales quedan en un `.eml` de `outbox/`.
+3. Crear su contrato en **Contratos**.
+4. Iniciar sesión con el usuario y la contraseña temporal del correo, dar de alta una factura y abrir su carga documental: se ofrecen el Invoice y los soportes configurados, no el XML ni el PDF del CFDI.
 
 ## Plantillas de correo
 
@@ -233,6 +233,7 @@ El Administrador define en **Administración › Plantillas de correo** (`/admin
 | Rechazada (`INVOICE_REJECTED`) | HU-20 (RN-HU20-03) | Proveedor (correo del catálogo) | `numero_factura`, `observaciones` | `folio_interno`, `proveedor`, `monto`, `estatus`, `fecha_estatus` |
 | Observaciones (`INVOICE_OBSERVATIONS`) | HU-20 (RN-HU20-03) | Proveedor (correo del catálogo) | `numero_factura`, `observaciones` | `folio_interno`, `proveedor`, `monto`, `estatus`, `fecha_estatus` |
 | Cancelada (`INVOICE_CANCELLED`) | HU-14 | Recepción de Facturas | `numero_factura`, `proveedor`, `fecha_limite_cancelacion` | `folio_interno`, `monto`, `estatus`, `fecha_estatus` |
+| Credenciales de acceso (`SUPPLIER_CREDENTIALS`) | HU-03, al autorizar al proveedor | Proveedor (correo del catálogo), sin copias | `usuario`, `contrasena_temporal`, `url_portal` | `proveedor` |
 
 | Variable | Contenido | Ejemplo de la vista previa |
 | --- | --- | --- |
@@ -244,6 +245,9 @@ El Administrador define en **Administración › Plantillas de correo** (`/admin
 | `fecha_estatus` | Fecha y hora del cambio de estatus (`dd/mm/aaaa HH:MM`, zona de negocio) | `25/09/2026 10:30` |
 | `observaciones` | Causa que capturó el PMO | `El subtotal del XML no coincide con el de la orden de compra.` |
 | `fecha_limite_cancelacion` | Fecha de la solicitud de cancelación + 72 horas | `28/09/2026 10:30` |
+| `usuario` | Correo con el que el proveedor inicia sesión | `contacto@serviciosdelnorte.mx` |
+| `contrasena_temporal` | Contraseña temporal generada al autorizar | `Ejemplo#Temporal2026` |
+| `url_portal` | Dirección de inicio de sesión del portal | `https://proveedores.ultrasist.com.mx/login` |
 
 - **Texto:** plano, sin HTML. Una variable se escribe `{{numero_factura}}` (se admiten espacios interiores) y sólo se reemplaza por su valor: no hay expresiones, filtros ni condiciones, y el texto nunca pasa por Jinja2. Una llave sencilla es texto normal. El asunto ocupa una línea de hasta 200 caracteres; el cuerpo, hasta 5000. Al guardar se recortan los espacios de los extremos y `CRLF` pasa a `LF`.
 - **Validación:** al guardar y en la vista previa se reportan juntos, con HTTP 400 y el formato "Campo: mensaje", los campos vacíos o demasiado largos, las variables sin cerrar, las que no son de la plantilla y las obligatorias que faltan en el cuerpo.
@@ -291,6 +295,21 @@ notification_service.notify(
 - Registra el intento en `email_deliveries` (evento, destinatarios, resultado, error técnico, entidad y usuario, **sin asunto ni cuerpo**) y confirma ese registro.
 - Un error del servidor de correo **no** se propaga: el envío queda `FAILED` en la bitácora y en el log (`notification.failed`). No hay cola ni reintentos automáticos.
 - Lanza `NotificationDataError` si falta el correo del proveedor o una variable de la plantilla.
+
+## Autorización y acceso de proveedores
+
+Un proveedor nace **"Registrado"** (carga masiva o formulario individual), sin usuario ni acceso al portal, y no puede facturar: SUP-001 exige el estatus operativo, que ahora se muestra como **"Autorizado"** (HU-02).
+
+- **Autorización masiva:** en **Proveedores**, el Administrador filtra por "Registrado", marca las casillas (o "seleccionar todos") y pulsa "Autorizar seleccionados". Un modal pide confirmación, porque se enviarán las credenciales. Se autorizan hasta 100 proveedores por operación, en una sola transacción con las filas bloqueadas:
+  - los que no están "Registrado" se omiten;
+  - si el correo de un proveedor lo usa otro usuario, ese proveedor no se autoriza;
+  - si ya tenía su propio usuario `PROVIDER`, se autoriza sin credenciales nuevas.
+- **Credenciales (HU-03):** por cada proveedor autorizado sin usuario se crea un usuario `PROVIDER` con su correo del catálogo y una contraseña temporal aleatoria de 20 caracteres. El portal guarda sólo su hash. Después de confirmar la autorización se envía el correo "Credenciales de acceso" con el usuario, la contraseña y la dirección `/login` del servidor.
+- **Resumen:** tras autorizar, el listado muestra a cada proveedor con "Credenciales enviadas", "Envío fallido" (con el error), "Ya tenía usuario", "Omitido" o "No autorizado". Los proveedores cuyo último envío falló llevan la marca "Credenciales no enviadas".
+- **Expediente:** la sección "Acceso al portal" muestra el usuario, el último acceso y el último envío de credenciales. **"Reenviar credenciales"** genera una contraseña nueva (la anterior deja de funcionar), sólo mientras el proveedor no haya iniciado sesión.
+- **Auditoría:** `SUPPLIER_STATUS_CHANGED`, `USER_CREATED` (origen `SUPPLIER_AUTHORIZATION`), `SUPPLIER_BULK_AUTHORIZED` y `SUPPLIER_CREDENTIALS_RESENT`, sin contraseñas. En el log técnico queda `supplier.bulk_authorize` sólo con contadores.
+- **ClickCloud (RN-HU03-01):** `app/services/secret_vault.py` es el punto de integración. Recibe la contraseña temporal antes de confirmar la transacción; si falla, la autorización se revierte. Hoy el adaptador activo (`NullSecretVault`) no guarda nada: falta la API de ClickCloud.
+- **Pendiente de HU-10:** nada obliga todavía al proveedor a cambiar la contraseña temporal en su primer acceso, y la contraseña no expira.
 
 ## Archivos y seguridad de PoC
 
@@ -390,7 +409,8 @@ Los XML bajo `data/demo_documents/` son estructuralmente útiles para el parser,
 - Los adaptadores Azure son contratos preparados, no llamadas productivas.
 - El catálogo de reglas (`BUSINESS_RULES`) se muestra en modo lectura; su edición persistente es un siguiente paso. Los archivos mínimos por origen sí son configurables.
 - Las facturas de proveedores internacionales sólo cumplen la parte documental: sin CFDI, las reglas XML y SUP-003 las dejan en "Requiere corrección" hasta que HU-16 defina sus validaciones y su expediente.
-- El portal ya puede enviar correos (HU-08), pero todavía ningún cambio de estatus los dispara: eso llega con HU-20 y HU-14. El envío es síncrono, sin cola ni reintentos automáticos.
+- El portal envía las credenciales de los proveedores autorizados (HU-03), pero todavía ningún cambio de estatus de factura dispara correos: eso llega con HU-20 y HU-14. El envío es síncrono, sin cola ni reintentos automáticos.
+- La contraseña temporal no se resguarda aún en ClickCloud (falta su API) y su cambio en el primer acceso llega con HU-10.
 - La verificación documental del Anexo A es presencia/vigencia referencial, no validación legal.
 - Bootstrap 5.3.3 y Bootstrap Icons están incluidos bajo `app/static/vendor/`; la interfaz tampoco requiere Internet.
 

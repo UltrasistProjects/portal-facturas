@@ -470,3 +470,14 @@ def test_segundo_buzon_de_recepcion(db):
                 " VALUES ('INVOICE_RECEPTION', 'Otro', '{a@b.mx}', now())"
             )
         )
+
+
+def test_evento_de_credenciales_aceptado_en_las_tablas_de_notificaciones(db):
+    db.execute(text(delivery_sql(event="'SUPPLIER_CREDENTIALS'")))
+    db.execute(
+        text(
+            "INSERT INTO notification_copies (event, addresses, updated_at)"
+            " VALUES ('SUPPLIER_CREDENTIALS', '{}', now())"
+        )
+    )
+    assert db.scalar(text("SELECT count(*) FROM notification_templates WHERE event = 'SUPPLIER_CREDENTIALS'")) == 1

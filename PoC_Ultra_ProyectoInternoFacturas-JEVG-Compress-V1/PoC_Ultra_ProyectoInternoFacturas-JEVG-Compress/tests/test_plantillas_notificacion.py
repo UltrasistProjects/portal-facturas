@@ -20,6 +20,7 @@ AUTHORIZED = NotificationEvent.INVOICE_AUTHORIZED
 REJECTED = NotificationEvent.INVOICE_REJECTED
 OBSERVATIONS = NotificationEvent.INVOICE_OBSERVATIONS
 CANCELLED = NotificationEvent.INVOICE_CANCELLED
+CREDENTIALS = NotificationEvent.SUPPLIER_CREDENTIALS
 SUPPLIER_NAME = "Servicios Digitales del Norte SA de CV"
 # Valores completos de un correo; cada prueba cambia solo lo que le interesa.
 VALUES = {
@@ -142,8 +143,9 @@ def test_listado_inicial(client):
         ("Rechazada", supplier),
         ("Observaciones", supplier),
         ("Cancelada", reception),
+        ("Credenciales de acceso", supplier),
     ]
-    assert [modified for *_, modified in rows] == ["Predeterminada"] * 4
+    assert [modified for *_, modified in rows] == ["Predeterminada"] * 5
     assert rows[0][2] == "Factura {{numero_factura}} autorizada para pago"
 
 
@@ -403,7 +405,10 @@ def test_textos_predeterminados_conforme_a_las_reglas_de_negocio():
         REJECTED: "Factura {{numero_factura}} rechazada",
         OBSERVATIONS: "Factura {{numero_factura}} con observaciones",
         CANCELLED: "Cancelación de la factura {{numero_factura}} de {{proveedor}}",
+        CREDENTIALS: "Acceso al Portal de Proveedores ULTRASIST",
     }
+    for line in ("Portal: {{url_portal}}", "Usuario: {{usuario}}", "Contraseña temporal: {{contrasena_temporal}}"):
+        assert f"\n{line}\n" in default_body(CREDENTIALS), line
     assert (
         "La factura número {{numero_factura}} del proveedor {{proveedor}} por el monto {{monto}} ha sido Autorizada "
         "para su pago."
@@ -549,3 +554,63 @@ def test_acciones_sin_auditoria(client):
     assert save(client, REJECTED, body="Sin variables").status_code == 400
     assert client.post(f"{URL}/{REJECTED}", data=stale, follow_redirects=False).status_code == 409
     assert audit_count() == before
+
+
+# --- Plantilla de credenciales de acceso (HU-03) -------------------------------------------------------------------
+
+CREDENTIAL_VALUES = {
+    "proveedor": SUPPLIER_NAME,
+    "usuario": "contacto@serviciosdelnorte.mx",
+    "contrasena_temporal": "Clave#Temporal#Real1",
+    "url_portal": "https://portal.ultrasist.local/login",
+}
+
+
+def test_variables_de_la_plantilla_de_credenciales(client):
+    login(client)
+    html = client.get(f"{URL}/{CREDENTIALS}").text
+    assert "Destinatario: Proveedor (correo del catálogo)" in html
+    rows = re.findall(r'<span class="mono">\{\{(\w+)\}\}</span>(<small>Obligatoria</small>)?', html)
+    assert rows == [
+        ("proveedor", ""),
+        ("usuario", "<small>Obligatoria</small>"),
+        ("contrasena_temporal", "<small>Obligatoria</small>"),
+        ("url_portal", "<small>Obligatoria</small>"),
+    ]
+
+
+def test_credenciales_sin_variable_obligatoria_o_ajena(client):
+    login(client)
+    body = default_body(CREDENTIALS)
+    missing = save(client, CREDENTIALS, body=body.replace("{{contrasena_temporal}}", "********"))
+    assert missing.status_code == 400
+    assert "Cuerpo: debe incluir la variable obligatoria {{contrasena_temporal}}" in missing.text
+    foreign = save(client, CREDENTIALS, body=body + "\n{{numero_factura}}")
+    assert foreign.status_code == 400
+    assert "Cuerpo: la variable {{numero_factura}} no existe en esta plantilla" in foreign.text
+    assert stored(CREDENTIALS).version == 1
+
+
+def test_vista_previa_de_las_credenciales(client):
+    login(client)
+    response = preview(client, CREDENTIALS)
+    assert response.status_code == 200
+    block = preview_block(response.text)
+    assert "Usuario: contacto@serviciosdelnorte.mx" in block
+    assert "Contraseña temporal: Ejemplo#Temporal2026" in block
+    assert "Portal: https://proveedores.ultrasist.com.mx/login" in block
+
+
+def test_composicion_de_las_credenciales():
+    with SessionLocal() as db:
+        email = nt.compose(db, CREDENTIALS, **CREDENTIAL_VALUES)
+        assert email.subject == "Acceso al Portal de Proveedores ULTRASIST"
+        assert email.body.startswith(f"{SUPPLIER_NAME}:\n\n")
+        for line in (
+            "Portal: https://portal.ultrasist.local/login",
+            "Usuario: contacto@serviciosdelnorte.mx",
+            "Contraseña temporal: Clave#Temporal#Real1",
+        ):
+            assert line in email.body
+        with pytest.raises(nt.NotificationDataError, match="contrasena_temporal"):
+            nt.compose(db, CREDENTIALS, **{**CREDENTIAL_VALUES, "contrasena_temporal": " "})

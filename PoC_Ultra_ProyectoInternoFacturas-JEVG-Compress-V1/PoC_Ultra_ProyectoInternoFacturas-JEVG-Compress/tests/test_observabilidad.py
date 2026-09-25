@@ -281,3 +281,29 @@ def test_sin_datos_sensibles_al_enviar_correos(client, monkeypatch, restore_noti
         "Factura LOG-MAIL-1 autorizada para pago",
     ):
         assert value not in content, value
+
+
+# --- Autorizacion de proveedores (HU-02, HU-03) -------------------------------------------------------------------
+
+
+def test_autorizacion_masiva_registrada(client, registered_suppliers, restore_notification_recipients):
+    rows = registered_suppliers(3)
+    active = supplier_by_email("proveedor1@poc.local")
+    login(client)
+    offset = log_offset()
+    ids = [str(s.id) for s in rows] + [str(active.id)]
+    response = client.post(
+        "/suppliers/authorize",
+        data={"supplier_ids": ids, "csrf_token": csrf(client, "/suppliers")},
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+    events = events_since(offset)
+    [event] = [e for e in events if e.get("event") == "supplier.bulk_authorize"]
+    counts = {key: event[key] for key in ("requested", "authorized", "existing_access", "skipped", "conflicts")}
+    assert counts == {"requested": 4, "authorized": 3, "existing_access": 0, "skipped": 1, "conflicts": 0}
+    assert (event["credentials_sent"], event["credentials_failed"]) == (3, 0) and "duration_ms" in event
+    content = json.dumps(events, ensure_ascii=False)
+    for supplier in rows:
+        assert supplier.email not in content and supplier.business_name not in content
+    assert "Contraseña" not in content and "contrasena" not in content

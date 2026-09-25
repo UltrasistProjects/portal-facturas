@@ -1,6 +1,7 @@
 import pytest
 from alembic import command
 from sqlalchemy import create_engine, text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.pool import NullPool
 
 from scripts import pgtools
@@ -336,3 +337,39 @@ def test_downgrade_de_destinatarios_con_datos(empty_db, statements):
         command.downgrade(config, NOTIFICATION_TEMPLATES)
     assert NOTIFICATION_TABLES <= tables(empty_db)
     assert query(empty_db, "SELECT version_num FROM alembic_version") == [(NOTIFICATION_RECIPIENTS,)]
+
+
+SUPPLIER_CREDENTIALS = "0006_supplier_credentials"
+
+
+def test_downgrade_de_credenciales_sin_uso(empty_db):
+    config = alembic_config(empty_db)
+    command.upgrade(config, SUPPLIER_CREDENTIALS)
+    command.downgrade(config, NOTIFICATION_RECIPIENTS)
+    assert query(empty_db, "SELECT count(*) FROM notification_templates") == [(4,)]
+    with pytest.raises(IntegrityError, match='violates check constraint "notificationevent"'):
+        execute(
+            empty_db,
+            "INSERT INTO email_deliveries (event, status, to_addresses, cc_addresses, transport, message_id,"
+            " created_at) VALUES ('SUPPLIER_CREDENTIALS', 'SENT', '{a@b.mx}', '{}', 'file', '<x@p>', now())",
+        )
+    command.upgrade(config, "head")
+    command.check(config)
+
+
+@pytest.mark.parametrize(
+    "sql",
+    [
+        "UPDATE notification_templates SET version = 2 WHERE event = 'SUPPLIER_CREDENTIALS'",
+        "INSERT INTO email_deliveries (event, status, to_addresses, cc_addresses, transport, message_id, created_at)"
+        " VALUES ('SUPPLIER_CREDENTIALS', 'SENT', '{a@b.mx}', '{}', 'file', '<x@portal.local>', now())",
+    ],
+)
+def test_downgrade_de_credenciales_en_uso(empty_db, sql):
+    config = alembic_config(empty_db)
+    command.upgrade(config, SUPPLIER_CREDENTIALS)
+    execute(empty_db, sql)
+    with pytest.raises(NotImplementedError, match="Restaure un respaldo"):
+        command.downgrade(config, NOTIFICATION_RECIPIENTS)
+    assert query(empty_db, "SELECT version_num FROM alembic_version") == [(SUPPLIER_CREDENTIALS,)]
+    assert query(empty_db, "SELECT count(*) FROM notification_templates") == [(5,)]
