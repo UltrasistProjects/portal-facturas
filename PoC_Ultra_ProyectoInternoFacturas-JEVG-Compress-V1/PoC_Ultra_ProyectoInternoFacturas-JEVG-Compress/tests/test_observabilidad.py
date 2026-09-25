@@ -1,13 +1,17 @@
 import json
 import re
+from datetime import datetime, timezone
+from decimal import Decimal
 
 from fastapi.testclient import TestClient
-from sqlalchemy import select
+from sqlalchemy import select, text
 
 from app.core.config import settings
+from app.core.constants import NotificationEvent
 from app.core.database import SessionLocal
 from app.core.demo import DEMO_ACCOUNTS
 from app.models import User
+from app.services import notification_templates
 from tests.conftest import ROOT, TEST_PASSWORDS, csrf, invoice_by_number, login, supplier_by_email
 
 LOG_FILE = settings.log_dir / "app.log"
@@ -129,4 +133,53 @@ def test_sin_datos_sensibles_en_el_log(client):
         *(account.password for account in DEMO_ACCOUNTS),
     ]
     for value in forbidden:
+        assert value not in content, value
+
+
+def test_cambio_de_plantilla_registrado(client, restore_notification_templates):
+    login(client)
+    offset = log_offset()
+    rejected = notification_templates.EVENTS[NotificationEvent.INVOICE_REJECTED]
+    data = {
+        "subject": "Asunto de prueba {{numero_factura}}",
+        "body": rejected.default_body,
+        "version": 1,
+        "csrf_token": csrf(client, "/"),
+    }
+    response = client.post("/admin/notification-templates/INVOICE_REJECTED", data=data, follow_redirects=False)
+    assert response.status_code == 303
+    events = events_since(offset)
+    updated = [e for e in events if e.get("event") == "notification_template.updated"]
+    assert [(e["event_code"], e["version"]) for e in updated] == [("INVOICE_REJECTED", 2)]
+    content = json.dumps(events, ensure_ascii=False)
+    assert "Asunto de prueba" not in content and "por la siguiente causa" not in content
+
+
+def test_plantilla_invalida_registrada(client, restore_notification_templates):
+    with SessionLocal() as db:
+        db.execute(
+            text(
+                "UPDATE notification_templates SET body = 'Texto dañado {{rfc_secreto}}'"
+                " WHERE event = 'INVOICE_REJECTED'"
+            )
+        )
+        db.commit()
+    offset = log_offset()
+    with SessionLocal() as db:
+        notification_templates.compose(
+            db,
+            NotificationEvent.INVOICE_REJECTED,
+            numero_factura="LOG-NOTIF-1",
+            folio_interno="FAC-LOG-NOTIF",
+            proveedor="Proveedor del log",
+            monto=Decimal("10.00"),
+            moneda="MXN",
+            fecha_estatus=datetime(2026, 9, 25, 16, 30, tzinfo=timezone.utc),
+            observaciones="Causa confidencial",
+        )
+    events = events_since(offset)
+    fallback = [e for e in events if e.get("event") == "notification.template_fallback"]
+    assert [(e["event_code"], e["reason"]) for e in fallback] == [("INVOICE_REJECTED", "invalid")]
+    content = json.dumps(events, ensure_ascii=False)
+    for value in ("Texto dañado", "rfc_secreto", "LOG-NOTIF-1", "FAC-LOG-NOTIF", "Proveedor del log", "confidencial"):
         assert value not in content, value

@@ -1,4 +1,4 @@
-# Invoice Portal PoCC
+# Invoice Portal PoC
 
 Portal local de facturación y prevalidación de proveedores para ULTRASIST. Recibe expedientes, extrae CFDI 4.0, aplica reglas determinísticas, presenta una matriz de evidencia y soporta revisión administrativa con trazabilidad completa.
 
@@ -184,7 +184,7 @@ El proveedor sólo observa sus facturas. `INTERNAL` revisa y decide. `ADMIN` añ
 
 ## Reglas implementadas
 
-- `DOC-001..007`: XML, PDF, OC, Vo.Bo., contrato/anexo, complemento y procesabilidad.
+- `DOC-001..009`: archivos mínimos según el origen del proveedor (XML y PDF del CFDI, orden de compra, Vo.Bo., Invoice y otros tipos obligatorios; ver [Archivos mínimos por tipo de proveedor](#archivos-mínimos-por-tipo-de-proveedor)), contrato/anexo disponible, complemento y procesabilidad.
 - `XML-001..008`: parseabilidad, receptor, PPD, FormaPago 99, UsoCFDI, UUID, moneda y esenciales.
 - `SUP-001..004`: proveedor activo, contrato vigente, expediente mínimo y vigencia aproximada.
 - `CON-001..004`: contrato, proyecto, periodo y heurística mes/tecnología.
@@ -197,6 +197,65 @@ El proveedor sólo observa sus facturas. `INTERNAL` revisa y decide. `ADMIN` añ
 ### Cálculo del score
 
 Cada regla evaluada aporta al denominador según severidad: `CRITICAL=35`, `ERROR=18`, `WARNING=6`, `INFO=0`. Un `FAIL` o `WARNING` descuenta su peso. `NOT_APPLICABLE` y `NOT_EVALUATED` no alteran el denominador. Una falla `CRITICAL` genera bloqueo; una evidencia AI de baja confianza permanece diferenciada y nunca equivale a aprobación administrativa.
+
+## Archivos mínimos por tipo de proveedor
+
+El Administrador define en **Administración › Archivos mínimos** (`/admin/required-documents`) qué archivos debe cargar el proveedor con cada factura, por separado para el proveedor **Nacional** y el **Internacional** (`suppliers.origin`):
+
+| Nivel | En la carga documental | En la prevalidación |
+| --- | --- | --- |
+| Obligatorio | Se ofrece; el checklist indica cuántos faltan | Si falta, su regla DOC resulta `FAIL` y la factura queda en "Requiere corrección" |
+| Opcional | Se ofrece | No se exige |
+| No aplica | No se ofrece; el servidor rechaza la carga | No se exige |
+
+- **Catálogo** (`invoice_document_types`): 10 tipos del sistema, con nombre en español, descripción y formatos admitidos (PDF, PNG, JPEG, XML, TXT), más los tipos soporte que cree el Administrador. La carga documental rechaza con HTTP 400, antes de escribir el archivo, un tipo que no aplica a la factura o una extensión que el tipo no admite.
+- **Valores iniciales:** Nacional exige XML y PDF del CFDI, orden de compra y Vo.Bo., y conserva el comportamiento anterior. Internacional exige Invoice (PDF), orden de compra y Vo.Bo. Contrato, anexo y documentación adicional son opcionales para ambos; los complementos de pago sólo aplican al Nacional.
+- **Niveles fijos:** XML y PDF del CFDI son obligatorios para el Nacional y no aplican al Internacional; el Invoice, al revés. La pantalla los muestra con candado, el servidor rechaza cambiarlos (409) y la base de datos los garantiza con un `CHECK`.
+- **Tipos soporte:** el Administrador los da de alta (nombre, descripción, formatos y un nivel por origen, "No aplica" por defecto), los edita y los desactiva o reactiva. Su clave es `SOPORTE_<id>`. Nunca se borran, y los documentos ya cargados siguen visibles y descargables en el detalle de la factura. Los tipos del sistema no se editan ni se desactivan.
+- **Reglas:** DOC-001 (XML del CFDI, `CRITICAL`), DOC-002 (PDF del CFDI), DOC-003 (orden de compra) y DOC-004 (Vo.Bo.) resultan `PASS`/`FAIL` cuando su tipo es obligatorio para el origen y `NOT_APPLICABLE` en otro caso. DOC-008 evalúa el Invoice (`CRITICAL`) y DOC-009 genera un resultado por cada otro tipo obligatorio, con su clave en la fuente.
+- **Vigencia:** la configuración se lee en cada prevalidación. Una factura que ya salió de los estados editables conserva sus resultados; una editable se evalúa con la configuración vigente al volver a prevalidarse.
+- **Concurrencia y auditoría:** el formulario lleva la huella `config_version`; si otro Administrador guardó antes, el guardado responde 409 sin cambios. Cada cambio queda en el Audit Log (`INVOICE_DOCUMENT_REQUIREMENTS_UPDATED`, `INVOICE_DOCUMENT_TYPE_CREATED`, `INVOICE_DOCUMENT_TYPE_UPDATED` e `INVOICE_DOCUMENT_TYPE_STATUS_CHANGED`) con los valores anterior y nuevo.
+
+**Probar con un proveedor internacional.** Los proveedores demo son nacionales y la autorización de proveedores (HU-02) aún no existe, así que un internacional se prepara así:
+
+1. Como `ADMIN`, registrar el proveedor con la carga masiva (`/suppliers/import`), origen Internacional. Queda en estatus "Registrado".
+2. Activarlo en la base de datos: `docker compose exec db psql -U portal -d portal -c "UPDATE suppliers SET status = 'ACTIVE' WHERE foreign_tax_id = '<identificador>'"`.
+3. Crear su contrato en **Contratos** y un usuario `PROVIDER` asociado en **Usuarios**.
+4. Iniciar sesión con ese usuario, dar de alta una factura y abrir su carga documental: se ofrecen el Invoice y los soportes configurados, no el XML ni el PDF del CFDI.
+
+## Plantillas de correo
+
+El Administrador define en **Administración › Plantillas de correo** (`/admin/notification-templates`) el asunto y el cuerpo de los correos que se envían cuando una factura cambia de estatus. Hay exactamente una plantilla por evento, creada por la migración `0004_notification_templates` con un texto predeterminado que reproduce las reglas de negocio. Las plantillas no se crean, eliminan ni desactivan, y el destinatario lo fija la regla de negocio de cada evento:
+
+| Evento | Lo dispara | Destinatario | Obligatorias en el cuerpo | Otras variables |
+| --- | --- | --- | --- | --- |
+| Autorizada (`INVOICE_AUTHORIZED`) | HU-20 (RN-HU20-02) | Recepción de Facturas | `numero_factura`, `proveedor`, `monto` | `folio_interno`, `estatus`, `fecha_estatus` |
+| Rechazada (`INVOICE_REJECTED`) | HU-20 (RN-HU20-03) | Proveedor (correo del catálogo) | `numero_factura`, `observaciones` | `folio_interno`, `proveedor`, `monto`, `estatus`, `fecha_estatus` |
+| Observaciones (`INVOICE_OBSERVATIONS`) | HU-20 (RN-HU20-03) | Proveedor (correo del catálogo) | `numero_factura`, `observaciones` | `folio_interno`, `proveedor`, `monto`, `estatus`, `fecha_estatus` |
+| Cancelada (`INVOICE_CANCELLED`) | HU-14 | Recepción de Facturas | `numero_factura`, `proveedor`, `fecha_limite_cancelacion` | `folio_interno`, `monto`, `estatus`, `fecha_estatus` |
+
+| Variable | Contenido | Ejemplo de la vista previa |
+| --- | --- | --- |
+| `numero_factura` | Número de la factura que capturó el proveedor | `A-1024` |
+| `folio_interno` | Folio interno del portal | `FAC-2026-00042` |
+| `proveedor` | Razón social del proveedor | `Servicios Digitales del Norte SA de CV` |
+| `monto` | Total con separador de miles, dos decimales y moneda | `$116,000.00 MXN` |
+| `estatus` | Nombre del evento | `Rechazada` |
+| `fecha_estatus` | Fecha y hora del cambio de estatus (`dd/mm/aaaa HH:MM`, zona de negocio) | `25/09/2026 10:30` |
+| `observaciones` | Causa que capturó el PMO | `El subtotal del XML no coincide con el de la orden de compra.` |
+| `fecha_limite_cancelacion` | Fecha de la solicitud de cancelación + 72 horas | `28/09/2026 10:30` |
+
+- **Texto:** plano, sin HTML. Una variable se escribe `{{numero_factura}}` (se admiten espacios interiores) y sólo se reemplaza por su valor: no hay expresiones, filtros ni condiciones, y el texto nunca pasa por Jinja2. Una llave sencilla es texto normal. El asunto ocupa una línea de hasta 200 caracteres; el cuerpo, hasta 5000. Al guardar se recortan los espacios de los extremos y `CRLF` pasa a `LF`.
+- **Validación:** al guardar y en la vista previa se reportan juntos, con HTTP 400 y el formato "Campo: mensaje", los campos vacíos o demasiado largos, las variables sin cerrar, las que no son de la plantilla y las obligatorias que faltan en el cuerpo.
+- **Vista previa:** compone el borrador con los datos de ejemplo de la tabla, sin JavaScript y sin guardar ni auditar.
+- **Texto predeterminado:** "Cargar texto predeterminado" lo pone en el formulario; la plantilla no cambia hasta pulsar Guardar.
+- **Concurrencia y auditoría:** el formulario lleva la versión de la plantilla; si otro Administrador guardó antes, el guardado responde 409 sin cambios. Un guardado sin cambios no aumenta la versión. Cada cambio queda en el Audit Log (`NOTIFICATION_TEMPLATE_UPDATED`) con el asunto, el cuerpo y la versión anteriores y nuevos, y en el log técnico (`notification_template.updated`), sin el texto.
+- **Composición para HU-20 y HU-14:** `app.services.notification_templates.compose(db, NotificationEvent.INVOICE_REJECTED, numero_factura=..., folio_interno=..., proveedor=..., monto=Decimal(...), moneda="MXN", fecha_estatus=..., observaciones=...)` devuelve `ComposedEmail(subject, body)` con la plantilla vigente.
+  - Formatea montos y fechas, y deja el asunto en una sola línea de hasta 255 caracteres.
+  - Lanza `NotificationDataError` si falta una variable del evento o si una obligatoria llega vacía.
+  - Si la plantilla guardada no es válida (por ejemplo, modificada por SQL), usa el texto predeterminado y registra `notification.template_fallback`.
+  - No envía el correo: el transporte, el remitente y la dirección de Recepción de Facturas llegan con HU-08.
+- **Reinicio de la demo:** `reset_demo.py` recrea el esquema, así que las plantillas vuelven a su texto predeterminado.
 
 ## Archivos y seguridad de PoC
 
@@ -287,7 +346,9 @@ Los XML bajo `data/demo_documents/` son estructuralmente útiles para el parser,
 - Sin integración real ClickBalance o SAP Ariba; ClickBalance es un estado manual.
 - Sin pagos, banca, correo, firma, SharePoint, Blob, Azure SQL, SSO, despliegue Azure, Kubernetes o colas.
 - Los adaptadores Azure son contratos preparados, no llamadas productivas.
-- El catálogo de reglas se muestra en modo lectura; su edición persistente es un siguiente paso.
+- El catálogo de reglas (`BUSINESS_RULES`) se muestra en modo lectura; su edición persistente es un siguiente paso. Los archivos mínimos por origen sí son configurables.
+- Las facturas de proveedores internacionales sólo cumplen la parte documental: sin CFDI, las reglas XML y SUP-003 las dejan en "Requiere corrección" hasta que HU-16 defina sus validaciones y su expediente.
+- Las plantillas de correo se editan y componen, pero ningún correo se envía todavía: el envío llega con HU-08, HU-20 y HU-14.
 - La verificación documental del Anexo A es presencia/vigencia referencial, no validación legal.
 - Bootstrap 5.3.3 y Bootstrap Icons están incluidos bajo `app/static/vendor/`; la interfaz tampoco requiere Internet.
 

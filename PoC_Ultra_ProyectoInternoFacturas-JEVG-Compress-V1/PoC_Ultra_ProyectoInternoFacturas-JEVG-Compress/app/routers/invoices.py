@@ -9,14 +9,23 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.core.constants import ContractStatus, DocumentType, InvoiceStatus, ProcessingStatus, Role, SupplierStatus
+from app.core.constants import (
+    DOCUMENT_REQUIREMENT_LABELS,
+    ContractStatus,
+    DocumentType,
+    InvoiceStatus,
+    ProcessingStatus,
+    Role,
+    SupplierStatus,
+)
 from app.core.database import get_db
-from app.core.errors import DuplicateInvoiceError
+from app.core.errors import DuplicateInvoiceError, InvalidInputError
 from app.core.security import get_current_user, require_roles, validate_csrf
 from app.models import Contract, Document, Invoice, Supplier, ValidationResult
 from app.repositories.invoice_repository import get_visible_invoice, search_invoices
 from app.routers.common import templates
 from app.schemas import InvoiceCreate, validation_message
+from app.services import document_requirements_service as requirements
 from app.services.audit_service import audit
 from app.services.file_service import LocalFileStorage, log_upload, safe_download_name
 from app.services.invoice_service import (
@@ -176,8 +185,26 @@ def invoice_detail(invoice_id: int, request: Request, db: Session = Depends(get_
             "xml": xml_data,
             "reconciliation": rec,
             "summary": summary,
+            # Nombre del catalogo de cada documento, tambien de tipos inactivos o que ya no aplican (RD-10).
+            "type_names": requirements.type_names(db),
         },
     )
+
+
+def _documents_page(request: Request, db: Session, invoice, user, error: str | None = None, status_code: int = 200):
+    """Carga documental con los tipos que aplican al origen del proveedor de la factura (HU-04)."""
+    items = requirements.checklist(db, invoice)
+    context = {
+        "user": user,
+        "invoice": invoice,
+        "items": items,
+        "pending_label": requirements.pending_label(requirements.pending_required(items)),
+        "requirement_labels": DOCUMENT_REQUIREMENT_LABELS,
+        "formats_label": requirements.formats_label,
+        "accept": ",".join(dict.fromkeys(ext for item in items for ext in requirements.extensions(item.document_type))),
+        "error": error,
+    }
+    return templates.TemplateResponse(request, "invoices/documents.html", context, status_code=status_code)
 
 
 @router.get("/{invoice_id}/documents")
@@ -185,9 +212,7 @@ def documents_page(invoice_id: int, request: Request, db: Session = Depends(get_
     invoice = _invoice_or_404(db, invoice_id, user)
     if user.role == Role.PROVIDER and not is_editable(invoice):
         return RedirectResponse(f"/invoices/{invoice.id}", status_code=303)
-    return templates.TemplateResponse(
-        request, "invoices/documents.html", {"user": user, "invoice": invoice, "document_types": DocumentType}
-    )
+    return _documents_page(request, db, invoice, user)
 
 
 @router.post("/{invoice_id}/documents")
@@ -202,8 +227,11 @@ async def upload_document(
     await validate_csrf(request)
     invoice = _invoice_or_404(db, invoice_id, user)
     ensure_editable(invoice)
-    if document_type not in {x.value for x in DocumentType}:
-        raise HTTPException(400, "Tipo documental invalido")
+    # Antes de leer o escribir el archivo: el tipo debe aplicar al origen del proveedor y admitir la extension.
+    try:
+        requirements.ensure_format(requirements.offered_type(db, invoice, document_type), upload.filename)
+    except InvalidInputError as exc:
+        return _documents_page(request, db, invoice, user, exc.message, 400)
     try:
         stored = await LocalFileStorage().save_invoice_file(invoice.id, upload)
         metadata, pages, processing = {}, None, ProcessingStatus.PROCESSED
@@ -227,12 +255,7 @@ async def upload_document(
                     "error": str(exc),
                 },
             )
-        return templates.TemplateResponse(
-            request,
-            "invoices/documents.html",
-            {"user": user, "invoice": invoice, "document_types": DocumentType, "error": str(exc)},
-            status_code=400,
-        )
+        return _documents_page(request, db, invoice, user, str(exc), 400)
     previous = next((d for d in invoice.documents if d.is_current and d.document_type == document_type), None)
     if previous:
         previous.is_current = False

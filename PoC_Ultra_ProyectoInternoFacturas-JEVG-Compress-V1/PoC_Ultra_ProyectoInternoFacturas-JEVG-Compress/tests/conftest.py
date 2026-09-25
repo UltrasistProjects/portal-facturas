@@ -96,6 +96,13 @@ def alembic_config(database_url: str | None = None):
     return config
 
 
+def head_revision() -> str:
+    """Revision cabeza de la cadena de migraciones (evita fijar su identificador en las pruebas)."""
+    from alembic.script import ScriptDirectory
+
+    return ScriptDirectory.from_config(alembic_config()).get_current_head()
+
+
 @pytest.fixture(scope="session", autouse=True)
 def test_database():
     before = _workspace_snapshot()
@@ -174,3 +181,24 @@ def supplier_by_email(email: str):
 
     with SessionLocal() as db:
         return db.scalar(select(Supplier).where(Supplier.email == email))
+
+
+@pytest.fixture()
+def restore_notification_templates():
+    """Devuelve las plantillas de correo (HU-05) a su texto predeterminado, en la version 1 y sin Administrador: la
+    base de la sesion es compartida y otras pruebas esperan la instalacion inicial."""
+    yield
+    from sqlalchemy import update
+
+    from app.core.database import SessionLocal
+    from app.models import NotificationTemplate
+    from app.services.notification_templates import EVENTS
+
+    with SessionLocal() as db:
+        for event, spec in EVENTS.items():
+            db.execute(
+                update(NotificationTemplate)
+                .where(NotificationTemplate.event == event)
+                .values(subject=spec.default_subject, body=spec.default_body, version=1, updated_by=None)
+            )
+        db.commit()

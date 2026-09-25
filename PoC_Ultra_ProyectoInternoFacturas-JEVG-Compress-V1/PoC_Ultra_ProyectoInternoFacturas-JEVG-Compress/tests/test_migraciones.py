@@ -4,7 +4,7 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.pool import NullPool
 
 from scripts import pgtools
-from tests.conftest import ROOT, alembic_config
+from tests.conftest import ROOT, alembic_config, head_revision
 
 VERSIONS = ROOT / "alembic" / "versions"
 BASELINE = VERSIONS / "0001_postgresql_baseline.py"
@@ -20,7 +20,10 @@ DOMAIN_TABLES = {
     "login_attempts",
     "reviews",
     "user_sessions",
+    "invoice_document_types",
+    "notification_templates",
 }
+BASELINE_TABLES = DOMAIN_TABLES - {"invoice_document_types", "notification_templates"}
 
 
 @pytest.fixture()
@@ -57,7 +60,8 @@ def test_downgrade_de_la_revision_base_no_destruye_datos(empty_db):
     with pytest.raises(NotImplementedError, match="Restaure un respaldo"):
         command.downgrade(config, "base")
     assert tables(empty_db) == before
-    assert query(empty_db, "SELECT version_num FROM alembic_version") == [("0001_postgresql_baseline",)]
+    # Toda la corrida es una transaccion: el fallo de la base revierte tambien los downgrades posteriores.
+    assert query(empty_db, "SELECT version_num FROM alembic_version") == [(head_revision(),)]
 
 
 def test_revisiones_explicitas_sin_create_all_ni_modelos():
@@ -71,8 +75,206 @@ def test_revisiones_explicitas_sin_create_all_ni_modelos():
 
 def test_revision_base_explicita_para_postgresql():
     source = BASELINE.read_text(encoding="utf-8")
-    assert source.count("op.create_table(") == len(DOMAIN_TABLES)
+    assert source.count("op.create_table(") == len(BASELINE_TABLES)
     for forbidden in ("pragma", "sqlite"):
         assert forbidden not in source.lower()
     legacy = ("0001_initial", "0004_integridad_datos", "0006_user_sessions")
     assert not [name for name in legacy if (VERSIONS / f"{name}.py").exists()], "la cadena anterior debe retirarse"
+
+
+BULK_IMPORT = "0002_supplier_bulk_import"
+SUPPLIER_COLUMNS = (
+    "business_name, supplier_type, email, status, confidentiality_agreement, economic_proposal, created_at, updated_at"
+)
+
+
+NATIONAL_COLUMNS, NATIONAL_VALUES = "origin, country, rfc", "'NATIONAL', 'MX', 'MIG200101AB1'"
+
+
+def execute(url: str, sql: str) -> None:
+    engine = create_engine(url, poolclass=NullPool)
+    try:
+        with engine.begin() as connection:
+            connection.execute(text(sql))
+    finally:
+        engine.dispose()
+
+
+def insert_supplier(url: str, extra_columns: str = "rfc", extra_values: str = "'MIG200101AB1'", status="ACTIVE"):
+    execute(
+        url,
+        f"INSERT INTO suppliers ({SUPPLIER_COLUMNS}, {extra_columns}) VALUES "
+        f"('Proveedor previo', 'PERSONA_MORAL', 'previo@proveedor.mx', '{status}', false, false, now(), now(), "
+        f"{extra_values})",
+    )
+
+
+def supplier_columns(url: str) -> set[str]:
+    rows = query(url, "SELECT column_name FROM information_schema.columns WHERE table_name = 'suppliers'")
+    return {name for (name,) in rows}
+
+
+def test_proveedores_previos_quedan_nacionales(empty_db):
+    config = alembic_config(empty_db)
+    command.upgrade(config, "0001_postgresql_baseline")
+    insert_supplier(empty_db)
+    command.upgrade(config, BULK_IMPORT)
+    assert query(empty_db, "SELECT origin, country, rfc, foreign_tax_id, status FROM suppliers") == [
+        ("NATIONAL", "MX", "MIG200101AB1", None, "ACTIVE")
+    ]
+
+
+def test_downgrade_de_carga_masiva_sin_datos_nuevos(empty_db):
+    config = alembic_config(empty_db)
+    command.upgrade(config, BULK_IMPORT)
+    insert_supplier(empty_db, NATIONAL_COLUMNS, NATIONAL_VALUES)
+    command.downgrade(config, "0001_postgresql_baseline")
+    assert not {"origin", "foreign_tax_id", "country"} & supplier_columns(empty_db)
+    assert query(empty_db, "SELECT rfc, status FROM suppliers") == [("MIG200101AB1", "ACTIVE")]
+    command.upgrade(config, "head")
+    command.check(config)
+
+
+@pytest.mark.parametrize(
+    ("extra_columns", "extra_values", "status"),
+    [
+        ("origin, foreign_tax_id, country", "'INTERNATIONAL', '12-3456789', 'US'", "ACTIVE"),
+        (NATIONAL_COLUMNS, NATIONAL_VALUES, "REGISTERED"),
+    ],
+)
+def test_downgrade_de_carga_masiva_con_datos_nuevos(empty_db, extra_columns, extra_values, status):
+    config = alembic_config(empty_db)
+    command.upgrade(config, BULK_IMPORT)
+    insert_supplier(empty_db, extra_columns, extra_values, status)
+    with pytest.raises(NotImplementedError, match="Restaure un respaldo"):
+        command.downgrade(config, "0001_postgresql_baseline")
+    assert {"origin", "foreign_tax_id", "country"} <= supplier_columns(empty_db)
+    assert query(empty_db, "SELECT version_num FROM alembic_version") == [(BULK_IMPORT,)]
+
+
+DOCUMENT_TYPES = "0003_invoice_document_types"
+# Catalogo inicial (HU-04): clave -> (nombre, formatos, nacional, internacional).
+INITIAL_CATALOG = {
+    "INVOICE_XML": ("XML del CFDI", ["XML"], "REQUIRED", "NOT_APPLICABLE"),
+    "INVOICE_PDF": ("PDF del CFDI", ["PDF"], "REQUIRED", "NOT_APPLICABLE"),
+    "FOREIGN_INVOICE": ("Invoice (PDF)", ["PDF"], "NOT_APPLICABLE", "REQUIRED"),
+    "PURCHASE_ORDER": ("Orden de compra", ["PDF", "PNG", "JPEG", "TXT"], "REQUIRED", "REQUIRED"),
+    "APPROVAL": ("Vo.Bo. del líder de proyecto", ["PDF", "PNG", "JPEG", "TXT"], "REQUIRED", "REQUIRED"),
+    "CONTRACT": ("Contrato", ["PDF", "PNG", "JPEG", "TXT"], "OPTIONAL", "OPTIONAL"),
+    "CONTRACT_ANNEX": ("Anexo del contrato", ["PDF", "PNG", "JPEG", "TXT"], "OPTIONAL", "OPTIONAL"),
+    "PAYMENT_COMPLEMENT_XML": ("Complemento de pago (XML)", ["XML"], "OPTIONAL", "NOT_APPLICABLE"),
+    "PAYMENT_COMPLEMENT_PDF": ("Complemento de pago (PDF)", ["PDF"], "OPTIONAL", "NOT_APPLICABLE"),
+    "ADDITIONAL": ("Documentación adicional", ["PDF", "PNG", "JPEG", "XML", "TXT"], "OPTIONAL", "OPTIONAL"),
+}
+
+
+def insert_invoice_documents(url: str, *document_types: str) -> None:
+    """Un usuario, un proveedor nacional, una factura y un documento vigente por tipo."""
+    insert_supplier(url, NATIONAL_COLUMNS, NATIONAL_VALUES)
+    execute(
+        url,
+        "INSERT INTO users (name, email, password_hash, role, is_active, created_at) "
+        "VALUES ('Previo', 'previo@poc.local', 'x', 'PROVIDER', true, now())",
+    )
+    execute(
+        url,
+        "INSERT INTO invoices (internal_folio, supplier_id, uploaded_by, invoice_number, service_period, project_name,"
+        " subtotal, tax, total, currency, status, created_at) SELECT 'FAC-MIG-1', s.id, u.id, 'MIG-1', '08/2026',"
+        " 'Proyecto', 0, 0, 0, 'MXN', 'DRAFT', now() FROM suppliers s, users u",
+    )
+    for document_type in document_types:
+        execute(
+            url,
+            "INSERT INTO documents (invoice_id, supplier_id, document_type, original_filename, stored_filename, path,"
+            " mime_type, file_size, sha256, uploaded_at, uploaded_by, processing_status, is_current)"
+            f" SELECT i.id, i.supplier_id, '{document_type}', 'a.pdf', 'a.pdf', 'invoices/1/a.pdf', 'application/pdf',"
+            " 1, repeat('0', 64), now(), i.uploaded_by, 'PROCESSED', true FROM invoices i",
+        )
+
+
+def catalog(url: str) -> dict:
+    rows = query(
+        url,
+        "SELECT code, name, formats, national_requirement, international_requirement, is_system, is_active"
+        " FROM invoice_document_types ORDER BY id",
+    )
+    return {code: rest for code, *rest in rows}
+
+
+def test_catalogo_inicial_tras_la_migracion(empty_db):
+    config = alembic_config(empty_db)
+    command.upgrade(config, BULK_IMPORT)
+    insert_invoice_documents(empty_db, "INVOICE_XML", "PURCHASE_ORDER", "TAX_STATUS")
+    command.upgrade(config, DOCUMENT_TYPES)
+    loaded = catalog(empty_db)
+    assert list(loaded) == list(INITIAL_CATALOG), "los tipos del sistema se siembran en el orden del catalogo"
+    assert loaded == {code: [*values, True, True] for code, values in INITIAL_CATALOG.items()}
+    assert query(empty_db, "SELECT document_type FROM documents ORDER BY id") == [
+        ("INVOICE_XML",),
+        ("PURCHASE_ORDER",),
+        ("TAX_STATUS",),
+    ]
+
+
+def test_downgrade_del_catalogo_sin_datos_nuevos(empty_db):
+    config = alembic_config(empty_db)
+    command.upgrade(config, DOCUMENT_TYPES)
+    execute(empty_db, "UPDATE invoice_document_types SET national_requirement = 'OPTIONAL' WHERE code = 'CONTRACT'")
+    command.downgrade(config, BULK_IMPORT)
+    assert "invoice_document_types" not in tables(empty_db)
+    command.upgrade(config, "head")
+    command.check(config)
+
+
+@pytest.mark.parametrize("data", ["support_type", "FOREIGN_INVOICE", "SOPORTE_12"])
+def test_downgrade_del_catalogo_con_datos_nuevos(empty_db, data):
+    config = alembic_config(empty_db)
+    command.upgrade(config, DOCUMENT_TYPES)
+    if data == "support_type":
+        execute(
+            empty_db,
+            "INSERT INTO invoice_document_types (code, name, formats, is_system, is_active, national_requirement,"
+            " international_requirement, created_at, updated_at) VALUES ('SOPORTE_11', 'Reporte de horas', '{PDF}',"
+            " false, false, 'NOT_APPLICABLE', 'NOT_APPLICABLE', now(), now())",
+        )
+    else:
+        insert_invoice_documents(empty_db, data)
+    with pytest.raises(NotImplementedError, match="Restaure un respaldo"):
+        command.downgrade(config, BULK_IMPORT)
+    assert "invoice_document_types" in tables(empty_db)
+    assert query(empty_db, "SELECT version_num FROM alembic_version") == [(DOCUMENT_TYPES,)]
+
+
+NOTIFICATION_TEMPLATES = "0004_notification_templates"
+
+
+def test_instalacion_nueva_con_las_plantillas_predeterminadas(empty_db):
+    from app.services.notification_templates import EVENTS
+
+    command.upgrade(alembic_config(empty_db), "head")
+    rows = query(empty_db, "SELECT event, subject, body, version, updated_by FROM notification_templates ORDER BY id")
+    # La migracion copia los textos (no importa app): deben coincidir con el catalogo del servicio.
+    assert rows == [(event.value, spec.default_subject, spec.default_body, 1, None) for event, spec in EVENTS.items()]
+
+
+def test_downgrade_de_plantillas_sin_cambios(empty_db):
+    config = alembic_config(empty_db)
+    command.upgrade(config, NOTIFICATION_TEMPLATES)
+    command.downgrade(config, DOCUMENT_TYPES)
+    assert "notification_templates" not in tables(empty_db)
+    command.upgrade(config, "head")
+    command.check(config)
+
+
+def test_downgrade_de_plantillas_modificadas(empty_db):
+    config = alembic_config(empty_db)
+    command.upgrade(config, NOTIFICATION_TEMPLATES)
+    execute(
+        empty_db,
+        "UPDATE notification_templates SET subject = 'Otro {{numero_factura}}', version = 2"
+        " WHERE event = 'INVOICE_REJECTED'",
+    )
+    with pytest.raises(NotImplementedError, match="Restaure un respaldo"):
+        command.downgrade(config, DOCUMENT_TYPES)
+    assert "notification_templates" in tables(empty_db)
+    assert query(empty_db, "SELECT version_num FROM alembic_version") == [(NOTIFICATION_TEMPLATES,)]

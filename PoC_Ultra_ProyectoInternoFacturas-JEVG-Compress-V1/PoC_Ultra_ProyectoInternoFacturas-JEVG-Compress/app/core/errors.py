@@ -23,3 +23,9 @@ class InvalidInputError(BusinessRuleError):
     """Dato de entrada invalido para la operacion (p. ej. una decision de revision desconocida)."""
 
     status_code = 400
+
+
+class NotFoundError(BusinessRuleError):
+    """La entidad sobre la que se opera no existe."""
+
+    status_code = 404

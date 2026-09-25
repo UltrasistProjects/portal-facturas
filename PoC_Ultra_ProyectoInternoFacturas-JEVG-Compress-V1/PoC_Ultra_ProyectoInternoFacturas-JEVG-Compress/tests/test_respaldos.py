@@ -19,7 +19,7 @@ from app.core.database import engine
 from scripts import pgtools
 from scripts.backup import MANIFEST, create_backup
 from scripts.restore_backup import restore_backup
-from tests.conftest import ROOT
+from tests.conftest import ROOT, head_revision
 
 SESSION_DB = engine.url
 
@@ -101,7 +101,7 @@ def test_respaldo_consistente_con_una_escritura_abierta(tmp_path, restored_copy)
     manifest = json.loads((backup / MANIFEST).read_text(encoding="utf-8"))
     assert manifest["database"]["sha256"] == digest(dump)
     assert manifest["storage"]["sha256"] == digest(backup / "storage.zip")
-    assert manifest["alembic_revision"] == "0001_postgresql_baseline"
+    assert manifest["alembic_revision"] == head_revision()
     assert manifest["server_version"] == pgtools.server_version()
     assert manifest["storage"]["files"] > 0
 
@@ -253,7 +253,7 @@ def test_reset_confirmado_respalda_y_reconstruye(workspace):
     assert len(list(backups.iterdir())) == 1
     assert not ana_exists(database)
     assert scalar(database, "SELECT count(*) FROM invoices") == 10
-    assert scalar(database, "SELECT version_num FROM alembic_version") == "0001_postgresql_baseline"
+    assert scalar(database, "SELECT version_num FROM alembic_version") == head_revision()
 
 
 def test_reset_rechaza_rutas_fuera_del_workspace(workspace):

@@ -3,7 +3,7 @@ from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, ValidationError, field_validator, model_validator
 
-from app.core.constants import Role, SupplierType
+from app.core.constants import FORMAT_EXTENSIONS, DocumentRequirement, Role, SupplierType
 from app.core.passwords import validate_password
 
 FIELD_LABELS = {
@@ -131,6 +131,68 @@ class InvoiceCreate(BaseModel):
     total: Decimal = Decimal("0")
     currency: str = "MXN"
     model_config = ConfigDict(str_strip_whitespace=True)
+
+
+INVALID_REQUIREMENT = "Nivel de exigencia inválido"
+
+
+def parse_requirement(value) -> DocumentRequirement:
+    """Nivel de exigencia recibido de un formulario; ValueError con el mensaje de la spec si no existe."""
+    try:
+        return DocumentRequirement(value)
+    except ValueError:
+        raise ValueError(INVALID_REQUIREMENT) from None
+
+
+class DocumentTypeUpdate(BaseModel):
+    """Campos editables de un tipo de documento soporte (HU-04). Los validadores emiten frases completas, que
+    document_type_message muestra tal cual."""
+
+    name: str
+    description: str | None = None
+    formats: list[str]
+
+    @field_validator("name", mode="before")
+    @classmethod
+    def normalized_name(cls, value):
+        name = " ".join(str(value or "").split())
+        if not 3 <= len(name) <= 80:
+            raise ValueError("El nombre debe tener entre 3 y 80 caracteres")
+        return name
+
+    @field_validator("description", mode="before")
+    @classmethod
+    def optional_description(cls, value):
+        description = str(value or "").strip()
+        if len(description) > 300:
+            raise ValueError("La descripción admite hasta 300 caracteres")
+        return description or None
+
+    @field_validator("formats", mode="before")
+    @classmethod
+    def known_formats(cls, value):
+        formats = set(value or [])
+        if not formats:
+            raise ValueError("Seleccione al menos un formato")
+        if not formats <= FORMAT_EXTENSIONS.keys():
+            raise ValueError("Formato no válido")
+        return [name for name in FORMAT_EXTENSIONS if name in formats]  # orden canonico
+
+
+class DocumentTypeCreate(DocumentTypeUpdate):
+    # "No aplica" por defecto: crear un tipo no cambia nada para los proveedores hasta que el Administrador decida.
+    national_requirement: DocumentRequirement = DocumentRequirement.NOT_APPLICABLE
+    international_requirement: DocumentRequirement = DocumentRequirement.NOT_APPLICABLE
+
+    @field_validator("national_requirement", "international_requirement", mode="before")
+    @classmethod
+    def known_requirement(cls, value):
+        return parse_requirement(value)
+
+
+def document_type_message(exc: ValidationError) -> str:
+    """Mensajes de los tipos de documento soporte: frases completas, sin prefijo de campo."""
+    return " ".join(dict.fromkeys(str(error.get("ctx", {}).get("error", error["msg"])) for error in exc.errors()))
 
 
 class ValidationOutcome(BaseModel):

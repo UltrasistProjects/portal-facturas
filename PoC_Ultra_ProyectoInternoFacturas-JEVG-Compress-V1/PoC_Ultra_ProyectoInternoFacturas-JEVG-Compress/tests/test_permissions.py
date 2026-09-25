@@ -13,3 +13,9 @@ def test_provider_solo_ve_sus_facturas(client):
     assert page.status_code == 200
     assert ajena.internal_folio not in page.text
     assert client.get(f"/invoices/{ajena.id}").status_code == 404
+
+
+def test_provider_e_internal_no_acceden_a_archivos_minimos(client):
+    for email in ("proveedor1@poc.local", "pmo@poc.local"):
+        login(client, email)
+        assert client.get("/admin/required-documents").status_code == 403

@@ -32,3 +32,19 @@ def outcome(
         source_reference=source_reference,
         evidence=evidence or {},
     )
+
+
+def not_applicable(
+    code: str, category: str, severity: str, message: str, expected=None, source_document=None
+) -> ValidationOutcome:
+    """Resultado de una regla que no aplica al caso. Conserva la severidad que tendria la regla; no altera el score
+    porque calculate_score excluye NOT_APPLICABLE."""
+    return ValidationOutcome(
+        rule_code=code,
+        category=category,
+        status="NOT_APPLICABLE",
+        severity=severity,
+        expected_value=None if expected is None else str(expected),
+        message=message,
+        source_document=source_document,
+    )

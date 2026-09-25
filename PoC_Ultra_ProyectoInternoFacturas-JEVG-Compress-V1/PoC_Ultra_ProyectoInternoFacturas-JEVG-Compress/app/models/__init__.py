@@ -5,20 +5,23 @@ from decimal import Decimal
 from enum import StrEnum
 from typing import Any
 
-from sqlalchemy import Boolean, CheckConstraint, Date, ForeignKey, Index, String, Text, UniqueConstraint, event
+from sqlalchemy import Boolean, CheckConstraint, Date, ForeignKey, Index, String, Text, UniqueConstraint, event, func
 from sqlalchemy import Enum as SAEnum
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import Mapped, Session, mapped_column, relationship
 
 from app.core.constants import (
     ContractStatus,
+    DocumentRequirement,
     InvoiceStatus,
     LoginResult,
+    NotificationEvent,
     ProcessingStatus,
     ReviewDecision,
     Role,
     RuleStatus,
     Severity,
+    SupplierOrigin,
     SupplierStatus,
     SupplierType,
 )
@@ -31,9 +34,10 @@ def now_utc() -> datetime:
     return datetime.now(timezone.utc)
 
 
-def enum_column(enum: type[StrEnum]) -> SAEnum:
-    """Enumeracion como VARCHAR con CHECK: la BD rechaza valores fuera del catalogo (AUDITORIA BD-05)."""
-    return SAEnum(enum, native_enum=False, create_constraint=True, validate_strings=True)
+def enum_column(enum: type[StrEnum], name: str | None = None) -> SAEnum:
+    """Enumeracion como VARCHAR con CHECK: la BD rechaza valores fuera del catalogo (AUDITORIA BD-05). El CHECK
+    se llama como la enumeracion; `name` lo cambia cuando dos columnas de una tabla usan la misma."""
+    return SAEnum(enum, name=name, native_enum=False, create_constraint=True, validate_strings=True)
 
 
 def restrict(target: str) -> ForeignKey:
@@ -57,9 +61,22 @@ class User(Base):
 
 class Supplier(Base):
     __tablename__ = "suppliers"
+    __table_args__ = (
+        # Identidad fiscal por origen: el nacional por RFC (unico, NULL permitido); el internacional por pais + id.
+        UniqueConstraint("country", "foreign_tax_id", name="uq_suppliers_country_foreign_tax_id"),
+        CheckConstraint(
+            "(origin = 'NATIONAL' AND rfc IS NOT NULL AND foreign_tax_id IS NULL AND country = 'MX')"
+            " OR (origin = 'INTERNATIONAL' AND rfc IS NULL AND foreign_tax_id IS NOT NULL AND country <> 'MX')",
+            name="ck_suppliers_origin_identity",
+        ),
+    )
     id: Mapped[int] = mapped_column(primary_key=True)
     business_name: Mapped[str] = mapped_column(String(250))
-    rfc: Mapped[str] = mapped_column(String(13), unique=True, index=True)
+    rfc: Mapped[str | None] = mapped_column(String(13), unique=True, index=True)
+    # Los valores por defecto mantienen el alta individual (solo nacionales) sin cambios.
+    origin: Mapped[SupplierOrigin] = mapped_column(enum_column(SupplierOrigin), default=SupplierOrigin.NATIONAL)
+    foreign_tax_id: Mapped[str | None] = mapped_column(String(40))
+    country: Mapped[str] = mapped_column(String(2), default="MX")
     supplier_type: Mapped[SupplierType] = mapped_column(enum_column(SupplierType))
     email: Mapped[str] = mapped_column(String(255))
     phone: Mapped[str | None] = mapped_column(String(30))
@@ -73,6 +90,11 @@ class Supplier(Base):
     users: Mapped[list[User]] = relationship(back_populates="supplier")
     contracts: Mapped[list[Contract]] = relationship(back_populates="supplier")
     invoices: Mapped[list[Invoice]] = relationship(back_populates="supplier")
+
+    @property
+    def tax_identifier(self) -> str:
+        """RFC del proveedor nacional, o pais e identificador fiscal del internacional."""
+        return self.rfc or f"{self.country} {self.foreign_tax_id}"
 
 
 class Contract(Base):
@@ -203,6 +225,50 @@ class Document(Base):
     invoice: Mapped[Invoice | None] = relationship(back_populates="documents", foreign_keys=[invoice_id])
 
 
+class InvoiceDocumentType(Base):
+    """Tipo de documento de factura y su nivel de exigencia por origen del proveedor (HU-04). `code` es el valor de
+    documents.document_type; no hay FK porque esa columna tambien guarda claves del expediente del Anexo A."""
+
+    __tablename__ = "invoice_document_types"
+    __table_args__ = (
+        UniqueConstraint("code", name="uq_invoice_document_types_code"),
+        CheckConstraint(
+            "cardinality(formats) >= 1 AND formats <@ ARRAY['PDF', 'PNG', 'JPEG', 'XML', 'TXT']::varchar[]",
+            name="ck_invoice_document_types_formats",
+        ),
+        CheckConstraint("is_active OR NOT is_system", name="ck_invoice_document_types_system_active"),
+        # Niveles fijos (RD-04): el nacional factura con CFDI y el internacional con Invoice.
+        CheckConstraint(
+            "(code NOT IN ('INVOICE_XML', 'INVOICE_PDF')"
+            " OR (national_requirement = 'REQUIRED' AND international_requirement = 'NOT_APPLICABLE'))"
+            " AND (code <> 'FOREIGN_INVOICE'"
+            " OR (national_requirement = 'NOT_APPLICABLE' AND international_requirement = 'REQUIRED'))",
+            name="ck_invoice_document_types_fixed_levels",
+        ),
+    )
+    id: Mapped[int] = mapped_column(primary_key=True)
+    code: Mapped[str] = mapped_column(String(60))
+    name: Mapped[str] = mapped_column(String(80))
+    description: Mapped[str | None] = mapped_column(String(300))
+    formats: Mapped[list[str]] = mapped_column(ARRAY(String(4)))
+    is_system: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    national_requirement: Mapped[DocumentRequirement] = mapped_column(
+        enum_column(DocumentRequirement, "ck_invoice_document_types_national_requirement"),
+        default=DocumentRequirement.NOT_APPLICABLE,
+    )
+    international_requirement: Mapped[DocumentRequirement] = mapped_column(
+        enum_column(DocumentRequirement, "ck_invoice_document_types_international_requirement"),
+        default=DocumentRequirement.NOT_APPLICABLE,
+    )
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=now_utc)
+    updated_at: Mapped[datetime] = mapped_column(UTCDateTime, default=now_utc, onupdate=now_utc)
+
+
+# Nombre unico sin distinguir mayusculas (el servicio normaliza espacios antes de guardar).
+Index("uq_invoice_document_types_name_lower", func.lower(InvoiceDocumentType.name), unique=True)
+
+
 class ValidationResult(Base):
     __tablename__ = "validation_results"
     __table_args__ = (
@@ -281,6 +347,27 @@ class Review(Base):
     reviewer: Mapped[User] = relationship()
 
 
+class NotificationTemplate(Base):
+    """Plantilla de correo de un evento de estatus de factura (HU-05). Las cuatro filas las crea la migracion y la
+    interfaz solo las edita. `version` es el bloqueo optimista; `updated_by` es NULL si nunca se ha modificado."""
+
+    __tablename__ = "notification_templates"
+    __table_args__ = (
+        UniqueConstraint("event", name="uq_notification_templates_event"),
+        CheckConstraint("char_length(subject) BETWEEN 1 AND 200", name="ck_notification_templates_subject_length"),
+        CheckConstraint("char_length(body) BETWEEN 1 AND 5000", name="ck_notification_templates_body_length"),
+        CheckConstraint("version >= 1", name="ck_notification_templates_version_positive"),
+    )
+    id: Mapped[int] = mapped_column(primary_key=True)
+    event: Mapped[NotificationEvent] = mapped_column(enum_column(NotificationEvent))
+    subject: Mapped[str] = mapped_column(String(200))
+    body: Mapped[str] = mapped_column(Text)
+    version: Mapped[int] = mapped_column(default=1)
+    updated_at: Mapped[datetime] = mapped_column(UTCDateTime, default=now_utc)
+    updated_by: Mapped[int | None] = mapped_column(restrict("users.id"))
+    updater: Mapped[User | None] = relationship()
+
+
 __all__ = [
     "User",
     "Supplier",
@@ -288,9 +375,11 @@ __all__ = [
     "ContractAmendment",
     "Invoice",
     "Document",
+    "InvoiceDocumentType",
     "ValidationResult",
     "AuditLog",
     "LoginAttempt",
     "Review",
     "UserSession",
+    "NotificationTemplate",
 ]

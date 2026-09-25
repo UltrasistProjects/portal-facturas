@@ -156,6 +156,17 @@ def test_subida_rechazada_desde_el_endpoint(client):
     assert "El contenido no corresponde a un PDF" in response.text
 
 
+def test_extension_no_permitida_desde_el_endpoint(client):
+    # El formato del tipo (HU-04) se verifica antes de leer el archivo: no se escribe nada en storage/.
+    invoice = invoice_by_number("BORRADOR-001")
+    login(client, "proveedor1@poc.local")
+    before = sorted((settings.storage_path / "invoices").rglob("*"))
+    response = post_document(client, invoice, b"<script></script>", "script.html")
+    assert response.status_code == 400
+    assert "Formato no admitido para Documentación adicional" in response.text
+    assert sorted((settings.storage_path / "invoices").rglob("*")) == before
+
+
 def test_subida_en_estado_no_editable_responde_409(client):
     invoice = invoice_by_number("REVISION-001")
     login(client, "proveedor1@poc.local")

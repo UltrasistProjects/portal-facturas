@@ -1,0 +1,36 @@
+{% extends "base.html" %}{% block title %}Archivos mínimos{% endblock %}{% block content %}
+{% macro level_cell(t, key, origin) %}{% set fixed = fixed_requirement(t.code, origin) %}{% if fixed %}<span class="fixed-level"><i class="bi bi-lock-fill" aria-hidden="true"></i> {{ levels[fixed] }}</span><small class="d-block text-muted">{{ fixed_reasons[t.code] }}</small>{% else %}<select name="{{ key }}__{{ t.code }}" class="form-select form-select-sm" aria-label="{{ t.name }} · {{ 'Nacional' if key == 'national' else 'Internacional' }}">{% for level, label in levels.items() %}<option value="{{ level.value }}"{% if t[key ~ '_requirement'] == level %} selected{% endif %}>{{ label }}</option>{% endfor %}</select>{% endif %}{% endmacro %}
+{% macro format_checkboxes(prefix, selected) %}<div class="format-options">{% for f in formats %}<label class="form-check-label"><input class="form-check-input me-1" type="checkbox" name="formats" value="{{ f }}"{% if f in selected %} checked{% endif %} id="{{ prefix }}-{{ f }}">{{ f }}</label>{% endfor %}</div>{% endmacro %}
+<div class="page-heading"><div><span class="eyebrow">ADMINISTRACION</span><h1>Archivos mínimos</h1><p>Archivos que el proveedor debe cargar con cada factura, según su origen.</p></div></div>
+{% if error %}<div class="alert alert-danger">{{ error }}</div>{% endif %}{% if notice %}<div class="alert alert-success">{{ notice }}</div>{% endif %}
+<section class="panel"><div class="panel-header"><div><h2>Configuración por origen</h2><p>Obligatorio: la factura no se puede enviar a revisión sin el archivo. Opcional: se ofrece pero no se exige. No aplica: no se ofrece.</p></div></div>
+<form method="post" action="/admin/required-documents"><input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}"><input type="hidden" name="config_version" value="{{ config_version }}">
+<div class="table-responsive"><table class="table enterprise-table requirements-table"><thead><tr><th>Tipo de documento</th><th>Formatos</th>{% for origin, key, label in origins %}<th>{{ label }}</th>{% endfor %}</tr></thead><tbody>
+{% for t in active_types %}<tr><td><strong>{{ t.name }}</strong><small>{% if t.is_system %}Tipo del sistema{% else %}Tipo soporte · {{ t.code }}{% endif %}{% if t.description %} · {{ t.description }}{% endif %}</small></td><td>{{ formats_label(t) }}</td>{% for origin, key, label in origins %}<td>{{ level_cell(t, key, origin) }}</td>{% endfor %}</tr>{% endfor %}
+</tbody></table></div>
+<div class="form-actions m-0 px-4 pb-4"><button class="btn btn-primary">Guardar configuración</button></div></form></section>
+
+<section class="panel"><details class="admin-create"><summary>Nuevo tipo de documento soporte</summary>
+<form method="post" action="/admin/required-documents/types" class="form-grid"><input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+<div class="field"><label for="new-name">Nombre</label><input id="new-name" name="name" class="form-control" minlength="3" maxlength="80" required></div>
+<div class="field"><label for="new-description">Descripción (opcional)</label><input id="new-description" name="description" class="form-control" maxlength="300"></div>
+<div class="field span-2"><label>Formatos admitidos</label>{{ format_checkboxes('new', []) }}</div>
+{% for origin, key, label in origins %}<div class="field"><label for="new-{{ key }}">{{ label }}</label><select id="new-{{ key }}" name="{{ key }}_requirement" class="form-select">{% for level, level_label in levels.items() %}<option value="{{ level.value }}"{% if level.value == 'NOT_APPLICABLE' %} selected{% endif %}>{{ level_label }}</option>{% endfor %}</select></div>{% endfor %}
+<div class="form-actions span-2"><button class="btn btn-primary">Crear tipo de documento</button></div></form></details></section>
+
+{% set support_types = active_types|rejectattr('is_system')|list %}
+<section class="panel"><div class="panel-header"><div><h2>Tipos soporte</h2><p>Definidos por el Administrador. Los tipos del sistema no se editan ni se desactivan.</p></div></div>
+{% for t in support_types %}<details class="admin-create border-bottom"><summary>{{ t.name }} <small class="text-muted">· {{ t.code }} · {{ formats_label(t) }}</small></summary>
+<form method="post" action="/admin/required-documents/types/{{ t.id }}" class="form-grid"><input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+<div class="field"><label for="name-{{ t.id }}">Nombre</label><input id="name-{{ t.id }}" name="name" class="form-control" value="{{ t.name }}" minlength="3" maxlength="80" required></div>
+<div class="field"><label for="description-{{ t.id }}">Descripción (opcional)</label><input id="description-{{ t.id }}" name="description" class="form-control" value="{{ t.description or '' }}" maxlength="300"></div>
+<div class="field span-2"><label>Formatos admitidos</label>{{ format_checkboxes('edit-' ~ t.id, t.formats) }}</div>
+<div class="form-actions span-2"><button class="btn btn-primary">Guardar cambios</button></div></form>
+<form method="post" action="/admin/required-documents/types/{{ t.id }}/status" class="mt-2"><input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}"><input type="hidden" name="active" value="false"><button class="btn btn-outline-danger btn-sm">Desactivar</button> <small class="text-muted">Deja de ofrecerse y de exigirse; conserva sus niveles y los documentos ya cargados.</small></form></details>
+{% else %}<p class="empty-state">Aún no hay tipos soporte activos.</p>{% endfor %}</section>
+
+<section class="panel inactive-types"><div class="panel-header"><div><h2>Tipos inactivos</h2><p>No se ofrecen ni se exigen. Al reactivarlos recuperan sus niveles.</p></div></div>
+{% if inactive_types %}<div class="table-responsive"><table class="table enterprise-table"><thead><tr><th>Tipo de documento</th><th>Formatos</th>{% for origin, key, label in origins %}<th>{{ label }}</th>{% endfor %}<th></th></tr></thead><tbody>
+{% for t in inactive_types %}<tr><td><strong>{{ t.name }}</strong><small>{{ t.code }}</small></td><td>{{ formats_label(t) }}</td>{% for origin, key, label in origins %}<td>{{ levels[t[key ~ '_requirement']] }}</td>{% endfor %}<td><form method="post" action="/admin/required-documents/types/{{ t.id }}/status"><input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}"><input type="hidden" name="active" value="true"><button class="btn btn-outline-primary btn-sm">Reactivar</button></form></td></tr>{% endfor %}
+</tbody></table></div>{% else %}<p class="empty-state">No hay tipos inactivos.</p>{% endif %}</section>
+{% endblock %}

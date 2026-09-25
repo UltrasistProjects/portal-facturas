@@ -2,7 +2,6 @@
 
 ## Purpose
 Integridad referencial enforzada, dinero exacto, unicidad fiscal, restricciones `CHECK`, índices, concurrencia de SQLite y prohibición del borrado físico de evidencia fiscal.
-
 ## Requirements
 ### Requirement: Integridad referencial enforzada
 PostgreSQL SHALL enforzar todas las llaves foráneas del esquema. Las llaves foráneas hacia facturas, proveedores, usuarios, contratos y documentos SHALL declarar `ON DELETE RESTRICT`.
@@ -57,19 +56,54 @@ La base de datos SHALL imponer unicidad sobre `invoices.uuid` (se permiten múlt
 - **WHEN** dos proveedores distintos registran el mismo `invoice_number`
 - **THEN** ambas facturas se aceptan
 
+### Requirement: Identidad fiscal única de proveedores
+La base de datos SHALL imponer unicidad sobre `suppliers.rfc` (se permiten múltiples `NULL`) y sobre `(suppliers.country, suppliers.foreign_tax_id)`. Una restricción `CHECK` SHALL exigir coherencia con el origen: un proveedor `NATIONAL` MUST tener `rfc` no nulo, `foreign_tax_id` nulo y `country = 'MX'`; un proveedor `INTERNATIONAL` MUST tener `rfc` nulo, `foreign_tax_id` no nulo y `country` distinto de `'MX'`. Los proveedores existentes antes del cambio SHALL quedar como `NATIONAL` con `country = 'MX'`.
+
+#### Scenario: Varios internacionales sin RFC
+- **WHEN** existen varios proveedores `INTERNATIONAL` con `rfc = NULL`
+- **THEN** la restricción de unicidad no los rechaza
+
+#### Scenario: Identificador fiscal repetido en el mismo país
+- **WHEN** se inserta un segundo proveedor con `country = 'US'` y `foreign_tax_id = '12-3456789'`
+- **THEN** la base de datos rechaza la operación
+
+#### Scenario: Mismo identificador fiscal en países distintos
+- **WHEN** se insertan dos proveedores con `foreign_tax_id = '12-3456789'`, uno con `country = 'US'` y otro con `country = 'CA'`
+- **THEN** ambos se aceptan
+
+#### Scenario: Proveedor nacional sin RFC
+- **WHEN** se ejecuta `UPDATE suppliers SET rfc = NULL` sobre un proveedor `NATIONAL`
+- **THEN** la base de datos rechaza la operación
+
+#### Scenario: Proveedores previos al cambio
+- **WHEN** se aplica la migración sobre una base con proveedores existentes
+- **THEN** todos quedan con `origin = 'NATIONAL'` y `country = 'MX'` y conservan su RFC y su estatus
+
 ### Requirement: Restricciones CHECK sobre estados, montos y vigencias
 La base de datos SHALL rechazar:
-- valores de estado, rol, tipo de proveedor, severidad, estado de regla, decisión de revisión o estado de procesamiento que no pertenezcan a su enumeración;
+- valores de estado, rol, tipo de proveedor, origen de proveedor, nivel de exigencia de archivo, evento de notificación, severidad, estado de regla, decisión de revisión o estado de procesamiento que no pertenezcan a su enumeración;
 - montos negativos en factura;
 - `authorized_amount <= 0` en contratos y `new_amount <= 0` en enmiendas;
 - `end_date < start_date` en contratos;
 - `validation_score` fuera de 0..100;
 - `confidence` fuera de 0..1.
 
-`suppliers.status` y `contracts.status` SHALL ser enumeraciones tipadas (`ACTIVE`, `INACTIVE`).
+`suppliers.status` SHALL ser una enumeración tipada (`REGISTERED`, `ACTIVE`, `INACTIVE`), `suppliers.origin` SHALL ser una enumeración tipada (`NATIONAL`, `INTERNATIONAL`), `invoice_document_types.national_requirement` e `invoice_document_types.international_requirement` SHALL ser enumeraciones tipadas (`REQUIRED`, `OPTIONAL`, `NOT_APPLICABLE`), `notification_templates.event` SHALL ser una enumeración tipada (`INVOICE_AUTHORIZED`, `INVOICE_REJECTED`, `INVOICE_OBSERVATIONS`, `INVOICE_CANCELLED`) y `contracts.status` SHALL ser una enumeración tipada (`ACTIVE`, `INACTIVE`).
 
 #### Scenario: Estado inválido por SQL directo
 - **WHEN** se ejecuta `UPDATE invoices SET status = 'APROBADA'`
+- **THEN** la base de datos rechaza la operación
+
+#### Scenario: Estatus de proveedor fuera de catálogo
+- **WHEN** se ejecuta `UPDATE suppliers SET status = 'PENDIENTE'`
+- **THEN** la base de datos rechaza la operación
+
+#### Scenario: Nivel de exigencia fuera de catálogo
+- **WHEN** se ejecuta `UPDATE invoice_document_types SET national_requirement = 'MANDATORY' WHERE code = 'ADDITIONAL'`
+- **THEN** la base de datos rechaza la operación
+
+#### Scenario: Evento de notificación fuera de catálogo
+- **WHEN** se ejecuta `UPDATE notification_templates SET event = 'INVOICE_PAID' WHERE event = 'INVOICE_CANCELLED'`
 - **THEN** la base de datos rechaza la operación
 
 #### Scenario: Monto negativo
@@ -131,4 +165,38 @@ El engine de la aplicación SHALL conectarse con el driver `psycopg` (v3), verif
 #### Scenario: Lectura durante una escritura
 - **WHEN** una transacción modifica filas de `invoices` sin confirmar y otra conexión lee esas filas
 - **THEN** la lectura se completa de inmediato con los valores confirmados previamente
+
+### Requirement: Integridad del catálogo de tipos de documento de factura
+La base de datos SHALL imponer sobre `invoice_document_types`:
+- unicidad de `code` y de `lower(name)`;
+- `formats` con al menos un elemento, todos dentro de (`PDF`, `PNG`, `JPEG`, `XML`, `TXT`);
+- que un tipo del sistema (`is_system`) esté siempre activo;
+- los niveles fijos: `INVOICE_XML` e `INVOICE_PDF` con `national_requirement = 'REQUIRED'` e `international_requirement = 'NOT_APPLICABLE'`; `FOREIGN_INVOICE` con `national_requirement = 'NOT_APPLICABLE'` e `international_requirement = 'REQUIRED'`.
+
+#### Scenario: Nivel fijo cambiado por SQL
+- **WHEN** se ejecuta `UPDATE invoice_document_types SET national_requirement = 'OPTIONAL' WHERE code = 'INVOICE_XML'`
+- **THEN** la base de datos rechaza la operación
+
+#### Scenario: Tipo del sistema desactivado por SQL
+- **WHEN** se ejecuta `UPDATE invoice_document_types SET is_active = false WHERE code = 'PURCHASE_ORDER'`
+- **THEN** la base de datos rechaza la operación
+
+#### Scenario: Nombre repetido con otra capitalización
+- **WHEN** se inserta un tipo con `name = 'ORDEN DE COMPRA'`
+- **THEN** la base de datos rechaza la operación
+
+#### Scenario: Formatos inválidos
+- **WHEN** se inserta un tipo con `formats` vacío o con `formats = '{DOCX}'`
+- **THEN** la base de datos rechaza la operación
+
+### Requirement: Una plantilla por evento de notificación
+La base de datos SHALL imponer unicidad sobre `notification_templates.event`. Restricciones `CHECK` SHALL exigir que `subject` tenga de 1 a 200 caracteres, que `body` tenga de 1 a 5000 caracteres y que `version` sea mayor o igual que 1. `notification_templates.updated_by` SHALL referenciar a `users` con `ON DELETE RESTRICT` y admitir `NULL` para las plantillas que nunca se han modificado.
+
+#### Scenario: Segunda plantilla para un evento
+- **WHEN** se inserta una plantilla con `event = 'INVOICE_REJECTED'` y ya existe una para ese evento
+- **THEN** la base de datos rechaza la operación
+
+#### Scenario: Asunto vacío por SQL directo
+- **WHEN** se ejecuta `UPDATE notification_templates SET subject = ''`
+- **THEN** la base de datos rechaza la operación
 

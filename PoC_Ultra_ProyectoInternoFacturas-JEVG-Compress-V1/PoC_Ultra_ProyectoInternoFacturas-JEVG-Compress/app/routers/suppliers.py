@@ -1,7 +1,7 @@
 from datetime import date
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse, Response
 from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -12,9 +12,11 @@ from app.core.security import get_current_user, require_roles, validate_csrf
 from app.models import Document, Supplier
 from app.routers.common import templates
 from app.schemas import SupplierCreate, validation_message
+from app.services import supplier_import_service
 from app.services.audit_service import audit
 from app.services.file_service import LocalFileStorage, log_upload
 from app.services.supplier_service import supplier_requirement_status
+from app.services.supplier_template import MAX_FILE_MB, MAX_ROWS, TEMPLATE_FILENAME, XLSX_MEDIA_TYPE, build_template
 
 router = APIRouter(prefix="/suppliers")
 
@@ -57,6 +59,37 @@ async def create_supplier(
     audit(db, "SUPPLIER_CREATED", "Supplier", supplier.id, user.id)
     db.commit()
     return RedirectResponse(f"/suppliers/{supplier.id}", status_code=303)
+
+
+# Las rutas /import se declaran antes de /{supplier_id}: de lo contrario "import" se tomaria como un id (422).
+@router.get("/import")
+def import_page(request: Request, user=Depends(require_roles(Role.ADMIN))):
+    context = {"user": user, "max_rows": MAX_ROWS, "max_file_mb": MAX_FILE_MB}
+    return templates.TemplateResponse(request, "suppliers/import.html", context)
+
+
+@router.get("/import/template")
+def import_template(user=Depends(require_roles(Role.ADMIN))):
+    headers = {"Content-Disposition": f'attachment; filename="{TEMPLATE_FILENAME}"'}
+    return Response(build_template(), media_type=XLSX_MEDIA_TYPE, headers=headers)
+
+
+@router.post("/import")
+async def import_suppliers(
+    request: Request,
+    upload: UploadFile | None = File(None),
+    mode: str = Form(supplier_import_service.STRICT),
+    expected_sha256: str | None = Form(None),
+    db: Session = Depends(get_db),
+    user=Depends(require_roles(Role.ADMIN)),
+):
+    """Siempre responde JSON (contrato D12); la pagina de carga lo consume con fetch."""
+    await validate_csrf(request)
+    content = await upload.read(supplier_import_service.MAX_FILE_BYTES + 1) if upload else b""
+    status_code, body = supplier_import_service.import_suppliers(
+        db, user, upload.filename if upload else None, content, mode, expected_sha256
+    )
+    return JSONResponse(body, status_code=status_code)
 
 
 @router.get("/{supplier_id}")

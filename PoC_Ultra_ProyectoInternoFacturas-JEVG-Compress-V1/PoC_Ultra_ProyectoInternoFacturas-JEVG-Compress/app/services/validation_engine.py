@@ -20,6 +20,7 @@ from app.rules.supplier_rules import supplier_rules
 from app.rules.xml_rules import xml_rules
 from app.services.ai import get_document_analyzer
 from app.services.audit_service import audit
+from app.services.document_requirements_service import required_types
 from app.services.file_service import LocalFileStorage
 from app.services.invoice_service import transition_invoice
 from app.services.supplier_service import supplier_requirement_status
@@ -107,7 +108,9 @@ def run_validation(db: Session, invoice: Invoice, user_id: int | None = None) ->
         )
     )
     results = []
-    results += document_rules(types, processable, bool(contract))
+    # Configuracion vigente de archivos minimos, sin cache: la leida en esta prevalidacion queda en sus resultados.
+    origin = invoice.supplier.origin
+    results += document_rules(types, required_types(db, origin), origin, processable, bool(contract))
     results += xml_rules(xml_data, xml_error)
     results += supplier_rules(invoice.supplier, contract, requirements)
     results += contract_rules(invoice, contract, descriptions)

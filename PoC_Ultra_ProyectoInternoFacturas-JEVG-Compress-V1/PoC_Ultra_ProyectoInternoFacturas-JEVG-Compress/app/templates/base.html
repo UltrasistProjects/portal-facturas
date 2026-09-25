@@ -23,6 +23,8 @@
       <div class="nav-label">Administracion</div>
       <a href="/admin/users" class="nav-item"><i class="bi bi-people"></i> Usuarios</a>
       <a href="/admin/rules" class="nav-item"><i class="bi bi-sliders"></i> Reglas</a>
+      <a href="/admin/required-documents" class="nav-item"><i class="bi bi-file-earmark-check"></i> Archivos mínimos</a>
+      <a href="/admin/notification-templates" class="nav-item"><i class="bi bi-envelope"></i> Plantillas de correo</a>
       <a href="/admin/audit" class="nav-item"><i class="bi bi-clock-history"></i> Audit Log</a>
       {% endif %}
     </nav>
@@ -37,4 +39,5 @@
 {% else %}{% block anonymous %}{% endblock %}{% endif %}
 <script src="{{ url_for('static', path='/vendor/bootstrap.bundle.min.js') }}"></script>
 <script src="{{ url_for('static', path='/js/app.js') }}"></script>
+{% block scripts %}{% endblock %}
 </body></html>

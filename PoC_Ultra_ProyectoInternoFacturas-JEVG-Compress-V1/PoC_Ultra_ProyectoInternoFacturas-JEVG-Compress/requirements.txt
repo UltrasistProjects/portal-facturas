@@ -16,5 +16,9 @@ python-multipart==0.0.32
 pwdlib[argon2]==0.2.1
 itsdangerous==2.2.0
 email-validator==2.2.0
+# Lectura y generacion de la plantilla de carga masiva de proveedores (.xlsx).
+openpyxl==3.1.5
+# openpyxl lo usa, si esta instalado, para parsear el XML del libro sin expandir entidades.
+defusedxml==0.7.1
 # Base de datos IANA de zonas horarias (Windows no la incluye).
 tzdata==2026.4
