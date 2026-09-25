@@ -272,3 +272,39 @@ def registered_suppliers():
         db.execute(delete(User).where(User.id.in_(user_ids)))
         db.execute(delete(Supplier).where(Supplier.id.in_(created)))
         db.commit()
+
+
+def validation_rules_migration():
+    """Modulo de la migracion 0007: sus constantes son la siembra de las Reglas de Validacion y los catalogos."""
+    import importlib.util
+
+    path = ROOT / "alembic" / "versions" / "0007_validation_rules_catalogs.py"
+    spec = importlib.util.spec_from_file_location("migration_0007", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+@pytest.fixture()
+def restore_validation_rules():
+    """Devuelve las Reglas de Validacion (HU-06) y los catalogos (HU-07) a la instalacion inicial: la base de la
+    sesion es compartida y el motor de otras pruebas espera la configuracion sembrada."""
+    yield
+    from sqlalchemy import delete, update
+
+    from app.core.database import SessionLocal
+    from app.models import CatalogEntry, ValidationSettings
+
+    seed = validation_rules_migration()
+    with SessionLocal() as db:
+        db.execute(update(ValidationSettings).values(**{k: v for k, v in seed.SETTINGS.items() if k != "id"}))
+        for catalog, rows in seed.ENTRIES.items():
+            codes = [code for code, _ in rows]
+            db.execute(delete(CatalogEntry).where(CatalogEntry.catalog == catalog, CatalogEntry.code.not_in(codes)))
+            for code, name in rows:
+                db.execute(
+                    update(CatalogEntry)
+                    .where(CatalogEntry.catalog == catalog, CatalogEntry.code == code)
+                    .values(name=name, is_active=True, updated_by=None)
+                )
+        db.commit()

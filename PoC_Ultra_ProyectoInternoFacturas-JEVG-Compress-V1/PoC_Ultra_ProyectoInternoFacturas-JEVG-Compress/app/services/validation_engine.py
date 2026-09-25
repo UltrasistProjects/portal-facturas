@@ -25,6 +25,7 @@ from app.services.file_service import LocalFileStorage
 from app.services.invoice_service import transition_invoice
 from app.services.supplier_service import supplier_requirement_status
 from app.services.validation_score_service import calculate_score
+from app.services.validation_settings_service import rule_parameters
 from app.services.xml_service import XMLParseError, parse_cfdi
 
 logger = logging.getLogger(__name__)
@@ -111,7 +112,8 @@ def run_validation(db: Session, invoice: Invoice, user_id: int | None = None) ->
     # Configuracion vigente de archivos minimos, sin cache: la leida en esta prevalidacion queda en sus resultados.
     origin = invoice.supplier.origin
     results += document_rules(types, required_types(db, origin), origin, processable, bool(contract))
-    results += xml_rules(xml_data, xml_error)
+    # Reglas de Validacion vigentes (HU-06) y monedas activas (HU-07), sin cache, como los archivos minimos.
+    results += xml_rules(xml_data, xml_error, rule_parameters(db))
     results += supplier_rules(invoice.supplier, contract, requirements)
     results += contract_rules(invoice, contract, descriptions)
     results += date_rules(invoice)

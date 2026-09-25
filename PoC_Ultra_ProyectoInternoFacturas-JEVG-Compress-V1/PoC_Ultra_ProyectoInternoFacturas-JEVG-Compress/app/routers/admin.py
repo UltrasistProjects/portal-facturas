@@ -1,29 +1,37 @@
-from fastapi import APIRouter, Depends, Form, Query, Request
-from fastapi.responses import RedirectResponse
+from fastapi import APIRouter, Depends, File, Form, Query, Request, UploadFile
+from fastapi.responses import RedirectResponse, Response
 from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
 from app.core.constants import (
     BUSINESS_RULES,
+    CATALOG_CODE_FORMATS,
+    CATALOG_LABELS,
     DOCUMENT_REQUIREMENT_LABELS,
     FIXED_REQUIREMENT_REASONS,
     FORMAT_EXTENSIONS,
+    CatalogType,
     Role,
     SupplierOrigin,
 )
 from app.core.database import get_db
-from app.core.errors import BusinessRuleError, InvalidInputError
+from app.core.errors import BusinessRuleError, InvalidInputError, NotFoundError
 from app.core.security import hash_password, require_roles, validate_csrf
 from app.models import AuditLog, EmailDelivery, Supplier, User
 from app.repositories.pagination import paginate
 from app.routers.common import templates
 from app.schemas import UserCreate, validation_message
+from app.services import catalog_service as catalogs
 from app.services import document_requirements_service as requirements
 from app.services import notification_service as notifications
 from app.services import notification_templates as templates_service
 from app.services import session_service
+from app.services import validation_settings_service as validation_settings
 from app.services.audit_service import audit
+from app.services.catalog_template import build_catalog_template, template_filename
+from app.services.supplier_import_service import ImportFileError
+from app.services.supplier_template import XLSX_MEDIA_TYPE
 
 router = APIRouter(prefix="/admin")
 
@@ -104,11 +112,71 @@ def audit_log(request: Request, page: int = 1, db: Session = Depends(get_db), us
     return templates.TemplateResponse(request, "admin/audit.html", context)
 
 
+# Reglas de Validacion (HU-06). Fuente unica de los parametros del motor (AUDITORIA COD-04): la pagina muestra y
+# edita la misma fila que lee cada prevalidacion; los pesos del score siguen en BUSINESS_RULES.
+RULES_URL = "/admin/rules"
+RULES_NOTICES = {"saved": "Reglas de validación guardadas", "unchanged": "Sin cambios"}
+
+
+def _rules_page(
+    request: Request,
+    db: Session,
+    user,
+    *,
+    values: dict | None = None,
+    version: int | None = None,
+    errors: list[str] | None = None,
+    error: str | None = None,
+    notice: str | None = None,
+    status_code: int = 200,
+):
+    settings = validation_settings.current(db)
+    context = {
+        "user": user,
+        "values": values or validation_settings.form_values(settings),
+        "version": settings.version if version is None else version,
+        "settings": settings,
+        "updater": validation_settings.updater_name(db, settings),
+        "checks": validation_settings.CHECKS,
+        "regimes": catalogs.active_entries(db, CatalogType.TAX_REGIME),
+        "methods": catalogs.active_entries(db, CatalogType.PAYMENT_METHOD),
+        "forms": catalogs.active_entries(db, CatalogType.PAYMENT_FORM),
+        "uses": catalogs.active_entries(db, CatalogType.CFDI_USE),
+        "currencies": sorted(catalogs.active_codes(db, CatalogType.CURRENCY)),
+        "weights": BUSINESS_RULES["score_weights"],
+        "format_datetime": templates_service.format_datetime,
+        "errors": errors or [],
+        "error": error,
+        "notice": notice,
+    }
+    return templates.TemplateResponse(request, "admin/rules.html", context, status_code=status_code)
+
+
 @router.get("/rules")
-def rules(request: Request, user=Depends(require_roles(Role.ADMIN))):
-    # Fuente unica: los mismos valores que aplica el motor de validacion (AUDITORIA COD-04).
-    rules_data = BUSINESS_RULES
-    return templates.TemplateResponse(request, "admin/rules.html", {"user": user, "rules": rules_data})
+def rules(request: Request, ok: str = "", db: Session = Depends(get_db), user=Depends(require_roles(Role.ADMIN))):
+    return _rules_page(request, db, user, notice=RULES_NOTICES.get(ok))
+
+
+@router.post("/rules")
+async def save_rules(request: Request, db: Session = Depends(get_db), user=Depends(require_roles(Role.ADMIN))):
+    await validate_csrf(request)
+    raw = await request.form()
+    form = {key: value for key, value in raw.items() if isinstance(value, str)}
+    form["allowed_cfdi_uses"] = [value for value in raw.getlist("allowed_cfdi_uses") if isinstance(value, str)]
+    try:
+        version = int(form.get("version", ""))
+    except ValueError:
+        version = 0
+    try:
+        changed = validation_settings.save(db, form, version, user)
+    except validation_settings.SettingsValidationError as exc:
+        return _rules_page(
+            request, db, user, values=exc.draft.values, version=version, errors=exc.draft.errors, status_code=400
+        )
+    except validation_settings.ConcurrentEditError as exc:
+        draft = validation_settings.check_form(db, form)
+        return _rules_page(request, db, user, values=draft.values, version=version, error=exc.message, status_code=409)
+    return RedirectResponse(f"{RULES_URL}?ok={'saved' if changed else 'unchanged'}", status_code=303)
 
 
 # Archivos minimos por tipo de proveedor (HU-04). La logica vive en document_requirements_service; estas rutas
@@ -441,3 +509,154 @@ async def send_test_notification(
             request, db, user, test_address=address, test_errors=exc.errors, status_code=exc.status_code
         )
     return RedirectResponse(f"{NOTIFICATIONS_URL}?test={delivery.id}", status_code=303)
+
+
+# Catalogos de referencia (HU-07). La logica vive en catalog_service; estas rutas solo traducen HTTP. Las rutas
+# /import y /template se declaran antes de /{entry_id}: de lo contrario "import" se tomaria como un id (422).
+CATALOGS_URL = "/admin/catalogs"
+CATALOG_NOTICES = {
+    "created": "Clave agregada",
+    "updated": "Descripción actualizada",
+    "status": "Estado de la clave actualizado",
+    "unchanged": "Sin cambios",
+}
+
+
+@router.get("/catalogs")
+def catalog_list(request: Request, db: Session = Depends(get_db), user=Depends(require_roles(Role.ADMIN))):
+    context = {"user": user, "catalogs": catalogs.summaries(db)}
+    return templates.TemplateResponse(request, "admin/catalogs.html", context)
+
+
+def _catalog_page(
+    request: Request,
+    db: Session,
+    user,
+    catalog: CatalogType,
+    *,
+    error: str | None = None,
+    notice: str | None = None,
+    result: catalogs.ImportResult | None = None,
+    import_error: str | None = None,
+    status_code: int = 200,
+):
+    context = {
+        "user": user,
+        "catalog": catalog,
+        "label": CATALOG_LABELS[catalog],
+        "entries": catalogs.entries(db, catalog),
+        "in_use": catalogs.in_use(db)[catalog],
+        "code_format": CATALOG_CODE_FORMATS[catalog][1],
+        "max_rows": catalogs.MAX_ROWS,
+        "error": error,
+        "notice": notice,
+        "result": result,
+        "import_error": import_error,
+    }
+    return templates.TemplateResponse(request, "admin/catalog.html", context, status_code=status_code)
+
+
+def _catalog_done(catalog: CatalogType, result: str):
+    return RedirectResponse(f"{CATALOGS_URL}/{catalog.value}?ok={result}", status_code=303)
+
+
+@router.get("/catalogs/{code}")
+def catalog_detail(
+    code: str, request: Request, ok: str = "", db: Session = Depends(get_db), user=Depends(require_roles(Role.ADMIN))
+):
+    catalog = catalogs.catalog_for_code(code)
+    return _catalog_page(request, db, user, catalog, notice=CATALOG_NOTICES.get(ok))
+
+
+@router.get("/catalogs/{code}/template")
+def catalog_template(code: str, db: Session = Depends(get_db), user=Depends(require_roles(Role.ADMIN))):
+    catalog = catalogs.catalog_for_code(code)
+    content = build_catalog_template(catalog, catalogs.entries(db, catalog))
+    headers = {"Content-Disposition": f'attachment; filename="{template_filename(catalog)}"'}
+    return Response(content, media_type=XLSX_MEDIA_TYPE, headers=headers)
+
+
+@router.post("/catalogs/{code}/import")
+async def import_catalog(
+    code: str,
+    request: Request,
+    upload: UploadFile | None = File(None),
+    db: Session = Depends(get_db),
+    user=Depends(require_roles(Role.ADMIN)),
+):
+    await validate_csrf(request)
+    catalog = catalogs.catalog_for_code(code)
+    content = await upload.read(catalogs.MAX_FILE_BYTES + 1) if upload else b""
+    try:
+        result = catalogs.import_catalog(db, catalog, upload.filename if upload else None, content, user.id)
+    except ImportFileError as exc:
+        return _catalog_page(request, db, user, catalog, import_error=exc.message, status_code=400)
+    return _catalog_page(request, db, user, catalog, result=result, status_code=400 if result.invalid else 200)
+
+
+@router.post("/catalogs/{code}")
+async def create_catalog_entry(
+    code: str,
+    request: Request,
+    entry_code: str = Form(""),
+    name: str = Form(""),
+    db: Session = Depends(get_db),
+    user=Depends(require_roles(Role.ADMIN)),
+):
+    await validate_csrf(request)
+    catalog = catalogs.catalog_for_code(code)
+    try:
+        catalogs.create_entry(db, catalog, entry_code, name, user.id)
+    except NotFoundError:
+        raise
+    except BusinessRuleError as exc:
+        db.rollback()
+        return _catalog_page(request, db, user, catalog, error=exc.message, status_code=exc.status_code)
+    db.commit()
+    return _catalog_done(catalog, "created")
+
+
+@router.post("/catalogs/{code}/{entry_id}")
+async def update_catalog_entry(
+    code: str,
+    entry_id: int,
+    request: Request,
+    name: str = Form(""),
+    db: Session = Depends(get_db),
+    user=Depends(require_roles(Role.ADMIN)),
+):
+    await validate_csrf(request)
+    catalog = catalogs.catalog_for_code(code)
+    try:
+        changed = catalogs.update_entry(db, catalog, entry_id, name, user.id)
+    except NotFoundError:
+        raise
+    except BusinessRuleError as exc:
+        db.rollback()
+        return _catalog_page(request, db, user, catalog, error=exc.message, status_code=exc.status_code)
+    db.commit()
+    return _catalog_done(catalog, "updated" if changed else "unchanged")
+
+
+@router.post("/catalogs/{code}/{entry_id}/status")
+async def set_catalog_entry_status(
+    code: str,
+    entry_id: int,
+    request: Request,
+    active: str = Form(""),
+    db: Session = Depends(get_db),
+    user=Depends(require_roles(Role.ADMIN)),
+):
+    await validate_csrf(request)
+    catalog = catalogs.catalog_for_code(code)
+    try:
+        if active not in {"true", "false"}:
+            raise InvalidInputError("Estado inválido")
+        changed = catalogs.set_active(db, catalog, entry_id, active == "true", user.id)
+    except NotFoundError:
+        raise
+    except BusinessRuleError as exc:
+        db.rollback()
+        return _catalog_page(request, db, user, catalog, error=exc.message, status_code=exc.status_code)
+    db.commit()
+    return _catalog_done(catalog, "status" if changed else "unchanged")

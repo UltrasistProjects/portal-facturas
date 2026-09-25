@@ -307,3 +307,57 @@ def test_autorizacion_masiva_registrada(client, registered_suppliers, restore_no
     for supplier in rows:
         assert supplier.email not in content and supplier.business_name not in content
     assert "Contraseña" not in content and "contrasena" not in content
+
+
+# --- Reglas de Validacion y catalogos (HU-06, HU-07) --------------------------------------------------------------
+
+
+def test_cambio_de_reglas_de_validacion_registrado(client, restore_validation_rules):
+    from app.models import ValidationSettings
+    from app.services.validation_settings_service import CHECK_FIELDS, LABELS
+
+    with SessionLocal() as db:
+        current = db.get(ValidationSettings, 1)
+        data = {name: getattr(current, name) for name in LABELS} | {"version": current.version}
+        data |= {name: "on" for name in CHECK_FIELDS}
+    login(client)
+    offset = log_offset()
+    data |= {"receiver_name": "RAZON SOCIAL DEL LOG", "payment_form": "03", "csrf_token": csrf(client, "/")}
+    assert client.post("/admin/rules", data=data, follow_redirects=False).status_code == 303
+    events = events_since(offset)
+    [updated] = [e for e in events if e.get("event") == "validation_settings.updated"]
+    assert (updated["fields"], updated["version"]) == (["receiver_name", "payment_form"], 2)
+    assert "RAZON SOCIAL DEL LOG" not in json.dumps(events, ensure_ascii=False)
+
+
+def test_carga_de_catalogo_registrada(client, restore_validation_rules):
+    from io import BytesIO
+
+    from openpyxl import Workbook
+
+    book = Workbook()
+    book.active.title = "Catalogo"
+    for row in (("Clave", "Descripción", "Activo"), ("USD", "Dólar estadounidense", "Sí"), ("JPY", "Yen", "Sí")):
+        book.active.append(row)
+    content = BytesIO()
+    book.save(content)
+    login(client)
+    offset = log_offset()
+    response = client.post(
+        "/admin/catalogs/CURRENCY/import",
+        data={"csrf_token": csrf(client, "/")},
+        files={"upload": ("monedas.xlsx", content.getvalue(), "application/octet-stream")},
+    )
+    assert response.status_code == 200
+    [event] = [e for e in events_since(offset) if e.get("event") == "catalog.import"]
+    counts = {key: event[key] for key in ("catalog", "result", "rows", "added", "updated", "unchanged", "invalid")}
+    assert counts == {
+        "catalog": "CURRENCY",
+        "result": "imported",
+        "rows": 2,
+        "added": 1,
+        "updated": 1,
+        "unchanged": 0,
+        "invalid": 0,
+    }
+    assert event["size_bytes"] == len(content.getvalue()) and "duration_ms" in event

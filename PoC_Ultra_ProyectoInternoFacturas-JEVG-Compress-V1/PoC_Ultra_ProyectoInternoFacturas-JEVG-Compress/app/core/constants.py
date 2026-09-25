@@ -181,11 +181,9 @@ ALLOWED_TRANSITIONS: dict[InvoiceStatus, set[InvoiceStatus]] = {
 }
 
 
+# Pesos del score por severidad. Los datos de ULTRASIST y los parametros del CFDI viven en la configuracion de Reglas
+# de Validacion (tabla validation_settings, HU-06); las monedas aceptadas, en el catalogo de monedas (HU-07).
 BUSINESS_RULES = {
-    "receiver": {"business_name": "ULTRASIST", "rfc": "ULT940623AG0", "postal_code": "03930", "tax_regime": "601"},
-    "payment_method": "PPD",
-    "payment_form": "99",
-    "allowed_cfdi_uses": ["G03", "I04"],
     "score_weights": {Severity.CRITICAL: 35, Severity.ERROR: 18, Severity.WARNING: 6, Severity.INFO: 0},
 }
 
@@ -240,3 +238,30 @@ class DeliveryStatus(StrEnum):
 
     SENT = "SENT"
     FAILED = "FAILED"
+
+
+class CatalogType(StrEnum):
+    """Catalogos de referencia administrables (HU-07). Sus claves las usan las Reglas de Validacion (HU-06)."""
+
+    CURRENCY = "CURRENCY"
+    CFDI_USE = "CFDI_USE"
+    PAYMENT_FORM = "PAYMENT_FORM"
+    PAYMENT_METHOD = "PAYMENT_METHOD"
+    TAX_REGIME = "TAX_REGIME"
+
+
+CATALOG_LABELS = {
+    CatalogType.CURRENCY: "Monedas",
+    CatalogType.CFDI_USE: "Usos de CFDI",
+    CatalogType.PAYMENT_FORM: "Formas de pago",
+    CatalogType.PAYMENT_METHOD: "Métodos de pago",
+    CatalogType.TAX_REGIME: "Regímenes fiscales",
+}
+# Formato de la clave por catalogo (claves del SAT) y su descripcion para los mensajes de error.
+CATALOG_CODE_FORMATS = {
+    CatalogType.CURRENCY: (r"[A-Z]{3}", "debe tener tres letras"),
+    CatalogType.CFDI_USE: (r"[A-Z]{1,2}[0-9]{2}", "debe tener una o dos letras seguidas de dos dígitos"),
+    CatalogType.PAYMENT_FORM: (r"[0-9]{2}", "debe tener dos dígitos"),
+    CatalogType.PAYMENT_METHOD: (r"[A-Z]{3}", "debe tener tres letras"),
+    CatalogType.TAX_REGIME: (r"[0-9]{3}", "debe tener tres dígitos"),
+}

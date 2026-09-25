@@ -481,3 +481,45 @@ def test_evento_de_credenciales_aceptado_en_las_tablas_de_notificaciones(db):
         )
     )
     assert db.scalar(text("SELECT count(*) FROM notification_templates WHERE event = 'SUPPLIER_CREDENTIALS'")) == 1
+
+
+# Reglas de Validacion y catalogos (HU-06, HU-07). updated_by con ON DELETE RESTRICT lo cubre la prueba general de
+# pg_constraint.
+
+
+@pytest.mark.parametrize(
+    ("sql", "constraint"),
+    [
+        ("UPDATE catalog_entries SET catalog = 'COUNTRY'", "catalogtype"),
+        ("UPDATE catalog_entries SET code = 'mxn' WHERE code = 'MXN'", "ck_catalog_entries_code"),
+        ("UPDATE catalog_entries SET name = '' WHERE code = 'MXN'", "ck_catalog_entries_name_length"),
+        ("UPDATE validation_settings SET receiver_postal_code = '3930'", "ck_validation_settings_postal_code"),
+        ("UPDATE validation_settings SET allowed_cfdi_uses = '{}'", "ck_validation_settings_cfdi_uses"),
+        ("UPDATE validation_settings SET version = 0", "ck_validation_settings_version_positive"),
+    ],
+)
+def test_restricciones_de_reglas_y_catalogos_por_sql_directo(db, sql, constraint):
+    with pytest.raises(IntegrityError, match=f'violates check constraint "{constraint}"'):
+        db.execute(text(sql))
+
+
+def test_segunda_configuracion_de_reglas(db):
+    with pytest.raises(IntegrityError, match='violates check constraint "ck_validation_settings_single_row"'):
+        db.execute(
+            text(
+                "INSERT INTO validation_settings SELECT 2, receiver_rfc, receiver_name, receiver_address,"
+                " receiver_postal_code, receiver_tax_regime, payment_method, payment_form, allowed_cfdi_uses,"
+                " check_receiver_rfc, check_receiver_name, check_receiver_postal_code, check_payment_method,"
+                " check_payment_form, check_cfdi_use, version, updated_at, updated_by FROM validation_settings"
+            )
+        )
+
+
+def test_clave_repetida_en_un_catalogo(db):
+    with pytest.raises(IntegrityError, match='violates unique constraint "uq_catalog_entries_catalog_code"'):
+        db.execute(
+            text(
+                "INSERT INTO catalog_entries (catalog, code, name, is_active, created_at, updated_at)"
+                " VALUES ('CURRENCY', 'MXN', 'Otro peso', true, now(), now())"
+            )
+        )

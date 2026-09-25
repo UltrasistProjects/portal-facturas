@@ -11,6 +11,7 @@ from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import Mapped, Session, mapped_column, relationship
 
 from app.core.constants import (
+    CatalogType,
     ContractStatus,
     DeliveryStatus,
     DocumentRequirement,
@@ -427,6 +428,58 @@ class EmailDelivery(Base):
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=now_utc, index=True)
 
 
+class ValidationSettings(Base):
+    """Reglas de Validacion (HU-06): datos de ULTRASIST y parametros del CFDI que compara el motor. Una sola fila
+    (id = 1), creada por la migracion; `version` es el bloqueo optimista y `updated_by` es NULL si nunca se modifico.
+    Las claves de regimen, metodo, forma y usos pertenecen a catalog_entries (el servicio exige que esten activas)."""
+
+    __tablename__ = "validation_settings"
+    __table_args__ = (
+        CheckConstraint("id = 1", name="ck_validation_settings_single_row"),
+        CheckConstraint("receiver_postal_code ~ '^[0-9]{5}$'", name="ck_validation_settings_postal_code"),
+        CheckConstraint("cardinality(allowed_cfdi_uses) >= 1", name="ck_validation_settings_cfdi_uses"),
+        CheckConstraint("version >= 1", name="ck_validation_settings_version_positive"),
+    )
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=False)
+    receiver_rfc: Mapped[str] = mapped_column(String(13))
+    receiver_name: Mapped[str] = mapped_column(String(254))
+    receiver_address: Mapped[str] = mapped_column(String(300), default="")
+    receiver_postal_code: Mapped[str] = mapped_column(String(5))
+    receiver_tax_regime: Mapped[str] = mapped_column(String(10))
+    payment_method: Mapped[str] = mapped_column(String(10))
+    payment_form: Mapped[str] = mapped_column(String(10))
+    allowed_cfdi_uses: Mapped[list[str]] = mapped_column(ARRAY(String(10)))
+    check_receiver_rfc: Mapped[bool] = mapped_column(Boolean, default=True)
+    check_receiver_name: Mapped[bool] = mapped_column(Boolean, default=True)
+    check_receiver_postal_code: Mapped[bool] = mapped_column(Boolean, default=True)
+    check_payment_method: Mapped[bool] = mapped_column(Boolean, default=True)
+    check_payment_form: Mapped[bool] = mapped_column(Boolean, default=True)
+    check_cfdi_use: Mapped[bool] = mapped_column(Boolean, default=True)
+    version: Mapped[int] = mapped_column(default=1)
+    updated_at: Mapped[datetime] = mapped_column(UTCDateTime, default=now_utc)
+    updated_by: Mapped[int | None] = mapped_column(restrict("users.id"))
+
+
+class CatalogEntry(Base):
+    """Clave de un catalogo de referencia (HU-07). Nunca se borra: se desactiva. El formato de la clave por catalogo
+    lo valida el servicio; la base de datos acota su alfabeto y longitud."""
+
+    __tablename__ = "catalog_entries"
+    __table_args__ = (
+        UniqueConstraint("catalog", "code", name="uq_catalog_entries_catalog_code"),
+        CheckConstraint("code ~ '^[A-Z0-9]{1,10}$'", name="ck_catalog_entries_code"),
+        CheckConstraint("char_length(name) BETWEEN 1 AND 150", name="ck_catalog_entries_name_length"),
+    )
+    id: Mapped[int] = mapped_column(primary_key=True)
+    catalog: Mapped[CatalogType] = mapped_column(enum_column(CatalogType))
+    code: Mapped[str] = mapped_column(String(10))
+    name: Mapped[str] = mapped_column(String(150))
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=now_utc)
+    updated_at: Mapped[datetime] = mapped_column(UTCDateTime, default=now_utc, onupdate=now_utc)
+    updated_by: Mapped[int | None] = mapped_column(restrict("users.id"))
+
+
 __all__ = [
     "User",
     "Supplier",
@@ -444,4 +497,6 @@ __all__ = [
     "NotificationMailbox",
     "NotificationCopy",
     "EmailDelivery",
+    "ValidationSettings",
+    "CatalogEntry",
 ]

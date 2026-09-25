@@ -144,8 +144,9 @@ def read_rows(filename: str | None, content: bytes) -> list[Row]:
     return rows
 
 
-def _inspect_package(content: bytes) -> None:
-    """Revisa el ZIP antes de abrirlo: tamano descomprimido acotado y XML sin DTD ni entidades (Excel no los usa)."""
+def _inspect_package(content: bytes, log_failure=None) -> None:
+    """Revisa el ZIP antes de abrirlo: tamano descomprimido acotado y XML sin DTD ni entidades (Excel no los usa).
+    `log_failure` permite a otra carga (catalogos, HU-07) registrar su propio evento de log."""
     try:
         with zipfile.ZipFile(BytesIO(content)) as package:
             members = package.infolist()
@@ -160,7 +161,7 @@ def _inspect_package(content: bytes) -> None:
     except ImportFileError:
         raise
     except (zipfile.BadZipFile, zipfile.LargeZipFile, OSError, EOFError, RuntimeError, ValueError) as exc:
-        _log_read_failure(exc)
+        (log_failure or _log_read_failure)(exc)
         raise ImportFileError(MSG_NOT_WORKBOOK) from exc
 
 

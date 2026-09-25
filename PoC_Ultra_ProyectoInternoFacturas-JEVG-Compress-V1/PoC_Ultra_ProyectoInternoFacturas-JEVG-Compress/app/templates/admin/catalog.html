@@ -1,0 +1,28 @@
+{% extends "base.html" %}{% block title %}{{ label }}{% endblock %}{% block content %}
+{% set url = "/admin/catalogs/" ~ catalog.value %}
+<div class="breadcrumb"><a href="/admin/catalogs">Catálogos</a><i class="bi bi-chevron-right"></i>{{ label }}</div>
+<div class="page-heading"><div><span class="eyebrow">CATALOGO</span><h1>{{ label }}</h1><p>La clave {{ code_format }}. Las claves nunca se borran: se desactivan. Las marcadas "En uso" las usan las Reglas de Validación y no se pueden desactivar.</p></div></div>
+{% if notice %}<div class="alert alert-success">{{ notice }}</div>{% endif %}
+{% if error %}<div class="alert alert-danger">{{ error }}</div>{% endif %}
+{% if import_error %}<div class="alert alert-danger">{{ import_error }}</div>{% endif %}
+{% if result %}{% if result.invalid %}<div class="alert alert-danger"><strong>No se aplicó la carga. Corrija el archivo y vuelva a cargarlo:</strong><ul class="template-errors">{% for item in result.errors %}<li>{{ item }}</li>{% endfor %}</ul>{% if result.hidden_errors %}<p class="mb-0">y {{ result.hidden_errors }} errores más</p>{% endif %}</div>{% else %}<div class="alert alert-success">Carga aplicada: {{ result.summary }}.</div>{% endif %}{% endif %}
+<div class="two-column">
+<section class="panel"><div class="panel-header"><div><h2>Agregar clave</h2><p>La clave {{ code_format }}.</p></div></div>
+<form method="post" action="{{ url }}" class="form-grid catalog-form"><input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+<div class="field"><label for="entry_code">Clave</label><input id="entry_code" name="entry_code" class="form-control mono" maxlength="10" required></div>
+<div class="field"><label for="entry_name">Descripción</label><input id="entry_name" name="name" class="form-control" maxlength="150" required></div>
+<div class="form-actions span-2 m-0"><button class="btn btn-primary">Agregar clave</button></div></form></section>
+<section class="panel"><div class="panel-header"><div><h2>Cargar desde Excel</h2><p>Agrega las claves nuevas y actualiza la descripción y el estado de las existentes. Si una fila tiene errores no se aplica nada.</p></div></div>
+<form method="post" action="{{ url }}/import" enctype="multipart/form-data" class="upload-form"><input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+<a class="btn btn-light" href="{{ url }}/template"><i class="bi bi-download"></i> Descargar plantilla con las claves vigentes</a>
+<div class="field"><label for="catalog-file">Archivo (.xlsx, hasta 5 MB y {{ max_rows }} filas)</label><input id="catalog-file" type="file" name="upload" accept=".xlsx" class="form-control" required></div>
+<div class="form-actions m-0"><button class="btn btn-primary"><i class="bi bi-upload"></i> Cargar archivo</button></div></form></section>
+</div>
+<section class="panel"><div class="panel-header"><div><h2>Claves</h2><p>{{ entries|selectattr('is_active')|list|length }} activas de {{ entries|length }}.</p></div></div>
+<div class="table-responsive"><table class="table enterprise-table catalog-table"><thead><tr><th>Clave</th><th>Descripción</th><th>Estado</th><th></th></tr></thead><tbody>
+{% for e in entries %}<tr{% if not e.is_active %} class="catalog-inactive"{% endif %}><td class="mono">{{ e.code }}{% if e.code in in_use %}<small class="in-use">En uso</small>{% endif %}</td>
+<td><details class="catalog-edit"><summary>{{ e.name }}</summary><form method="post" action="{{ url }}/{{ e.id }}" class="catalog-edit-form"><input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}"><input name="name" class="form-control form-control-sm" value="{{ e.name }}" maxlength="150" required aria-label="Descripción de {{ e.code }}"><button class="btn btn-sm btn-primary">Guardar</button></form></details></td>
+<td>{% if e.is_active %}<span class="status status-delivery-sent">Activa</span>{% else %}<span class="status">Inactiva</span>{% endif %}</td>
+<td><form method="post" action="{{ url }}/{{ e.id }}/status"><input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}"><input type="hidden" name="active" value="{{ 'false' if e.is_active else 'true' }}">{% if e.is_active %}<button class="btn btn-sm btn-outline-danger"{% if e.code in in_use %} disabled title="En uso en Reglas de Validación"{% endif %}>Desactivar</button>{% else %}<button class="btn btn-sm btn-outline-primary">Reactivar</button>{% endif %}</form></td></tr>
+{% endfor %}</tbody></table></div></section>
+{% endblock %}

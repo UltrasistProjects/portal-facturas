@@ -26,9 +26,14 @@ DOMAIN_TABLES = {
     "notification_mailboxes",
     "notification_copies",
     "email_deliveries",
+    "validation_settings",
+    "catalog_entries",
 }
 NOTIFICATION_TABLES = {"notification_mailboxes", "notification_copies", "email_deliveries"}
-BASELINE_TABLES = DOMAIN_TABLES - {"invoice_document_types", "notification_templates"} - NOTIFICATION_TABLES
+VALIDATION_TABLES = {"validation_settings", "catalog_entries"}
+BASELINE_TABLES = (
+    DOMAIN_TABLES - {"invoice_document_types", "notification_templates"} - NOTIFICATION_TABLES - VALIDATION_TABLES
+)
 
 
 @pytest.fixture()
@@ -373,3 +378,49 @@ def test_downgrade_de_credenciales_en_uso(empty_db, sql):
         command.downgrade(config, NOTIFICATION_RECIPIENTS)
     assert query(empty_db, "SELECT version_num FROM alembic_version") == [(SUPPLIER_CREDENTIALS,)]
     assert query(empty_db, "SELECT count(*) FROM notification_templates") == [(5,)]
+
+
+VALIDATION_RULES = "0007_validation_rules_catalogs"
+
+
+def test_instalacion_nueva_con_reglas_y_catalogos(empty_db):
+    command.upgrade(alembic_config(empty_db), "head")
+    settings = query(
+        empty_db,
+        "SELECT receiver_rfc, receiver_name, receiver_address, receiver_postal_code, receiver_tax_regime,"
+        " payment_method, payment_form, allowed_cfdi_uses, check_receiver_rfc AND check_receiver_name"
+        " AND check_receiver_postal_code AND check_payment_method AND check_payment_form AND check_cfdi_use,"
+        " version, updated_by FROM validation_settings",
+    )
+    assert settings == [("ULT940623AG0", "ULTRASIST", "", "03930", "601", "PPD", "99", ["G03", "I04"], True, 1, None)]
+    counts = dict(query(empty_db, "SELECT catalog, count(*) FROM catalog_entries WHERE is_active GROUP BY catalog"))
+    assert counts == {"CURRENCY": 3, "CFDI_USE": 24, "PAYMENT_FORM": 22, "PAYMENT_METHOD": 2, "TAX_REGIME": 19}
+    currencies = query(empty_db, "SELECT code FROM catalog_entries WHERE catalog = 'CURRENCY' ORDER BY code")
+    assert currencies == [("EUR",), ("MXN",), ("USD",)]
+
+
+def test_downgrade_de_reglas_sin_cambios(empty_db):
+    config = alembic_config(empty_db)
+    command.upgrade(config, VALIDATION_RULES)
+    command.downgrade(config, SUPPLIER_CREDENTIALS)
+    assert not VALIDATION_TABLES & tables(empty_db)
+    command.upgrade(config, "head")
+    command.check(config)
+
+
+@pytest.mark.parametrize(
+    "sql",
+    [
+        "UPDATE validation_settings SET version = 2, payment_form = '03'",
+        "UPDATE catalog_entries SET is_active = false WHERE catalog = 'CURRENCY' AND code = 'EUR'",
+        "INSERT INTO catalog_entries (catalog, code, name, is_active, created_at, updated_at)"
+        " VALUES ('CURRENCY', 'JPY', 'Yen', true, now(), now())",
+    ],
+)
+def test_downgrade_de_reglas_modificadas(empty_db, sql):
+    config = alembic_config(empty_db)
+    command.upgrade(config, VALIDATION_RULES)
+    execute(empty_db, sql)
+    with pytest.raises(NotImplementedError, match="Restaure un respaldo"):
+        command.downgrade(config, SUPPLIER_CREDENTIALS)
+    assert VALIDATION_TABLES <= tables(empty_db)

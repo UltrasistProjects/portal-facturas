@@ -1,0 +1,6 @@
+{% extends "base.html" %}{% block title %}Catálogos{% endblock %}{% block content %}
+<div class="page-heading"><div><span class="eyebrow">ADMINISTRACION</span><h1>Catálogos</h1><p>Claves del SAT que usa la validación de facturas. Las claves nunca se borran: se desactivan.</p></div></div>
+<section class="panel"><div class="table-responsive"><table class="table enterprise-table"><thead><tr><th>Catálogo</th><th>Claves activas</th><th>Total</th><th></th></tr></thead><tbody>
+{% for c in catalogs %}<tr><td><strong>{{ c.label }}</strong><small class="mono">{{ c.catalog.value }}</small></td><td>{{ c.active }}</td><td>{{ c.total }}</td><td><a class="btn btn-sm btn-light" href="/admin/catalogs/{{ c.catalog.value }}">Administrar</a></td></tr>
+{% endfor %}</tbody></table></div></section>
+{% endblock %}

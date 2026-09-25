@@ -185,18 +185,51 @@ El proveedor sólo observa sus facturas. `INTERNAL` revisa y decide. `ADMIN` añ
 ## Reglas implementadas
 
 - `DOC-001..009`: archivos mínimos según el origen del proveedor (XML y PDF del CFDI, orden de compra, Vo.Bo., Invoice y otros tipos obligatorios; ver [Archivos mínimos por tipo de proveedor](#archivos-mínimos-por-tipo-de-proveedor)), contrato/anexo disponible, complemento y procesabilidad.
-- `XML-001..008`: parseabilidad, receptor, PPD, FormaPago 99, UsoCFDI, UUID, moneda y esenciales.
+- `XML-001..010`: parseabilidad, RFC del receptor, método y forma de pago, UsoCFDI, UUID, moneda, esenciales, razón social y código postal del receptor, con los valores de [Reglas de validación](#reglas-de-validación).
 - `SUP-001..004`: proveedor activo, contrato vigente, expediente mínimo y vigencia aproximada.
 - `CON-001..004`: contrato, proyecto, periodo y heurística mes/tecnología.
 - `DAT-001`: recepción del día 1 al 20; advertencia no fatal.
 - `FIN-001..006`: límite autorizado, consistencia, moneda, UUID/número duplicados y diferencia absoluta/porcentual.
 - `SEM-001`: comparación semántica mediante adaptador; el mock reconoce Power Platform/Power Automate con confianza 0.93.
 
-`SEM-002..004` quedan reservadas como extensión. Los parámetros de negocio (receptor, método/forma de pago, usos CFDI y pesos del score) tienen una sola fuente, `BUSINESS_RULES` en `app/core/constants.py`, que usan tanto el motor como la vista `/admin/rules`.
+`SEM-002..004` quedan reservadas como extensión. Los parámetros del motor (datos del receptor, método y forma de pago, usos de CFDI e interruptores) tienen una sola fuente, la tabla `validation_settings`, que el Administrador edita en `/admin/rules` y el motor lee en cada prevalidación. Las monedas aceptadas son las activas del catálogo de monedas. Sólo los pesos del score siguen en `BUSINESS_RULES` (`app/core/constants.py`).
 
 ### Cálculo del score
 
 Cada regla evaluada aporta al denominador según severidad: `CRITICAL=35`, `ERROR=18`, `WARNING=6`, `INFO=0`. Un `FAIL` o `WARNING` descuenta su peso. `NOT_APPLICABLE` y `NOT_EVALUATED` no alteran el denominador. Una falla `CRITICAL` genera bloqueo; una evidencia AI de baja confianza permanece diferenciada y nunca equivale a aprobación administrativa.
+
+## Reglas de validación
+
+El Administrador define en **Administración › Reglas de validación** (`/admin/rules`) los datos de ULTRASIST y los parámetros del CFDI contra los que se comparan las facturas (HU-06). La migración `0007_validation_rules_catalogs` siembra los valores que antes estaban fijos en el código, y la siguiente prevalidación usa lo que se guarde.
+
+| Regla | Compara | Severidad | Valor inicial |
+| --- | --- | --- | --- |
+| XML-002 | `Receptor.Rfc` con el RFC | `CRITICAL` | `ULT940623AG0` |
+| XML-009 | `Receptor.Nombre` con la razón social, sin distinguir mayúsculas, acentos ni espacios repetidos | `ERROR` | `ULTRASIST` |
+| XML-010 | `Receptor.DomicilioFiscalReceptor` con el código postal | `ERROR` | `03930` |
+| XML-003 | `MetodoPago` con el método esperado | `ERROR` | `PPD` |
+| XML-004 | `FormaPago` con la forma esperada | `ERROR` | `99` |
+| XML-005 | `UsoCFDI` con los usos permitidos | `ERROR` | `G03`, `I04` |
+| XML-007 | `Moneda` con las monedas activas del catálogo | `ERROR` | `MXN`, `USD`, `EUR` |
+
+- **Interruptores:** cada comparación, salvo XML-007, se puede desactivar. Una comparación desactivada resulta `NOT_APPLICABLE` ("Comparación desactivada en Reglas de Validación") y no altera el score.
+- **Datos de referencia:** la dirección (el CFDI 4.0 del receptor sólo trae el código postal; la usará la validación de invoices internacionales, HU-16) y el régimen fiscal se guardan sin comparación.
+- **Validación:** RFC de persona moral con fecha válida, razón social obligatoria, código postal de 5 dígitos, y régimen, método, forma y usos elegidos de las claves activas de los catálogos. Todos los errores se muestran juntos (HTTP 400).
+- **Concurrencia y auditoría:** el formulario lleva la versión; si otro Administrador guardó antes, responde 409. Cada cambio queda en el Audit Log (`VALIDATION_SETTINGS_UPDATED`, sólo los campos que cambiaron) y en el log técnico (`validation_settings.updated`, sin valores).
+- **Pesos del score:** se muestran en solo lectura; se cambian en `BUSINESS_RULES`.
+
+## Catálogos
+
+**Administración › Catálogos** (`/admin/catalogs`) administra las claves del SAT que usa la validación (HU-07): monedas, usos de CFDI (24), formas de pago (22), métodos de pago (2) y regímenes fiscales (19), según los catálogos de CFDI 4.0. La migración siembra también las monedas `MXN`, `USD` y `EUR`.
+
+- **Alta y edición:** la clave se guarda en mayúsculas con el formato de su catálogo (p. ej. dos dígitos para una forma de pago) y no se repite; la descripción tiene hasta 150 caracteres. Las claves nunca se borran ni se renombran.
+- **Desactivación:** una clave inactiva deja de ofrecerse en Reglas de validación y, en monedas, deja de aceptarse en XML-007. Las claves marcadas "En uso" (las que usan las Reglas de validación) y la última moneda activa no se pueden desactivar.
+- **Carga desde Excel:** "Descargar plantilla" entrega las claves vigentes en la hoja "Catalogo" (Clave, Descripción, Activo). Al cargarla modificada:
+  - se agregan las claves nuevas y se actualizan la descripción y el estado de las existentes; las que no vienen en el archivo no cambian;
+  - si una fila tiene errores no se aplica nada y se listan los errores por fila;
+  - se aplican las mismas protecciones de archivo que en la carga de proveedores (sólo `.xlsx`, 5 MB, sin fórmulas ni entidades XML, hasta 1000 filas);
+  - en los catálogos numéricos, una clave que Excel convirtió en número (`3`) se completa con ceros (`03`).
+- **Auditoría:** `CATALOG_ENTRY_CREATED`, `CATALOG_ENTRY_UPDATED`, `CATALOG_ENTRY_STATUS_CHANGED` y `CATALOG_IMPORTED`. En el log técnico, `catalog.import` con los contadores de la carga.
 
 ## Archivos mínimos por tipo de proveedor
 
@@ -407,7 +440,7 @@ Los XML bajo `data/demo_documents/` son estructuralmente útiles para el parser,
 - Sin integración real ClickBalance o SAP Ariba; ClickBalance es un estado manual.
 - Sin pagos, banca, firma, SharePoint, Blob, Azure SQL, SSO, despliegue Azure, Kubernetes o colas.
 - Los adaptadores Azure son contratos preparados, no llamadas productivas.
-- El catálogo de reglas (`BUSINESS_RULES`) se muestra en modo lectura; su edición persistente es un siguiente paso. Los archivos mínimos por origen sí son configurables.
+- Las Reglas de validación y los catálogos son editables, pero los pesos del score siguen en el código y no se pueden crear reglas nuevas desde la interfaz. Los catálogos se usan en la validación del CFDI; la moneda del contrato sigue siendo texto libre de tres letras.
 - Las facturas de proveedores internacionales sólo cumplen la parte documental: sin CFDI, las reglas XML y SUP-003 las dejan en "Requiere corrección" hasta que HU-16 defina sus validaciones y su expediente.
 - El portal envía las credenciales de los proveedores autorizados (HU-03), pero todavía ningún cambio de estatus de factura dispara correos: eso llega con HU-20 y HU-14. El envío es síncrono, sin cola ni reintentos automáticos.
 - La contraseña temporal no se resguarda aún en ClickCloud (falta su API) y su cambio en el primer acceso llega con HU-10.
