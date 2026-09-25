@@ -15,11 +15,12 @@ from app.core.constants import (
 from app.core.database import get_db
 from app.core.errors import BusinessRuleError, InvalidInputError
 from app.core.security import hash_password, require_roles, validate_csrf
-from app.models import AuditLog, Supplier, User
+from app.models import AuditLog, EmailDelivery, Supplier, User
 from app.repositories.pagination import paginate
 from app.routers.common import templates
 from app.schemas import UserCreate, validation_message
 from app.services import document_requirements_service as requirements
+from app.services import notification_service as notifications
 from app.services import notification_templates as templates_service
 from app.services import session_service
 from app.services.audit_service import audit
@@ -349,3 +350,94 @@ async def save_notification_template(
         # Se conserva la version enviada: guardar de nuevo vuelve a dar 409 hasta abrir la vigente (D12).
         return _template_editor(request, user, spec, subject, body, version, error=exc.message, status_code=409)
     return RedirectResponse(f"{TEMPLATES_URL}?updated={spec.event.value}", status_code=303)
+
+
+# Destinatarios de notificaciones y correo de prueba (HU-08). La logica vive en notification_service; estas rutas solo
+# traducen HTTP. Los errores vuelven a pintar la pagina con lo capturado; el exito redirige (?ok=<clave> o ?test=<id>).
+NOTIFICATIONS_URL = "/admin/notifications"
+NOTIFICATIONS_NOTICES = {"saved": "Configuración guardada", "unchanged": "Sin cambios"}
+
+
+def _notifications_page(
+    request: Request,
+    db: Session,
+    user,
+    *,
+    values: dict[str, str] | None = None,
+    errors: list[str] | None = None,
+    error: str | None = None,
+    notice: str | None = None,
+    test_delivery: EmailDelivery | None = None,
+    test_address: str = "",
+    test_errors: list[str] | None = None,
+    status_code: int = 200,
+):
+    config = notifications.load(db)
+    lists = notifications.recipient_lists(config)
+    context = {
+        "user": user,
+        "mailbox": lists[0],
+        "copies": lists[1:],
+        "values": values or {item.key: "\n".join(item.addresses) for item in lists},
+        "config_version": notifications.config_version(config),
+        "errors": errors or [],
+        "error": error,
+        "notice": notice,
+        "test_delivery": test_delivery,
+        "test_address": test_address,
+        "test_errors": test_errors or [],
+        "transport": notifications.transport_summary(),
+        "deliveries": notifications.recent_deliveries(db),
+        "delivery_label": notifications.delivery_label,
+        "format_datetime": templates_service.format_datetime,
+    }
+    return templates.TemplateResponse(request, "admin/notifications.html", context, status_code=status_code)
+
+
+@router.get("/notifications")
+def notification_settings(
+    request: Request,
+    ok: str = "",
+    test: int | None = None,
+    db: Session = Depends(get_db),
+    user=Depends(require_roles(Role.ADMIN)),
+):
+    # El resultado de la prueba se lee de la bitacora: el parametro nunca se refleja tal cual.
+    delivery = db.get(EmailDelivery, test) if test else None
+    if delivery is not None and delivery.event is not None:
+        delivery = None
+    return _notifications_page(request, db, user, notice=NOTIFICATIONS_NOTICES.get(ok), test_delivery=delivery)
+
+
+@router.post("/notifications")
+async def save_notification_settings(
+    request: Request, db: Session = Depends(get_db), user=Depends(require_roles(Role.ADMIN))
+):
+    await validate_csrf(request)
+    form = {key: value for key, value in (await request.form()).items() if isinstance(value, str)}
+    try:
+        changed = notifications.save_recipients(db, form, user)
+    except notifications.RecipientsValidationError as exc:
+        db.rollback()  # libera el bloqueo consultivo antes de volver a pintar
+        return _notifications_page(request, db, user, values=form, errors=exc.errors, status_code=exc.status_code)
+    except BusinessRuleError as exc:
+        db.rollback()
+        return _notifications_page(request, db, user, values=form, error=exc.message, status_code=exc.status_code)
+    return RedirectResponse(f"{NOTIFICATIONS_URL}?ok={'saved' if changed else 'unchanged'}", status_code=303)
+
+
+@router.post("/notifications/test")
+async def send_test_notification(
+    request: Request,
+    address: str = Form(""),
+    db: Session = Depends(get_db),
+    user=Depends(require_roles(Role.ADMIN)),
+):
+    await validate_csrf(request)
+    try:
+        delivery = notifications.send_test(db, address, user)
+    except notifications.RecipientsValidationError as exc:
+        return _notifications_page(
+            request, db, user, test_address=address, test_errors=exc.errors, status_code=exc.status_code
+        )
+    return RedirectResponse(f"{NOTIFICATIONS_URL}?test={delivery.id}", status_code=303)

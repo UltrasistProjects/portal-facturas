@@ -1,5 +1,6 @@
 import json
 import re
+import socket
 from datetime import datetime, timezone
 from decimal import Decimal
 
@@ -182,4 +183,101 @@ def test_plantilla_invalida_registrada(client, restore_notification_templates):
     assert [(e["event_code"], e["reason"]) for e in fallback] == [("INVOICE_REJECTED", "invalid")]
     content = json.dumps(events, ensure_ascii=False)
     for value in ("Texto dañado", "rfc_secreto", "LOG-NOTIF-1", "FAC-LOG-NOTIF", "Proveedor del log", "confidencial"):
+        assert value not in content, value
+
+
+# --- Notificaciones por correo (HU-08) ----------------------------------------------------------------------------
+
+INVOICE_VALUES = {
+    "numero_factura": "LOG-MAIL-1",
+    "folio_interno": "FAC-LOG-MAIL",
+    "proveedor": "Proveedor del log de correo",
+    "monto": Decimal("10.00"),
+    "moneda": "MXN",
+    "fecha_estatus": datetime(2026, 9, 25, 16, 30, tzinfo=timezone.utc),
+}
+
+
+def closed_port() -> int:
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        return probe.getsockname()[1]
+
+
+def save_recipients(client, **lists) -> None:
+    from app.services import notification_service
+
+    with SessionLocal() as db:
+        config = notification_service.load(db)
+        data = {item.key: "\n".join(item.addresses) for item in notification_service.recipient_lists(config)}
+        data["config_version"] = notification_service.config_version(config)
+    response = client.post(
+        "/admin/notifications", data={**data, **lists, "csrf_token": csrf(client, "/")}, follow_redirects=False
+    )
+    assert response.status_code == 303
+
+
+def test_envio_de_correo_registrado(restore_notification_recipients):
+    from app.services import notification_service
+
+    offset = log_offset()
+    with SessionLocal() as db:
+        delivery = notification_service.notify(db, NotificationEvent.INVOICE_AUTHORIZED, **INVOICE_VALUES)
+    events = events_since(offset)
+    [sent] = [e for e in events if e.get("event") == "notification.sent"]
+    assert sent["event_code"] == "INVOICE_AUTHORIZED" and sent["delivery_id"] == delivery.id
+    assert sent["transport"] == "file" and sent["recipients"] == 1 and "duration_ms" in sent
+    content = json.dumps(events, ensure_ascii=False)
+    for value in ("recepcionfacturas@ultrasist.com.mx", "LOG-MAIL-1", "autorizada para pago", "Proveedor del log"):
+        assert value not in content, value
+
+
+def test_envio_fallido_registrado(client, monkeypatch, restore_notification_recipients):
+    monkeypatch.setattr(settings, "mail_backend", "smtp")
+    monkeypatch.setattr(settings, "smtp_host", "127.0.0.1")
+    monkeypatch.setattr(settings, "smtp_port", closed_port())
+    login(client)
+    offset = log_offset()
+    client.post(
+        "/admin/notifications/test", data={"address": "prueba-log@ultrasist.com.mx", "csrf_token": csrf(client, "/")}
+    )
+    events = events_since(offset)
+    [failed] = [e for e in events if e.get("event") == "notification.failed"]
+    assert failed["level"] == "WARNING" and failed["event_code"] == "TEST"
+    assert failed["error_type"] == "ConnectionRefusedError" and "error" not in failed
+    assert "prueba-log@ultrasist.com.mx" not in json.dumps(events)
+
+
+def test_cambio_de_destinatarios_registrado(client, restore_notification_recipients):
+    login(client)
+    offset = log_offset()
+    save_recipients(client, INVOICE_REJECTED="copia-log@ultrasist.com.mx")
+    events = events_since(offset)
+    updated = [e for e in events if e.get("event") == "notification_recipients.updated"]
+    assert [e["lists"] for e in updated] == [["INVOICE_REJECTED"]]
+    assert "copia-log@ultrasist.com.mx" not in json.dumps(events)
+
+
+def test_sin_datos_sensibles_al_enviar_correos(client, monkeypatch, restore_notification_recipients):
+    from pydantic import SecretStr
+
+    from app.services import notification_service
+
+    monkeypatch.setattr(settings, "smtp_password", SecretStr("Clave#Smtp#DelLog"))
+    login(client)
+    offset = log_offset()
+    save_recipients(client, INVOICE_RECEPTION="buzon-log@ultrasist.com.mx")
+    client.post(
+        "/admin/notifications/test", data={"address": "prueba-log@ultrasist.com.mx", "csrf_token": csrf(client, "/")}
+    )
+    with SessionLocal() as db:
+        notification_service.notify(db, NotificationEvent.INVOICE_AUTHORIZED, **INVOICE_VALUES)
+    content = json.dumps(events_since(offset), ensure_ascii=False)
+    for value in (
+        "Clave#Smtp#DelLog",
+        "buzon-log@ultrasist.com.mx",
+        "prueba-log@ultrasist.com.mx",
+        "Correo de prueba del Portal",
+        "Factura LOG-MAIL-1 autorizada para pago",
+    ):
         assert value not in content, value

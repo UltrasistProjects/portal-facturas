@@ -3,7 +3,7 @@ from pathlib import Path
 from typing import Literal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from pydantic import Field, field_validator, model_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Raiz del proyecto: todas las rutas relativas de la configuracion se resuelven contra ella, no contra el CWD.
@@ -13,6 +13,8 @@ MIN_SECRET_KEY_LENGTH = 32
 SECRET_KEY_HINT = 'Genere una con: python -c "import secrets; print(secrets.token_urlsafe(64))"'
 DATABASE_URL_PREFIX = "postgresql+psycopg://"
 DATABASE_URL_HINT = "Ejecute python scripts/create_env.py para completar el .env."
+# Remitente del transporte de archivo: nunca sale del equipo, no necesita un dominio real.
+DEFAULT_FILE_MAIL_FROM = "Portal de Proveedores ULTRASIST <no-reply@portal.local>"
 
 
 class Settings(BaseSettings):
@@ -39,6 +41,16 @@ class Settings(BaseSettings):
     azure_openai_api_key: str = ""
     azure_openai_deployment: str = ""
     azure_openai_api_version: str = ""
+    # Correo (HU-08). None significa "derivar de app_env": smtp en produccion y file (no envia) en los demas.
+    mail_backend: Literal["smtp", "file"] | None = None
+    mail_from: str = ""
+    mail_outbox_dir: Path = Path("outbox")
+    smtp_host: str = ""
+    smtp_port: int = Field(default=587, ge=1, le=65535)
+    smtp_security: Literal["starttls", "ssl", "none"] = "starttls"
+    smtp_username: str = ""
+    smtp_password: SecretStr = SecretStr("")
+    smtp_timeout: int = Field(default=10, ge=1, le=120)
 
     model_config = SettingsConfigDict(env_file=BASE_DIR / ".env", env_file_encoding="utf-8", extra="ignore")
 
@@ -79,7 +91,21 @@ class Settings(BaseSettings):
             raise ValueError(f"BUSINESS_TIMEZONE desconocida: {value!r} (ejemplo: America/Mexico_City)") from exc
         return value
 
-    @field_validator("storage_path", "log_dir", "backup_dir")
+    @field_validator("mail_backend", "smtp_security", mode="before")
+    @classmethod
+    def normalized_choice(cls, value):
+        # Vacio en .env equivale a "sin definir" para MAIL_BACKEND.
+        if isinstance(value, str):
+            value = value.strip().lower()
+            return value or None
+        return value
+
+    @field_validator("mail_from", "smtp_host", "smtp_username")
+    @classmethod
+    def stripped_text(cls, value: str) -> str:
+        return value.strip()
+
+    @field_validator("storage_path", "log_dir", "backup_dir", "mail_outbox_dir")
     @classmethod
     def anchored_path(cls, value: Path) -> Path:
         return (value if value.is_absolute() else BASE_DIR / value).resolve()
@@ -103,6 +129,15 @@ class Settings(BaseSettings):
     def derived_defaults(self):
         if self.session_https_only is None:
             self.session_https_only = self.app_env != "development"
+        if self.mail_backend is None:
+            self.mail_backend = "smtp" if self.app_env == "production" else "file"
+        if self.mail_backend == "smtp":
+            if not self.smtp_host:
+                raise ValueError("SMTP_HOST es obligatoria con MAIL_BACKEND=smtp.")
+            if not self.mail_from:
+                raise ValueError("MAIL_FROM es obligatoria con MAIL_BACKEND=smtp.")
+        elif not self.mail_from:
+            self.mail_from = DEFAULT_FILE_MAIL_FROM
         return self
 
 

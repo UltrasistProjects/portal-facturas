@@ -41,8 +41,12 @@ os.environ.update(
         "LOG_DIR": str(TEST_ROOT / "logs"),
         # TestClient usa http://testserver; con cookie Secure no se enviaria la sesion.
         "SESSION_HTTPS_ONLY": "false",
+        # Ninguna prueba envia correos reales: el transporte de archivo escribe en el directorio temporal.
+        "MAIL_BACKEND": "file",
+        "MAIL_OUTBOX_DIR": str(TEST_ROOT / "outbox"),
     }
 )
+OUTBOX = TEST_ROOT / "outbox"
 
 
 def pytest_sessionstart(session):
@@ -202,3 +206,24 @@ def restore_notification_templates():
                 .values(subject=spec.default_subject, body=spec.default_body, version=1, updated_by=None)
             )
         db.commit()
+
+
+RECEPTION_SEED = ["recepcionfacturas@ultrasist.com.mx"]
+
+
+@pytest.fixture()
+def restore_notification_recipients():
+    """Devuelve los destinatarios (HU-08) a la instalacion inicial, vacia la bitacora de envios y el buzon de salida:
+    la base de la sesion es compartida y otras pruebas esperan la configuracion sembrada."""
+    yield
+    from sqlalchemy import delete, update
+
+    from app.core.database import SessionLocal
+    from app.models import EmailDelivery, NotificationCopy, NotificationMailbox
+
+    with SessionLocal() as db:
+        db.execute(delete(EmailDelivery))
+        db.execute(update(NotificationMailbox).values(addresses=RECEPTION_SEED, updated_by=None))
+        db.execute(update(NotificationCopy).values(addresses=[], updated_by=None))
+        db.commit()
+    shutil.rmtree(OUTBOX, ignore_errors=True)

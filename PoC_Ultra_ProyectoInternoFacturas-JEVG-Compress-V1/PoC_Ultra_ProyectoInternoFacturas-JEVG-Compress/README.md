@@ -164,7 +164,7 @@ app/
   repositories/ consultas con alcance por usuario
   routers/       auth, dashboard, facturas, proveedores, contratos y admin
   rules/         reglas DOC/XML/SUP/CON/FIN/DAT/SEM
-  services/      storage, XML, PDF, conciliación, score, auditoría y workflow
+  services/      storage, XML, PDF, conciliación, score, auditoría, workflow y notificaciones por correo
     ai/          interfaz, mock y adaptadores Azure
   templates/     interfaz Jinja server-rendered
   static/        CSS y JavaScript Vanilla
@@ -254,8 +254,43 @@ El Administrador define en **Administración › Plantillas de correo** (`/admin
   - Formatea montos y fechas, y deja el asunto en una sola línea de hasta 255 caracteres.
   - Lanza `NotificationDataError` si falta una variable del evento o si una obligatoria llega vacía.
   - Si la plantilla guardada no es válida (por ejemplo, modificada por SQL), usa el texto predeterminado y registra `notification.template_fallback`.
-  - No envía el correo: el transporte, el remitente y la dirección de Recepción de Facturas llegan con HU-08.
+  - No envía el correo: para enviarlo use `notification_service.notify()` (sección siguiente).
 - **Reinicio de la demo:** `reset_demo.py` recrea el esquema, así que las plantillas vuelven a su texto predeterminado.
+
+## Correo y notificaciones
+
+El Administrador define en **Administración › Notificaciones** (`/admin/notifications`) a qué direcciones llegan los avisos (HU-08). El destinatario principal de cada evento lo fija su regla de negocio; la pantalla configura:
+
+- **Buzón "Recepción de Facturas":** de 1 a 10 correos. La migración `0005_notification_recipients` lo siembra con `recepcionfacturas@ultrasist.com.mx`. Recibe los avisos de facturas Autorizadas y Canceladas.
+- **Copias por evento:** de 0 a 10 correos en `Cc` para Autorizada, Rechazada, Observaciones y Cancelada. Se omiten las que ya están en "Para".
+- **Correo de prueba** a una dirección que indique el Administrador, con un texto fijo.
+- **Transporte** vigente en solo lectura, sin usuario ni contraseña, y los **últimos 20 envíos** con su resultado.
+
+Las listas se capturan una dirección por línea (también se aceptan comas o punto y coma). Al guardar se pasan a minúsculas y se quitan las repetidas; todos los errores se muestran juntos con HTTP 400. El formulario lleva una huella de la configuración: si otro Administrador guardó antes, responde 409 sin cambios. Cada cambio queda en el Audit Log (`NOTIFICATION_RECIPIENTS_UPDATED`, sólo las listas que cambiaron) y en el log técnico (`notification_recipients.updated`, sin direcciones).
+
+**Transporte.** Se configura en `.env` (tabla de variables abajo):
+
+- `MAIL_BACKEND=file`, el valor por omisión fuera de producción, **no envía**: escribe cada correo como `.eml` (permisos `0600`) en `MAIL_OUTBOX_DIR` (`./outbox`, excluido de git y de los respaldos). Ábralo con cualquier cliente de correo para revisarlo.
+- `MAIL_BACKEND=smtp` envía con `smtplib` (STARTTLS o SSL con verificación del certificado) y exige `SMTP_HOST` y `MAIL_FROM`. Es el valor por omisión en producción, donde el arranque se aborta con `MAIL_BACKEND=file` o `SMTP_SECURITY=none`.
+
+**Envío para HU-03, HU-14 y HU-20.** Después de confirmar la transacción de negocio:
+
+```python
+notification_service.notify(
+    db,
+    NotificationEvent.INVOICE_REJECTED,
+    supplier_email=invoice.supplier.email,  # sólo en los eventos dirigidos al proveedor
+    entity="Invoice",
+    entity_id=invoice.id,
+    user_id=user.id,
+    **valores,  # los mismos de notification_templates.compose()
+)
+```
+
+- Resuelve los destinatarios con la configuración vigente, compone el correo con la plantilla de HU-05 y lo envía en texto plano UTF-8.
+- Registra el intento en `email_deliveries` (evento, destinatarios, resultado, error técnico, entidad y usuario, **sin asunto ni cuerpo**) y confirma ese registro.
+- Un error del servidor de correo **no** se propaga: el envío queda `FAILED` en la bitácora y en el log (`notification.failed`). No hay cola ni reintentos automáticos.
+- Lanza `NotificationDataError` si falta el correo del proveedor o una variable de la plantilla.
 
 ## Archivos y seguridad de PoC
 
@@ -279,7 +314,7 @@ El Administrador define en **Administración › Plantillas de correo** (`/admin
 
 `SECRET_KEY` es obligatoria (mínimo 32 caracteres; se rechaza el valor de ejemplo `change-me...`). `scripts/create_env.py` la genera al crear `.env`. `DEBUG` sólo sube el nivel de log; nunca muestra trazas al usuario.
 
-Para producción use `APP_ENV=production`: la aplicación no arranca sin `SESSION_HTTPS_ONLY=true` ni con cuentas demo activas. Añada además políticas de retención, escaneo antimalware y gestión de secretos.
+Para producción use `APP_ENV=production`: la aplicación no arranca sin `SESSION_HTTPS_ONLY=true`, con cuentas demo activas, con `MAIL_BACKEND=file` ni con `SMTP_SECURITY=none`. Añada además políticas de retención, escaneo antimalware y gestión de secretos.
 
 **Detrás de un proxy inverso**, arranque uvicorn con `--proxy-headers --forwarded-allow-ips=<IP del proxy>`. Sin eso, todas las peticiones parecen venir del proxy: el límite de login por IP se vuelve global y HSTS no se emite.
 
@@ -302,6 +337,13 @@ Para producción use `APP_ENV=production`: la aplicación no arranca sin `SESSIO
 | `BUSINESS_TIMEZONE` | `America/Mexico_City` | Zona de las reglas de calendario (corte del día 20) y del año del folio. |
 | `BACKUP_RETENTION` | `14` | Respaldos que conserva `scripts/backup.py`. |
 | `MAX_UPLOAD_MB` | `20` | Tamaño máximo por archivo. |
+| `MAIL_BACKEND` | según `APP_ENV` | `smtp` o `file`; `smtp` en `production` y `file` (no envía) en los demás. |
+| `MAIL_FROM` | *(obligatoria con `smtp`)* | Remitente, p. ej. `Portal de Proveedores ULTRASIST <no-reply@ultrasist.com.mx>`. Con `file`: `…<no-reply@portal.local>`. |
+| `MAIL_OUTBOX_DIR` | `./outbox` | Directorio de los `.eml` del transporte `file`. |
+| `SMTP_HOST`, `SMTP_PORT` | *(obligatoria con `smtp`)*, `587` | Servidor SMTP. |
+| `SMTP_SECURITY` | `starttls` | `starttls`, `ssl` o `none` (prohibido en `production`). |
+| `SMTP_USERNAME`, `SMTP_PASSWORD` | *(vacías)* | Si hay usuario, el transporte inicia sesión. La contraseña nunca se muestra ni se registra. |
+| `SMTP_TIMEOUT` | `10` | Segundos de espera del servidor SMTP (1 a 120). |
 
 ## Empaquetado para distribución
 
@@ -344,11 +386,11 @@ Los XML bajo `data/demo_documents/` son estructuralmente útiles para el parser,
 
 - Sin validación SAT online, timbrado ni generación CFDI.
 - Sin integración real ClickBalance o SAP Ariba; ClickBalance es un estado manual.
-- Sin pagos, banca, correo, firma, SharePoint, Blob, Azure SQL, SSO, despliegue Azure, Kubernetes o colas.
+- Sin pagos, banca, firma, SharePoint, Blob, Azure SQL, SSO, despliegue Azure, Kubernetes o colas.
 - Los adaptadores Azure son contratos preparados, no llamadas productivas.
 - El catálogo de reglas (`BUSINESS_RULES`) se muestra en modo lectura; su edición persistente es un siguiente paso. Los archivos mínimos por origen sí son configurables.
 - Las facturas de proveedores internacionales sólo cumplen la parte documental: sin CFDI, las reglas XML y SUP-003 las dejan en "Requiere corrección" hasta que HU-16 defina sus validaciones y su expediente.
-- Las plantillas de correo se editan y componen, pero ningún correo se envía todavía: el envío llega con HU-08, HU-20 y HU-14.
+- El portal ya puede enviar correos (HU-08), pero todavía ningún cambio de estatus los dispara: eso llega con HU-20 y HU-14. El envío es síncrono, sin cola ni reintentos automáticos.
 - La verificación documental del Anexo A es presencia/vigencia referencial, no validación legal.
 - Bootstrap 5.3.3 y Bootstrap Icons están incluidos bajo `app/static/vendor/`; la interfaz tampoco requiere Internet.
 

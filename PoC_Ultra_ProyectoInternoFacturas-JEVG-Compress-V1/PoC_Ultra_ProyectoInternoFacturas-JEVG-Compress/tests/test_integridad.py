@@ -412,3 +412,61 @@ def test_segunda_plantilla_para_un_evento(db):
 def test_restricciones_de_plantillas_por_sql_directo(db, sql, constraint):
     with pytest.raises(IntegrityError, match=f'violates check constraint "{constraint}"'):
         db.execute(text(sql))
+
+
+# Destinatarios de notificaciones y bitacora de envios (HU-08). Las FK con ON DELETE RESTRICT las cubre la prueba
+# general de pg_constraint.
+
+DELIVERY_INSERT = (
+    "INSERT INTO email_deliveries (event, status, to_addresses, cc_addresses, transport, message_id, error, created_at)"
+    " VALUES ({event}, {status}, {to}, '{{}}', 'file', '<x@portal.local>', {error}, now())"
+)
+
+
+def delivery_sql(event="'INVOICE_REJECTED'", status="'SENT'", to="'{a@b.mx}'", error="NULL") -> str:
+    return DELIVERY_INSERT.format(event=event, status=status, to=to, error=error)
+
+
+@pytest.mark.parametrize(
+    ("sql", "constraint"),
+    [
+        (delivery_sql(status="'QUEUED'"), "deliverystatus"),
+        (delivery_sql(event="'INVOICE_PAID'"), "notificationevent"),
+        (delivery_sql(status="'FAILED'"), "ck_email_deliveries_failed_error"),
+        (delivery_sql(to="'{}'"), "ck_email_deliveries_to_addresses"),
+        ("UPDATE notification_mailboxes SET addresses = '{}'", "ck_notification_mailboxes_addresses"),
+        ("UPDATE notification_mailboxes SET code = 'OTRO'", "mailbox"),
+        (
+            "UPDATE notification_copies SET addresses = array_fill('a@b.mx'::varchar, ARRAY[11])",
+            "ck_notification_copies_addresses",
+        ),
+    ],
+)
+def test_restricciones_de_notificaciones_por_sql_directo(db, sql, constraint):
+    with pytest.raises(IntegrityError, match=f'violates check constraint "{constraint}"'):
+        db.execute(text(sql))
+
+
+def test_envio_fallido_con_error_y_prueba_sin_evento(db):
+    db.execute(text(delivery_sql(status="'FAILED'", error="'OSError: sin red'")))
+    db.execute(text(delivery_sql(event="NULL")))
+
+
+def test_segunda_lista_de_copias_para_un_evento(db):
+    with pytest.raises(IntegrityError, match='violates unique constraint "uq_notification_copies_event"'):
+        db.execute(
+            text(
+                "INSERT INTO notification_copies (event, addresses, updated_at)"
+                " VALUES ('INVOICE_REJECTED', '{}', now())"
+            )
+        )
+
+
+def test_segundo_buzon_de_recepcion(db):
+    with pytest.raises(IntegrityError, match='violates unique constraint "uq_notification_mailboxes_code"'):
+        db.execute(
+            text(
+                "INSERT INTO notification_mailboxes (code, name, addresses, updated_at)"
+                " VALUES ('INVOICE_RECEPTION', 'Otro', '{a@b.mx}', now())"
+            )
+        )

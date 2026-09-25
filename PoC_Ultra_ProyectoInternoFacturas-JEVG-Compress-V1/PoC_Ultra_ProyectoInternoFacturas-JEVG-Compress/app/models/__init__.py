@@ -12,9 +12,11 @@ from sqlalchemy.orm import Mapped, Session, mapped_column, relationship
 
 from app.core.constants import (
     ContractStatus,
+    DeliveryStatus,
     DocumentRequirement,
     InvoiceStatus,
     LoginResult,
+    Mailbox,
     NotificationEvent,
     ProcessingStatus,
     ReviewDecision,
@@ -368,6 +370,63 @@ class NotificationTemplate(Base):
     updater: Mapped[User | None] = relationship()
 
 
+class NotificationMailbox(Base):
+    """Buzon de destino de notificaciones (HU-08), p. ej. Recepcion de Facturas. La fila la crea la migracion y la
+    interfaz solo cambia sus direcciones. `updated_by` es NULL si nunca se ha modificado."""
+
+    __tablename__ = "notification_mailboxes"
+    __table_args__ = (
+        UniqueConstraint("code", name="uq_notification_mailboxes_code"),
+        CheckConstraint("cardinality(addresses) BETWEEN 1 AND 10", name="ck_notification_mailboxes_addresses"),
+    )
+    id: Mapped[int] = mapped_column(primary_key=True)
+    code: Mapped[Mailbox] = mapped_column(enum_column(Mailbox))
+    name: Mapped[str] = mapped_column(String(80))
+    addresses: Mapped[list[str]] = mapped_column(ARRAY(String(254)))
+    updated_at: Mapped[datetime] = mapped_column(UTCDateTime, default=now_utc)
+    updated_by: Mapped[int | None] = mapped_column(restrict("users.id"))
+
+
+class NotificationCopy(Base):
+    """Direcciones que reciben copia del correo de un evento (HU-08), ademas de su destinatario principal. Una fila
+    por evento que admite copias, creada por la migracion."""
+
+    __tablename__ = "notification_copies"
+    __table_args__ = (
+        UniqueConstraint("event", name="uq_notification_copies_event"),
+        CheckConstraint("cardinality(addresses) <= 10", name="ck_notification_copies_addresses"),
+    )
+    id: Mapped[int] = mapped_column(primary_key=True)
+    event: Mapped[NotificationEvent] = mapped_column(enum_column(NotificationEvent))
+    addresses: Mapped[list[str]] = mapped_column(ARRAY(String(254)), default=list)
+    updated_at: Mapped[datetime] = mapped_column(UTCDateTime, default=now_utc)
+    updated_by: Mapped[int | None] = mapped_column(restrict("users.id"))
+
+
+class EmailDelivery(Base):
+    """Bitacora de envios de correo (HU-08). Sin asunto ni cuerpo: el correo de credenciales lleva una contrasena
+    temporal. `event` es NULL en el correo de prueba."""
+
+    __tablename__ = "email_deliveries"
+    __table_args__ = (
+        Index("ix_email_deliveries_entity", "entity", "entity_id"),
+        CheckConstraint("cardinality(to_addresses) >= 1", name="ck_email_deliveries_to_addresses"),
+        CheckConstraint("status <> 'FAILED' OR error IS NOT NULL", name="ck_email_deliveries_failed_error"),
+    )
+    id: Mapped[int] = mapped_column(primary_key=True)
+    event: Mapped[NotificationEvent | None] = mapped_column(enum_column(NotificationEvent))
+    status: Mapped[DeliveryStatus] = mapped_column(enum_column(DeliveryStatus))
+    to_addresses: Mapped[list[str]] = mapped_column(ARRAY(String(254)))
+    cc_addresses: Mapped[list[str]] = mapped_column(ARRAY(String(254)), default=list)
+    transport: Mapped[str] = mapped_column(String(10))
+    message_id: Mapped[str] = mapped_column(String(255))
+    error: Mapped[str | None] = mapped_column(String(300))
+    entity: Mapped[str | None] = mapped_column(String(80))
+    entity_id: Mapped[str | None] = mapped_column(String(80))
+    requested_by: Mapped[int | None] = mapped_column(restrict("users.id"), index=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=now_utc, index=True)
+
+
 __all__ = [
     "User",
     "Supplier",
@@ -382,4 +441,7 @@ __all__ = [
     "Review",
     "UserSession",
     "NotificationTemplate",
+    "NotificationMailbox",
+    "NotificationCopy",
+    "EmailDelivery",
 ]

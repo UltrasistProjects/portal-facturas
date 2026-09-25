@@ -221,3 +221,19 @@ class NotificationEvent(StrEnum):
     INVOICE_REJECTED = "INVOICE_REJECTED"
     INVOICE_OBSERVATIONS = "INVOICE_OBSERVATIONS"
     INVOICE_CANCELLED = "INVOICE_CANCELLED"
+
+
+class Mailbox(StrEnum):
+    """Buzones de destino configurables por el Administrador (HU-08). Hoy solo Recepcion de Facturas."""
+
+    INVOICE_RECEPTION = "INVOICE_RECEPTION"
+
+
+MAILBOX_LABELS = {Mailbox.INVOICE_RECEPTION: "Recepción de Facturas"}
+
+
+class DeliveryStatus(StrEnum):
+    """Resultado de un intento de envio de correo registrado en la bitacora (HU-08)."""
+
+    SENT = "SENT"
+    FAILED = "FAILED"

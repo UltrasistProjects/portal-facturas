@@ -22,8 +22,12 @@ DOMAIN_TABLES = {
     "user_sessions",
     "invoice_document_types",
     "notification_templates",
+    "notification_mailboxes",
+    "notification_copies",
+    "email_deliveries",
 }
-BASELINE_TABLES = DOMAIN_TABLES - {"invoice_document_types", "notification_templates"}
+NOTIFICATION_TABLES = {"notification_mailboxes", "notification_copies", "email_deliveries"}
+BASELINE_TABLES = DOMAIN_TABLES - {"invoice_document_types", "notification_templates"} - NOTIFICATION_TABLES
 
 
 @pytest.fixture()
@@ -278,3 +282,57 @@ def test_downgrade_de_plantillas_modificadas(empty_db):
         command.downgrade(config, DOCUMENT_TYPES)
     assert "notification_templates" in tables(empty_db)
     assert query(empty_db, "SELECT version_num FROM alembic_version") == [(NOTIFICATION_TEMPLATES,)]
+
+
+NOTIFICATION_RECIPIENTS = "0005_notification_recipients"
+
+
+def test_instalacion_nueva_con_el_buzon_de_recepcion(empty_db):
+    command.upgrade(alembic_config(empty_db), "head")
+    assert query(empty_db, "SELECT code, name, addresses, updated_by FROM notification_mailboxes") == [
+        ("INVOICE_RECEPTION", "Recepción de Facturas", ["recepcionfacturas@ultrasist.com.mx"], None)
+    ]
+    copies = query(empty_db, "SELECT event, addresses, updated_by FROM notification_copies ORDER BY id")
+    events = ["INVOICE_AUTHORIZED", "INVOICE_REJECTED", "INVOICE_OBSERVATIONS", "INVOICE_CANCELLED"]
+    assert copies == [(event, [], None) for event in events]
+    assert query(empty_db, "SELECT count(*) FROM email_deliveries") == [(0,)]
+
+
+def test_downgrade_de_destinatarios_sin_cambios(empty_db):
+    config = alembic_config(empty_db)
+    command.upgrade(config, NOTIFICATION_RECIPIENTS)
+    command.downgrade(config, NOTIFICATION_TEMPLATES)
+    assert not NOTIFICATION_TABLES & tables(empty_db)
+    command.upgrade(config, "head")
+    command.check(config)
+
+
+ADMIN_ROW = (
+    "INSERT INTO users (id, name, email, password_hash, role, is_active, created_at)"
+    " VALUES (1, 'Admin', 'admin@ultrasist.com.mx', 'x', 'ADMIN', true, now())"
+)
+
+
+@pytest.mark.parametrize(
+    "statements",
+    [
+        [
+            "INSERT INTO email_deliveries (event, status, to_addresses, cc_addresses, transport, message_id,"
+            " created_at) VALUES (NULL, 'SENT', '{a@b.mx}', '{}', 'file', '<x@portal.local>', now())"
+        ],
+        [
+            ADMIN_ROW,
+            "UPDATE notification_copies SET addresses = '{a@b.mx}', updated_by = 1 WHERE event = 'INVOICE_REJECTED'",
+        ],
+        [ADMIN_ROW, "UPDATE notification_mailboxes SET addresses = '{a@b.mx}', updated_by = 1"],
+    ],
+)
+def test_downgrade_de_destinatarios_con_datos(empty_db, statements):
+    config = alembic_config(empty_db)
+    command.upgrade(config, NOTIFICATION_RECIPIENTS)
+    for sql in statements:
+        execute(empty_db, sql)
+    with pytest.raises(NotImplementedError, match="Restaure un respaldo"):
+        command.downgrade(config, NOTIFICATION_TEMPLATES)
+    assert NOTIFICATION_TABLES <= tables(empty_db)
+    assert query(empty_db, "SELECT version_num FROM alembic_version") == [(NOTIFICATION_RECIPIENTS,)]

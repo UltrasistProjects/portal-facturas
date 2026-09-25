@@ -98,6 +98,56 @@ def test_arranque_desde_otro_directorio_con_debug_activo(tmp_path):
     assert not (tmp_path / "data").exists()
 
 
+# --- Transporte de correo (HU-08) ---------------------------------------------------------------------------------
+
+MAIL_VARIABLES = ("MAIL_BACKEND", "MAIL_FROM", "MAIL_OUTBOX_DIR", "SMTP_HOST", "SMTP_SECURITY")
+
+
+@pytest.fixture()
+def no_mail_env(monkeypatch):
+    for name in MAIL_VARIABLES:
+        monkeypatch.delenv(name, raising=False)
+
+
+def test_correo_por_omision_fuera_de_produccion(no_mail_env, tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    settings = build(secret_key=VALID_KEY, app_env="development")
+    assert settings.mail_backend == "file"
+    assert settings.mail_outbox_dir == ROOT / "outbox"
+    assert settings.mail_from == "Portal de Proveedores ULTRASIST <no-reply@portal.local>"
+    assert (settings.smtp_port, settings.smtp_security, settings.smtp_timeout) == (587, "starttls", 10)
+
+
+def test_correo_por_omision_en_produccion_exige_smtp(no_mail_env):
+    with pytest.raises(ValidationError, match="SMTP_HOST es obligatoria con MAIL_BACKEND=smtp"):
+        build(secret_key=VALID_KEY, app_env="production")
+    configured = build(
+        secret_key=VALID_KEY, app_env="production", smtp_host="smtp.ultrasist.com.mx", mail_from="a@b.mx"
+    )
+    assert configured.mail_backend == "smtp"
+
+
+def test_smtp_sin_remitente(no_mail_env):
+    with pytest.raises(ValidationError, match="MAIL_FROM es obligatoria con MAIL_BACKEND=smtp"):
+        build(secret_key=VALID_KEY, mail_backend="smtp", smtp_host="smtp.ultrasist.com.mx")
+
+
+@pytest.mark.parametrize(("field", "value"), [("smtp_security", "tls"), ("mail_backend", "sendmail")])
+def test_valores_de_correo_fuera_de_dominio(no_mail_env, field, value):
+    with pytest.raises(ValidationError, match="starttls|smtp"):
+        build(secret_key=VALID_KEY, **{field: value})
+
+
+def test_mail_backend_vacio_equivale_a_sin_definir(no_mail_env):
+    assert build(secret_key=VALID_KEY, app_env="test", mail_backend=" ").mail_backend == "file"
+
+
+@pytest.mark.parametrize("timeout", [0, 121])
+def test_tiempo_de_espera_smtp_fuera_de_rango(no_mail_env, timeout):
+    with pytest.raises(ValidationError):
+        build(secret_key=VALID_KEY, smtp_timeout=timeout)
+
+
 EXAMPLE = "APP_ENV=development\nSECRET_KEY=\nPOSTGRES_USER=portal\nPOSTGRES_DB=portal\nPOSTGRES_PORT=55432\n"
 EXAMPLE += "POSTGRES_PASSWORD=\nDATABASE_URL=\nDEBUG=false\n"
 

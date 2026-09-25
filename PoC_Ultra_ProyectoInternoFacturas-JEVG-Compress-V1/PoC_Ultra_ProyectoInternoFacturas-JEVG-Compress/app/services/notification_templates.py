@@ -11,6 +11,7 @@ import re
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
+from enum import StrEnum
 
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session, joinedload
@@ -73,6 +74,14 @@ def tag(name: str) -> str:
     return "{{" + name + "}}"
 
 
+class Recipient(StrEnum):
+    """Destinatario principal de un evento, fijado por su regla de negocio (RD-03). El valor es el texto de la
+    pantalla; las direcciones las resuelve notification_service con la configuracion de HU-08."""
+
+    RECEPTION = "Recepción de Facturas"
+    SUPPLIER = "Proveedor (correo del catálogo)"
+
+
 @dataclass(frozen=True)
 class EventSpec:
     """Lo que el Administrador no puede cambiar de una plantilla: nombre, destinatario (RD-03), variables disponibles
@@ -80,7 +89,7 @@ class EventSpec:
 
     event: NotificationEvent
     label: str
-    recipient: str
+    recipient: Recipient
     variables: tuple[str, ...]
     required: tuple[str, ...]
     default_subject: str
@@ -105,8 +114,8 @@ def _variables(*extra: str) -> tuple[str, ...]:
     return tuple(name for name in VARIABLES if name in COMMON_VARIABLES or name in extra)
 
 
-RECEPTION = "Recepción de Facturas"
-SUPPLIER = "Proveedor (correo del catálogo)"
+RECEPTION = Recipient.RECEPTION
+SUPPLIER = Recipient.SUPPLIER
 RECEPTION_FOOTER = "Este es un mensaje automático del Portal de Proveedores ULTRASIST. No responda a este correo."
 SUPPLIER_FOOTER = (
     "Puede consultar el detalle en el Portal de Proveedores ULTRASIST. "

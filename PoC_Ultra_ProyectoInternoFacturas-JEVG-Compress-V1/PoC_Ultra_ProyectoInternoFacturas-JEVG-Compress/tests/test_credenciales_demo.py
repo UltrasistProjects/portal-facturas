@@ -51,11 +51,34 @@ def test_arranque_en_produccion_detecta_configuracion_insegura():
     assert any("admin@poc.local" in p for p in problems)
 
 
+# Correo de produccion valido (HU-08): sin el, el transporte file de las pruebas seria otro problema.
+SMTP = {"mail_backend": "smtp", "smtp_host": "smtp.ultrasist.com.mx", "mail_from": "portal@ultrasist.com.mx"}
+
+
+def production_settings(**values) -> Settings:
+    return Settings(_env_file=None, secret_key="k" * 32, app_env="production", **{**SMTP, **values})
+
+
 def test_arranque_en_produccion_con_cookie_segura_solo_reporta_cuentas_demo():
-    production = Settings(_env_file=None, secret_key="k" * 32, app_env="production", session_https_only=True)
+    production = production_settings(session_https_only=True)
     with SessionLocal() as db:
         problems = startup_problems(production, db)
     assert len(problems) == 1 and "Cuentas demo activas" in problems[0]
+
+
+def test_arranque_en_produccion_con_transporte_de_archivo():
+    production = production_settings(session_https_only=True, mail_backend="file")
+    with SessionLocal() as db:
+        problems = startup_problems(production, db)
+    assert any("MAIL_BACKEND=file" in p and "SMTP" in p for p in problems)
+
+
+def test_arranque_en_produccion_con_smtp_sin_cifrar():
+    production = production_settings(session_https_only=True, smtp_security="none")
+    with SessionLocal() as db:
+        problems = startup_problems(production, db)
+    assert any("SMTP_SECURITY=none" in p for p in problems)
+    assert not any("MAIL_BACKEND" in p for p in problems)
 
 
 def test_arranque_en_produccion_aborta(monkeypatch):

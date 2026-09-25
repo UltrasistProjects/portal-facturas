@@ -15,6 +15,7 @@ storage/temp/*
 logs/*
 !logs/.gitkeep
 backups/
+outbox/
 dist/
 Microsoft/
 *.log
