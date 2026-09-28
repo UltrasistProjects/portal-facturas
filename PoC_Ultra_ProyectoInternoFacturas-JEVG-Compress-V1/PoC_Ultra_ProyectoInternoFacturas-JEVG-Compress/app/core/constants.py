@@ -61,15 +61,15 @@ class ProcessingStatus(StrEnum):
 
 
 class InvoiceStatus(StrEnum):
+    """Modelo de estatus del ERS (EP-01, DT-01). Se conservan las claves que ya significaban lo mismo; cambia la
+    etiqueta. READY_FOR_CLICKBALANCE y UPLOADED_TO_CLICKBALANCE los resuelve HU-20."""
+
     DRAFT = "DRAFT"
     UPLOADED = "UPLOADED"
-    VALIDATING = "VALIDATING"
-    VALIDATION_FAILED = "VALIDATION_FAILED"
-    REQUIRES_CORRECTION = "REQUIRES_CORRECTION"
-    PREVALIDATED = "PREVALIDATED"
     UNDER_REVIEW = "UNDER_REVIEW"
     ACCEPTED = "ACCEPTED"
     REJECTED = "REJECTED"
+    REQUIRES_CORRECTION = "REQUIRES_CORRECTION"
     READY_FOR_CLICKBALANCE = "READY_FOR_CLICKBALANCE"
     UPLOADED_TO_CLICKBALANCE = "UPLOADED_TO_CLICKBALANCE"
 
@@ -77,13 +77,10 @@ class InvoiceStatus(StrEnum):
 STATUS_LABELS = {
     InvoiceStatus.DRAFT: "Borrador",
     InvoiceStatus.UPLOADED: "Cargada",
-    InvoiceStatus.VALIDATING: "Validando",
-    InvoiceStatus.VALIDATION_FAILED: "Validacion fallida",
-    InvoiceStatus.REQUIRES_CORRECTION: "Requiere correccion",
-    InvoiceStatus.PREVALIDATED: "Prevalidada",
-    InvoiceStatus.UNDER_REVIEW: "En revision",
-    InvoiceStatus.ACCEPTED: "Aceptada",
+    InvoiceStatus.UNDER_REVIEW: "Enviada",
+    InvoiceStatus.ACCEPTED: "Autorizada",
     InvoiceStatus.REJECTED: "Rechazada",
+    InvoiceStatus.REQUIRES_CORRECTION: "Observaciones",
     InvoiceStatus.READY_FOR_CLICKBALANCE: "Lista para ClickBalance",
     InvoiceStatus.UPLOADED_TO_CLICKBALANCE: "Cargada a ClickBalance",
 }
@@ -179,17 +176,12 @@ class ReviewDecision(StrEnum):
     COMMENT = "COMMENT"
 
 
+# DRAFT <-> UPLOADED lo asigna el sistema segun los archivos obligatorios; UNDER_REVIEW, un envio que procede;
+# REQUIRES_CORRECTION ("Observaciones"), solo la decision del PMO.
 ALLOWED_TRANSITIONS: dict[InvoiceStatus, set[InvoiceStatus]] = {
     InvoiceStatus.DRAFT: {InvoiceStatus.UPLOADED},
-    InvoiceStatus.UPLOADED: {InvoiceStatus.VALIDATING},
-    InvoiceStatus.VALIDATING: {
-        InvoiceStatus.PREVALIDATED,
-        InvoiceStatus.REQUIRES_CORRECTION,
-        InvoiceStatus.VALIDATION_FAILED,
-    },
-    InvoiceStatus.VALIDATION_FAILED: {InvoiceStatus.VALIDATING},
-    InvoiceStatus.REQUIRES_CORRECTION: {InvoiceStatus.UPLOADED, InvoiceStatus.VALIDATING},
-    InvoiceStatus.PREVALIDATED: {InvoiceStatus.UNDER_REVIEW},
+    InvoiceStatus.UPLOADED: {InvoiceStatus.DRAFT, InvoiceStatus.UNDER_REVIEW},
+    InvoiceStatus.REQUIRES_CORRECTION: {InvoiceStatus.UNDER_REVIEW},
     InvoiceStatus.UNDER_REVIEW: {InvoiceStatus.ACCEPTED, InvoiceStatus.REJECTED, InvoiceStatus.REQUIRES_CORRECTION},
     InvoiceStatus.ACCEPTED: {InvoiceStatus.READY_FOR_CLICKBALANCE},
     InvoiceStatus.READY_FOR_CLICKBALANCE: {InvoiceStatus.UPLOADED_TO_CLICKBALANCE},

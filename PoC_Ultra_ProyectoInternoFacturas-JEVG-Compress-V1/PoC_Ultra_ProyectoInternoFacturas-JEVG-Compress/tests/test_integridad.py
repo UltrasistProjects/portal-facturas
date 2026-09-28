@@ -146,6 +146,8 @@ def test_numero_unico_por_proveedor(db):
     "sql",
     [
         "UPDATE invoices SET status = 'APROBADA'",
+        # Estatus retirado por el modelo del ERS (HU-12/13).
+        "UPDATE invoices SET status = 'PREVALIDATED'",
         "UPDATE invoices SET total = -1.00",
         "UPDATE invoices SET validation_score = 101",
         "UPDATE contracts SET end_date = '2025-01-01'",

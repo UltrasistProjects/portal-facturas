@@ -7,14 +7,8 @@ document.querySelectorAll('input[type=file]').forEach(input => input.addEventLis
   const label = input.closest('label')?.querySelector('.file-name');
   if (label) label.textContent = input.files[0]?.name || 'Ningun archivo seleccionado';
 }));
-const supplier = document.querySelector('#supplier');
+// Alta de factura: el servidor solo envia los contratos del proveedor del usuario; se copian proyecto y lider.
 const contract = document.querySelector('#contract');
-function syncContract() {
-  if (!supplier || !contract) return;
-  [...contract.options].forEach(o => o.hidden = o.dataset.supplier !== supplier.value);
-  const visible = [...contract.options].find(o => !o.hidden); if (visible) contract.value = visible.value;
-  syncProject();
-}
 function syncProject() { const o = contract?.selectedOptions[0]; if (o) { document.querySelector('#project').value = o.dataset.project || ''; document.querySelector('#leader').value = o.dataset.leader || ''; } }
-supplier?.addEventListener('change', syncContract); contract?.addEventListener('change', syncProject); syncContract();
+contract?.addEventListener('change', syncProject); syncProject();
 

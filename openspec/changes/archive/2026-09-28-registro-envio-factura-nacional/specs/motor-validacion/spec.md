@@ -1,39 +1,13 @@
-# motor-validacion Specification
+## ADDED Requirements
 
-## Purpose
-Fuente única de reglas de negocio (Reglas de Validación editables por el administrador), comparaciones del receptor y del CFDI, reglas de calendario en la zona horaria de negocio y detección de UUID duplicados coherente con la unicidad de la base de datos.
-## Requirements
-### Requirement: Fuente única de reglas de negocio
-Los parámetros de negocio que usa el motor de validación SHALL tener una sola fuente: la configuración de Reglas de Validación en la base de datos (HU-06). Esos parámetros son:
-- los datos del receptor: RFC, Razón Social, Código Postal y régimen;
-- el método de pago y la forma de pago;
-- los usos de CFDI permitidos;
-- los interruptores de cada comparación.
+### Requirement: La validación no cambia el estatus de la factura
+`run_validation` SHALL guardar los resultados, el score, el UUID, la fecha y los importes del XML, y auditar `VALIDATION_STARTED` y `VALIDATION_COMPLETED`, sin cambiar el estatus de la factura. Decidir si una factura pasa a "Enviada" SHALL corresponder al envío: cualquier resultado `FAIL` lo impide. El evento de log `validation.completed` SHALL incluir `duration_ms`, `score`, `blockers` y `failures` (número de resultados `FAIL`).
 
-Las monedas aceptadas SHALL ser las claves activas del catálogo de monedas (HU-07). El motor SHALL leer esta configuración en cada prevalidación, sin caché. Los pesos del score SHALL seguir definidos en `BUSINESS_RULES`, que MUST NOT contener otros parámetros. La vista `/admin/rules` SHALL mostrar exactamente los valores que usa el motor, incluidos los pesos del score por severidad. El archivo `app/rules/business_rules.json` MUST NOT existir.
+#### Scenario: Validación con fallas
+- **WHEN** se ejecuta `run_validation` sobre una factura "Cargada" cuyo XML falla XML-002
+- **THEN** los resultados quedan guardados, la factura sigue "Cargada" y `validation.completed` registra `failures` mayor que cero
 
-#### Scenario: Vista de reglas coincide con el motor
-- **WHEN** un ADMIN abre `/admin/rules`
-- **THEN** ve el RFC, la razón social, el código postal, el régimen, el método y la forma de pago, los usos de CFDI y los pesos `CRITICAL`, `ERROR`, `WARNING` e `INFO`, con los mismos valores que usa el motor
-
-#### Scenario: Cambio de un parámetro
-- **WHEN** el Administrador cambia la forma de pago esperada a `03` en `/admin/rules`
-- **THEN** la regla XML-004 de la siguiente prevalidación espera `03` y la vista muestra `03`, sin editar ningún archivo ni reiniciar la aplicación
-
-### Requirement: Reglas de calendario en la zona horaria de negocio
-La zona horaria de negocio SHALL configurarse con `BUSINESS_TIMEZONE` (por defecto `America/Mexico_City`). La regla DAT-001 SHALL evaluar el día de recepción convirtiendo `created_at` de UTC a esa zona antes de compararlo con el día 20.
-
-#### Scenario: Último minuto del día 20
-- **WHEN** una factura se recibe el 20 de agosto a las 23:00 en `America/Mexico_City` (21 de agosto 05:00 UTC)
-- **THEN** DAT-001 resulta `PASS`
-
-#### Scenario: Primer minuto del día 21
-- **WHEN** una factura se recibe el 21 de agosto a las 00:30 en `America/Mexico_City`
-- **THEN** DAT-001 resulta `WARNING` con el mensaje de siguiente ciclo
-
-#### Scenario: Zona configurable
-- **WHEN** `BUSINESS_TIMEZONE=UTC` y la factura se recibe el 21 de agosto a las 05:00 UTC
-- **THEN** DAT-001 resulta `WARNING`
+## MODIFIED Requirements
 
 ### Requirement: Detección de UUID duplicado coherente con la unicidad en BD
 Antes de asignar el UUID del CFDI a una factura, el motor SHALL verificar si ya pertenece a otra factura, en cualquier estatus y de cualquier proveedor. Si es duplicado, SHALL registrar FIN-004 como `FAIL` de severidad `CRITICAL`, conservar el UUID detectado en los metadatos del documento XML y dejar `invoices.uuid` sin asignar, completando la validación sin error. El resultado SHALL impedir el envío. Su mensaje y sus valores SHALL NOT incluir el folio, el número, el proveedor ni ningún otro dato de la otra factura. Si la restricción de unicidad detecta una carrera, la petición SHALL responder HTTP 409 sin persistir resultados parciales.
@@ -118,11 +92,3 @@ Cuando su comparación está desactivada, XML-002, XML-003, XML-004, XML-005, XM
 #### Scenario: Factura demo correcta
 - **WHEN** se valida la factura demo con `cfdi_demo_correcto.xml` y la configuración inicial
 - **THEN** XML-009 y XML-010 son `PASS`
-
-### Requirement: La validación no cambia el estatus de la factura
-`run_validation` SHALL guardar los resultados, el score, el UUID, la fecha y los importes del XML, y auditar `VALIDATION_STARTED` y `VALIDATION_COMPLETED`, sin cambiar el estatus de la factura. Decidir si una factura pasa a "Enviada" SHALL corresponder al envío: cualquier resultado `FAIL` lo impide. El evento de log `validation.completed` SHALL incluir `duration_ms`, `score`, `blockers` y `failures` (número de resultados `FAIL`).
-
-#### Scenario: Validación con fallas
-- **WHEN** se ejecuta `run_validation` sobre una factura "Cargada" cuyo XML falla XML-002
-- **THEN** los resultados quedan guardados, la factura sigue "Cargada" y `validation.completed` registra `failures` mayor que cero
-

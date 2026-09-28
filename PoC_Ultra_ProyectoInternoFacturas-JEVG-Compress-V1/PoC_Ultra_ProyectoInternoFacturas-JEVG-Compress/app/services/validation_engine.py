@@ -8,7 +8,7 @@ from decimal import Decimal
 from sqlalchemy import and_, delete, select
 from sqlalchemy.orm import Session
 
-from app.core.constants import DocumentType, InvoiceStatus, ProcessingStatus
+from app.core.constants import DocumentType, ProcessingStatus
 from app.core.types import to_money
 from app.models import Document, Invoice, ValidationResult
 from app.rules.contract_rules import contract_rules
@@ -22,7 +22,6 @@ from app.services.ai import get_document_analyzer
 from app.services.audit_service import audit
 from app.services.document_requirements_service import required_types
 from app.services.file_service import LocalFileStorage
-from app.services.invoice_service import transition_invoice
 from app.services.supplier_service import supplier_requirement_status
 from app.services.validation_score_service import calculate_score
 from app.services.validation_settings_service import rule_parameters
@@ -49,11 +48,9 @@ def uuid_owner(db: Session, uuid: str | None, invoice_id: int) -> int | None:
 
 
 def run_validation(db: Session, invoice: Invoice, user_id: int | None = None) -> dict:
-    """Ejecuta las reglas y deja la factura en PREVALIDATED o REQUIRES_CORRECTION. No hace commit: el llamador
-    confirma la transaccion (y traduce una carrera sobre uq_invoices_uuid a 409)."""
-    if invoice.status in {InvoiceStatus.DRAFT, InvoiceStatus.REQUIRES_CORRECTION}:
-        transition_invoice(db, invoice, InvoiceStatus.UPLOADED, user_id)
-    transition_invoice(db, invoice, InvoiceStatus.VALIDATING, user_id)
+    """Ejecuta las reglas y guarda sus resultados sin cambiar el estatus: decidir si la factura pasa a "Enviada" le
+    corresponde al envio (submission_service). No hace commit: el llamador confirma la transaccion (y traduce una
+    carrera sobre uq_invoices_uuid a 409)."""
     audit(db, "VALIDATION_STARTED", "Invoice", invoice.id, user_id)
     started = time.perf_counter()
     logger.info("validation.started", extra={"event": "validation.started", "invoice_id": invoice.id})
@@ -141,10 +138,6 @@ def run_validation(db: Session, invoice: Invoice, user_id: int | None = None) ->
         )
     summary = calculate_score(results)
     invoice.validation_score = summary["score"]
-    target = (
-        InvoiceStatus.REQUIRES_CORRECTION if summary["blockers"] or summary["errors"] else InvoiceStatus.PREVALIDATED
-    )
-    transition_invoice(db, invoice, target, user_id)
     audit(db, "VALIDATION_COMPLETED", "Invoice", invoice.id, user_id, new=summary)
     logger.info(
         "validation.completed",
@@ -154,7 +147,7 @@ def run_validation(db: Session, invoice: Invoice, user_id: int | None = None) ->
             "duration_ms": round((time.perf_counter() - started) * 1000, 1),
             "score": summary["score"],
             "blockers": summary["blockers"],
-            "status": target.value,
+            "failures": summary["errors"],
         },
     )
     return {**summary, "results": results, "xml": xml_data}

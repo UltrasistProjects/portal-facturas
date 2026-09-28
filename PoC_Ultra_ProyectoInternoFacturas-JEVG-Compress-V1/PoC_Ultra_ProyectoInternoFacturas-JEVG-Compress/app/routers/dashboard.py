@@ -24,7 +24,6 @@ def dashboard(request: Request, notice: str = "", db: Session = Depends(get_db),
         "correction": counts.get(InvoiceStatus.REQUIRES_CORRECTION, 0),
         "accepted": counts.get(InvoiceStatus.ACCEPTED, 0),
         "rejected": counts.get(InvoiceStatus.REJECTED, 0),
-        "prevalidated": counts.get(InvoiceStatus.PREVALIDATED, 0),
     }
     recent = search_invoices(db, user, per_page=RECENT_INVOICES).items
     return templates.TemplateResponse(

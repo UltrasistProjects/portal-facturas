@@ -214,18 +214,27 @@ def main(passwords: dict[str, str] | None = None) -> None:
                 )
         db.commit()
 
+        # Modelo de estatus del ERS (HU-12/13): "Cargada" = obligatorios completos, lista para enviar; el envio de
+        # B-EXCEDE no procede por FIN-001. Las facturas enviadas o posteriores llevan submitted_at.
         scenarios = [
             ("BORRADOR-001", None, InvoiceStatus.DRAFT, "Borrador sin documentos"),
-            ("A-CORRECTA", "cfdi_demo_correcto.xml", InvoiceStatus.PREVALIDATED, "Caso A correcto"),
+            ("A-CORRECTA", "cfdi_demo_correcto.xml", InvoiceStatus.UPLOADED, "Caso A correcto"),
             ("REVISION-001", "cfdi_demo_correcto.xml", InvoiceStatus.UNDER_REVIEW, "Caso en revision"),
             ("ACEPTADA-001", "cfdi_demo_correcto.xml", InvoiceStatus.ACCEPTED, "Caso aceptado"),
             ("C-RFC-ERROR", "cfdi_demo_rfc_incorrecto.xml", InvoiceStatus.REJECTED, "Caso C RFC incorrecto"),
-            ("D-SIN-VOBO", "cfdi_demo_correcto.xml", InvoiceStatus.REQUIRES_CORRECTION, "Caso D falta Vo.Bo."),
+            ("D-SIN-VOBO", "cfdi_demo_correcto.xml", InvoiceStatus.DRAFT, "Caso D falta Vo.Bo."),
             ("CLICK-READY", "cfdi_demo_correcto.xml", InvoiceStatus.READY_FOR_CLICKBALANCE, "Lista para ClickBalance"),
             ("CLICK-DONE", "cfdi_demo_correcto.xml", InvoiceStatus.UPLOADED_TO_CLICKBALANCE, "Carga manual registrada"),
-            ("B-EXCEDE", "cfdi_demo_monto_excedido.xml", InvoiceStatus.REQUIRES_CORRECTION, "Caso B excede contrato"),
-            ("E-SEMANTICO", "cfdi_demo_correcto.xml", InvoiceStatus.PREVALIDATED, "Caso E semantico mock 0.93"),
+            ("B-EXCEDE", "cfdi_demo_monto_excedido.xml", InvoiceStatus.UPLOADED, "Caso B excede contrato"),
+            ("E-SEMANTICO", "cfdi_demo_correcto.xml", InvoiceStatus.UPLOADED, "Caso E semantico mock 0.93"),
         ]
+        submitted = {
+            InvoiceStatus.UNDER_REVIEW,
+            InvoiceStatus.ACCEPTED,
+            InvoiceStatus.REJECTED,
+            InvoiceStatus.READY_FOR_CLICKBALANCE,
+            InvoiceStatus.UPLOADED_TO_CLICKBALANCE,
+        }
         for index, (number, xml_name, final_status, note) in enumerate(scenarios, 1):
             invoice = Invoice(
                 internal_folio=f"FAC-2026-{index:05d}",
@@ -292,6 +301,8 @@ def main(passwords: dict[str, str] | None = None) -> None:
                 db.commit()
                 run_validation(db, invoice, users[2].id)
                 invoice.status = final_status
+                if final_status in submitted:
+                    invoice.submitted_at = datetime.now(timezone.utc)
                 if final_status in {InvoiceStatus.ACCEPTED, InvoiceStatus.REJECTED}:
                     invoice.reviewed_by = users[1].id
                     invoice.reviewed_at = datetime.now(timezone.utc)

@@ -178,9 +178,30 @@ tests/           pruebas críticas automatizadas
 
 ## Flujo funcional
 
-Login → alta de factura → carga/reemplazo documental → parser XML/PDF → reglas → score y evidencia → envío a revisión → aceptación/rechazo/corrección → marcado manual para ClickBalance.
+Login → alta de factura → carga/reemplazo documental → "Verificar" (opcional) → "Enviar a validación" (parser XML/PDF, reglas, score y evidencia) → decisión del PMO: autorizar, rechazar u observaciones → marcado manual para ClickBalance.
 
-El proveedor sólo observa sus facturas. `INTERNAL` revisa y decide. `ADMIN` añade administración de usuarios, proveedores, contratos, reglas visibles y Audit Log.
+El proveedor registra, carga, verifica y envía sus facturas, y sólo ve las suyas. `INTERNAL` (PMO) revisa y decide. `ADMIN` añade administración de usuarios, proveedores, contratos, reglas visibles y Audit Log. `INTERNAL` y `ADMIN` consultan las facturas y descargan sus documentos, pero no las registran, cargan, verifican ni envían (403).
+
+### Estatus de la factura
+
+Modelo del ERS (§3.6), fijado por EP-01 para el proveedor y el PMO:
+
+| Estatus | Clave | Cuándo | ¿El proveedor puede editar? |
+| --- | --- | --- | --- |
+| Borrador | `DRAFT` | Registrada; faltan archivos obligatorios | Sí |
+| Cargada | `UPLOADED` | Archivos obligatorios completos | Sí |
+| Enviada | `UNDER_REVIEW` | El envío superó las validaciones | No |
+| Autorizada | `ACCEPTED` | Decisión del PMO | No |
+| Rechazada | `REJECTED` | Decisión del PMO; es definitiva | No |
+| Observaciones | `REQUIRES_CORRECTION` | El PMO pidió correcciones | Sí: corrige y reenvía |
+| Lista para ClickBalance / Cargada a ClickBalance | `READY_FOR_CLICKBALANCE` / `UPLOADED_TO_CLICKBALANCE` | Marcado manual (lo resuelve HU-20) | No |
+
+- **Registro (HU-12):** el formulario usa el proveedor del usuario y sólo ofrece sus contratos activos; los de otros proveedores nunca llegan al navegador. Un proveedor que no está "Autorizado" no puede registrar (409). La factura nace en "Borrador" y cada carga o reemplazo de documento la pasa a "Cargada" o de vuelta a "Borrador" según los [archivos mínimos](#archivos-mínimos-por-tipo-de-proveedor); con los obligatorios completos, la carga documental avisa "Factura cargada. Ya puede enviarla a validación". "Observaciones" no se recalcula.
+- **Verificar:** ejecuta el motor y guarda sus resultados sin cambiar el estatus. El detalle lista las "Reglas que impiden el envío".
+- **Envío (HU-13):** "Enviar a validación", desde "Cargada" u "Observaciones", ejecuta el motor con la configuración vigente en ese momento. Sin ningún `FAIL`, la factura pasa a "Enviada" con `submitted_at` y la auditoría `INVOICE_SUBMITTED`. Con algún `FAIL` (crítico o error), responde 409, conserva el estatus y muestra cada regla que lo impide con el valor esperado y el detectado. Las advertencias no bloquean. Desde "Borrador" responde 409 ("Faltan archivos obligatorios") sin ejecutar el motor.
+- **Duplicados (RN-HU13-01):** el UUID del CFDI (folio fiscal) no se repite en ninguna otra factura, de ningún proveedor ni estatus, incluidas las rechazadas (FIN-004 y `uq_invoices_uuid`). El mensaje no revela datos de la otra factura.
+- **Concurrencia:** la carga, la verificación y el envío bloquean la fila de la factura, así que se ejecutan uno después del otro.
+- **Migración `0010_invoice_status_model`:** retira `VALIDATING`, `VALIDATION_FAILED` y `PREVALIDATED`. Las facturas previas al envío pasan a "Cargada" o "Borrador" según sus obligatorios, salvo las que el PMO devolvió y aún no se reenvían, que quedan en "Observaciones". Cada cambio queda en el Audit Log como `STATUS_MIGRATED`.
 
 ## Reglas implementadas
 
@@ -200,7 +221,7 @@ Cada regla evaluada aporta al denominador según severidad: `CRITICAL=35`, `ERRO
 
 ## Reglas de validación
 
-El Administrador define en **Administración › Reglas de validación** (`/admin/rules`) los datos de ULTRASIST y los parámetros del CFDI contra los que se comparan las facturas (HU-06). La migración `0007_validation_rules_catalogs` siembra los valores que antes estaban fijos en el código, y la siguiente prevalidación usa lo que se guarde.
+El Administrador define en **Administración › Reglas de validación** (`/admin/rules`) los datos de ULTRASIST y los parámetros del CFDI contra los que se comparan las facturas (HU-06). La migración `0007_validation_rules_catalogs` siembra los valores que antes estaban fijos en el código, y la siguiente verificación o envío usa lo que se guarde.
 
 | Regla | Compara | Severidad | Valor inicial |
 | --- | --- | --- | --- |
@@ -235,9 +256,9 @@ El Administrador define en **Administración › Reglas de validación** (`/admi
 
 El Administrador define en **Administración › Archivos mínimos** (`/admin/required-documents`) qué archivos debe cargar el proveedor con cada factura, por separado para el proveedor **Nacional** y el **Internacional** (`suppliers.origin`):
 
-| Nivel | En la carga documental | En la prevalidación |
+| Nivel | En la carga documental | En la verificación y el envío |
 | --- | --- | --- |
-| Obligatorio | Se ofrece; el checklist indica cuántos faltan | Si falta, su regla DOC resulta `FAIL` y la factura queda en "Requiere corrección" |
+| Obligatorio | Se ofrece; el checklist indica cuántos faltan y la factura sigue en "Borrador" | Si falta, su regla DOC resulta `FAIL` y el envío no procede |
 | Opcional | Se ofrece | No se exige |
 | No aplica | No se ofrece; el servidor rechaza la carga | No se exige |
 
@@ -246,7 +267,7 @@ El Administrador define en **Administración › Archivos mínimos** (`/admin/re
 - **Niveles fijos:** XML y PDF del CFDI son obligatorios para el Nacional y no aplican al Internacional; el Invoice, al revés. La pantalla los muestra con candado, el servidor rechaza cambiarlos (409) y la base de datos los garantiza con un `CHECK`.
 - **Tipos soporte:** el Administrador los da de alta (nombre, descripción, formatos y un nivel por origen, "No aplica" por defecto), los edita y los desactiva o reactiva. Su clave es `SOPORTE_<id>`. Nunca se borran, y los documentos ya cargados siguen visibles y descargables en el detalle de la factura. Los tipos del sistema no se editan ni se desactivan.
 - **Reglas:** DOC-001 (XML del CFDI, `CRITICAL`), DOC-002 (PDF del CFDI), DOC-003 (orden de compra) y DOC-004 (Vo.Bo.) resultan `PASS`/`FAIL` cuando su tipo es obligatorio para el origen y `NOT_APPLICABLE` en otro caso. DOC-008 evalúa el Invoice (`CRITICAL`) y DOC-009 genera un resultado por cada otro tipo obligatorio, con su clave en la fuente.
-- **Vigencia:** la configuración se lee en cada prevalidación. Una factura que ya salió de los estados editables conserva sus resultados; una editable se evalúa con la configuración vigente al volver a prevalidarse.
+- **Vigencia:** la configuración se lee en cada verificación y envío. Una factura que ya salió de los estados editables conserva sus resultados; una editable se evalúa con la configuración vigente al verificarse o enviarse. Si la configuración cambia, el estatus "Borrador"/"Cargada" se recalcula en la siguiente carga o en el envío.
 - **Concurrencia y auditoría:** el formulario lleva la huella `config_version`; si otro Administrador guardó antes, el guardado responde 409 sin cambios. Cada cambio queda en el Audit Log (`INVOICE_DOCUMENT_REQUIREMENTS_UPDATED`, `INVOICE_DOCUMENT_TYPE_CREATED`, `INVOICE_DOCUMENT_TYPE_UPDATED` e `INVOICE_DOCUMENT_TYPE_STATUS_CHANGED`) con los valores anterior y nuevo.
 
 **Probar con un proveedor internacional.** Los proveedores demo son nacionales; un internacional se prepara así:
@@ -464,7 +485,7 @@ Complete las variables Azure en `.env`, implemente la llamada HTTP/SDK dentro de
 
 ## Datos de demostración
 
-El seed crea 4 usuarios, 2 proveedores, 2 contratos, expedientes Anexo A, 10 facturas y Audit Log. Incluye: borrador, correcta, prevalidada, en revisión, aceptada, rechazada, corrección, excedente, RFC incorrecto, semántico y estados manuales de ClickBalance.
+El seed crea 4 usuarios, 2 proveedores, 2 contratos, expedientes Anexo A, 10 facturas y Audit Log. Incluye: borrador sin documentos (`BORRADOR-001`), borrador sin Vo.Bo. (`D-SIN-VOBO`), cargadas listas para enviar (`A-CORRECTA`, `E-SEMANTICO`), cargada cuyo envío no procede porque excede el contrato (`B-EXCEDE`), enviada (`REVISION-001`), autorizada, rechazada por RFC incorrecto y los estados manuales de ClickBalance. Todas son de `proveedor1@poc.local`.
 
 Los XML bajo `data/demo_documents/` son estructuralmente útiles para el parser, pero **no están timbrados ni son fiscalmente válidos**. El seed asigna a cada factura demo un UUID fiscal distinto y usa el PDF sintético versionado `data/demo_documents/factura_demo.pdf` (si faltara, lo genera en un directorio temporal sin modificar el repositorio).
 
@@ -475,7 +496,7 @@ Los XML bajo `data/demo_documents/` son estructuralmente útiles para el parser,
 - Sin pagos, banca, firma, SharePoint, Blob, Azure SQL, SSO, despliegue Azure, Kubernetes o colas.
 - Los adaptadores Azure son contratos preparados, no llamadas productivas.
 - Las Reglas de validación y los catálogos son editables, pero los pesos del score siguen en el código y no se pueden crear reglas nuevas desde la interfaz. Los catálogos se usan en la validación del CFDI; la moneda del contrato sigue siendo texto libre de tres letras.
-- Las facturas de proveedores internacionales sólo cumplen la parte documental: sin CFDI, las reglas XML y SUP-003 las dejan en "Requiere corrección" hasta que HU-16 defina sus validaciones y su expediente.
+- Las facturas de proveedores internacionales sólo cumplen la parte documental: sin CFDI, las reglas XML y SUP-003 resultan `FAIL` y el envío no procede hasta que HU-15/HU-16 definan sus importes, validaciones y expediente.
 - El portal envía las credenciales de los proveedores autorizados (HU-03), pero todavía ningún cambio de estatus de factura dispara correos: eso llega con HU-20 y HU-14. El envío es síncrono, sin cola ni reintentos automáticos.
 - La contraseña temporal no se resguarda aún en ClickCloud (falta su API), no expira y no hay recuperación de contraseña.
 - La verificación documental del Anexo A es presencia/vigencia referencial, no validación legal.

@@ -100,7 +100,7 @@ def test_factura_demo_sin_vobo_con_la_configuracion_inicial():
             for r in db.scalars(select(ValidationResult).where(ValidationResult.invoice_id == invoice.id))
             if r.category == "DOC"
         }
-    assert invoice.status == "REQUIRES_CORRECTION"
+    assert invoice.status == "DRAFT"
     assert [results[c].status for c in ("DOC-001", "DOC-002", "DOC-003")] == ["PASS"] * 3
     assert (results["DOC-004"].status, results["DOC-004"].message) == ("FAIL", "Falta Vo.Bo. del líder de proyecto")
     assert results["DOC-008"].status == "NOT_APPLICABLE"
@@ -664,6 +664,7 @@ def test_desactivacion_y_reactivacion(client, international, restore_catalog):
     login(client)
     assert set_status(client, hours.id, "true").status_code == 303
     assert type_by(id=hours.id).international_requirement == "REQUIRED"
+    login_international(client)
     page = client.get(f"/invoices/{other.id}/documents").text
     assert checklist_row(page, "Reporte de horas") == "Obligatorio · Pendiente"
 
@@ -721,22 +722,45 @@ def national_with_cfdi(client, *extra: tuple[str, str, bytes]):
     return invoice
 
 
-def test_factura_ya_prevalidada_conserva_sus_resultados(client, restore_catalog):
-    invoice = national_with_cfdi(client, ("PURCHASE_ORDER", "oc.txt", TXT), ("APPROVAL", "vobo.txt", TXT))
-    assert validate(client, invoice).status_code == 303
-    assert invoice_status(invoice.id) == "PREVALIDATED"
-    before = [(r.rule_code, r.status, r.message) for r in rule_results(invoice.id, "DOC-009")]
-    set_level("CONTRACT", NATIONAL, "REQUIRED")
-    assert rule_results(invoice.id, "DOC-009") == [] and before == []
+def submit(client, invoice):
     token = csrf(client, f"/invoices/{invoice.id}")
-    assert client.post(f"/invoices/{invoice.id}/submit", data={"csrf_token": token}).status_code == 200
+    return client.post(f"/invoices/{invoice.id}/submit", data={"csrf_token": token}, follow_redirects=False)
+
+
+def complete_national(client):
+    return national_with_cfdi(client, ("PURCHASE_ORDER", "oc.txt", TXT), ("APPROVAL", "vobo.txt", TXT))
+
+
+def test_factura_ya_enviada_conserva_sus_resultados(client, restore_catalog):
+    invoice = complete_national(client)
+    assert invoice_status(invoice.id) == "UPLOADED"
+    assert submit(client, invoice).status_code == 303
+    assert invoice_status(invoice.id) == "UNDER_REVIEW"
+    before = [(r.rule_code, r.status, r.message) for r in rule_results(invoice.id, "DOC-004")]
+    set_level("CONTRACT", NATIONAL, "REQUIRED")
+    assert rule_results(invoice.id, "DOC-009") == []
+    assert [(r.rule_code, r.status, r.message) for r in rule_results(invoice.id, "DOC-004")] == before
     assert invoice_status(invoice.id) == "UNDER_REVIEW"
 
 
-def test_factura_editable_prevalidada_de_nuevo(client, restore_catalog):
+def test_factura_en_observaciones_enviada_de_nuevo(client, restore_catalog):
+    invoice = complete_national(client)
+    assert submit(client, invoice).status_code == 303
+    login(client, "pmo@poc.local")
+    data = {"decision": "REQUIRES_CORRECTION", "comments": "Falta el contrato", "csrf_token": csrf(client, "/invoices")}
+    assert client.post(f"/invoices/{invoice.id}/review", data=data, follow_redirects=False).status_code == 303
+    set_level("CONTRACT", NATIONAL, "REQUIRED")
+    login(client, "proveedor1@poc.local")
+    assert submit(client, invoice).status_code == 409
+    [contract] = rule_results(invoice.id, "DOC-009")
+    assert (contract.status, contract.message, contract.source_document) == ("FAIL", "Falta Contrato", "CONTRACT")
+    assert invoice_status(invoice.id) == "REQUIRES_CORRECTION"
+
+
+def test_factura_editable_verificada_de_nuevo(client, restore_catalog):
     invoice = national_with_cfdi(client)
     assert validate(client, invoice).status_code == 303
-    assert invoice_status(invoice.id) == "REQUIRES_CORRECTION"
+    assert invoice_status(invoice.id) == "DRAFT"
     assert rule_results(invoice.id, "DOC-009") == []
     set_level("CONTRACT", NATIONAL, "REQUIRED")
     assert validate(client, invoice).status_code == 303
@@ -752,7 +776,7 @@ def test_factura_internacional_sin_invoice(client, international):
     for code in ("DOC-001", "DOC-002"):
         [result] = rule_results(invoice.id, code)
         assert (result.status, result.message) == ("NOT_APPLICABLE", "No requerido para proveedores internacionales")
-    assert invoice_status(invoice.id) == "REQUIRES_CORRECTION"
+    assert invoice_status(invoice.id) == "DRAFT"
     assert "rule-result not_applicable" in client.get(f"/invoices/{invoice.id}").text
 
 

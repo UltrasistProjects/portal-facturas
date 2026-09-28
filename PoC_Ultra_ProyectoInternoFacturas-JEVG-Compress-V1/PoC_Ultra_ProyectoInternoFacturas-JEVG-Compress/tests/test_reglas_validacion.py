@@ -264,7 +264,8 @@ def test_codigo_postal_distinto_en_una_factura(client):
     xml010 = stored_results(invoice.id)["XML-010"]
     assert (xml010.status, xml010.severity) == ("FAIL", "ERROR")
     assert (xml010.expected_value, xml010.detected_value) == ("03930", "06600")
-    assert invoice.status.value == "REQUIRES_CORRECTION"
+    # Verificar no cambia el estatus: la factura sin orden de compra ni Vo.Bo. sigue en "Borrador".
+    assert invoice.status.value == "DRAFT"
 
 
 def test_factura_demo_correcta(client):

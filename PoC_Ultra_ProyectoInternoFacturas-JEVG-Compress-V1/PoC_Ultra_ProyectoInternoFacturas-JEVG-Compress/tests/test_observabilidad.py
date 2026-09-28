@@ -82,7 +82,8 @@ def test_lineas_json_con_request_id_y_user_id(client):
     assert started["request_id"] == completed["request_id"]
     assert completed["user_id"] == provider
     assert completed["duration_ms"] >= 0 and "score" in completed and "blockers" in completed
-    assert completed["status"] in {"PREVALIDATED", "REQUIRES_CORRECTION"}
+    # La validacion ya no cambia el estatus (HU-13): el evento informa cuantas reglas impedirian el envio.
+    assert completed["failures"] >= 0 and "status" not in completed
     for entry in events:
         assert {"timestamp", "level", "logger", "message", "request_id"} <= set(entry)
 

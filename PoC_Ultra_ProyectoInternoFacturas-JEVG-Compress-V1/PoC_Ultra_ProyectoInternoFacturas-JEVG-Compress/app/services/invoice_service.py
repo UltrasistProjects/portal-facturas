@@ -20,9 +20,8 @@ from app.services.validation_score_service import calculate_score
 
 logger = logging.getLogger(__name__)
 
-# Estados en los que el expediente admite cambios de documentos.
-EDITABLE_STATUSES = frozenset({InvoiceStatus.DRAFT, InvoiceStatus.REQUIRES_CORRECTION, InvoiceStatus.VALIDATION_FAILED})
-PREVALIDATABLE_STATUSES = EDITABLE_STATUSES | {InvoiceStatus.UPLOADED}
+# Estados en los que el expediente admite cambios de documentos, verificacion y envio (EP-01 DT-01).
+EDITABLE_STATUSES = frozenset({InvoiceStatus.DRAFT, InvoiceStatus.UPLOADED, InvoiceStatus.REQUIRES_CORRECTION})
 REVIEW_TARGETS = {
     ReviewDecision.ACCEPTED: InvoiceStatus.ACCEPTED,
     ReviewDecision.REJECTED: InvoiceStatus.REJECTED,
@@ -45,6 +44,12 @@ def violates(exc: IntegrityError, constraint_name: str) -> bool:
     return getattr(getattr(exc.orig, "diag", None), "constraint_name", None) == constraint_name
 
 
+def lock_invoice(db: Session, invoice: Invoice) -> None:
+    """SELECT ... FOR UPDATE de la factura y recarga de su estatus y documentos: la carga, la verificacion y el envio
+    de una misma factura se ejecutan uno despues del otro (una carga no se cuela en una factura ya enviada)."""
+    db.refresh(invoice, with_for_update=True)
+
+
 def is_editable(invoice: Invoice) -> bool:
     return invoice.status in EDITABLE_STATUSES
 
@@ -54,9 +59,14 @@ def ensure_editable(invoice: Invoice) -> None:
         raise BusinessRuleError("El expediente no admite cambios en su estado actual")
 
 
-def ensure_prevalidatable(invoice: Invoice) -> None:
-    if invoice.status not in PREVALIDATABLE_STATUSES:
-        raise BusinessRuleError("La factura no puede prevalidarse en este estado")
+def sync_upload_status(db: Session, invoice: Invoice, complete: bool, user_id: int | None = None) -> None:
+    """ "Borrador" <-> "Cargada" segun si estan completos los archivos obligatorios (RN-HU12-01). Otro estatus no
+    cambia: "Observaciones" se conserva mientras el proveedor corrige. `complete` lo calcula quien llama con el
+    checklist de HU-04 (document_requirements_service ya depende de este modulo)."""
+    if invoice.status == InvoiceStatus.DRAFT and complete:
+        transition_invoice(db, invoice, InvoiceStatus.UPLOADED, user_id)
+    elif invoice.status == InvoiceStatus.UPLOADED and not complete:
+        transition_invoice(db, invoice, InvoiceStatus.DRAFT, user_id)
 
 
 def has_critical_blockers(validations: Iterable) -> bool:

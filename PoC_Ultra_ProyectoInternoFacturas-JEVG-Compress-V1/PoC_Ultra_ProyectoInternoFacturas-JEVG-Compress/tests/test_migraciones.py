@@ -533,3 +533,92 @@ def test_downgrade_del_perfil_con_datos(empty_db, sql):
     with pytest.raises(NotImplementedError, match="Restaure un respaldo"):
         command.downgrade(config, PASSWORD_CHANGE)
     assert PROFILE_COLUMNS <= supplier_columns(empty_db)
+
+
+INVOICE_STATUS_MODEL = "0010_invoice_status_model"
+NATIONAL_REQUIRED = ("INVOICE_XML", "INVOICE_PDF", "PURCHASE_ORDER", "APPROVAL")
+
+
+def add_invoice(url: str, number: str, status: str, document_types=(), decisions=()) -> None:
+    """Factura del primer proveedor, con un documento vigente por tipo y las revisiones en orden cronologico."""
+    execute(
+        url,
+        "INSERT INTO invoices (internal_folio, supplier_id, uploaded_by, invoice_number, service_period, project_name,"
+        " subtotal, tax, total, currency, status, created_at)"
+        f" SELECT 'FAC-{number}', s.id, u.id, '{number}', '08/2026', 'Proyecto', 0, 0, 0, 'MXN', '{status}', now()"
+        " FROM suppliers s, users u ORDER BY s.id, u.id LIMIT 1",
+    )
+    for document_type in document_types:
+        execute(
+            url,
+            "INSERT INTO documents (invoice_id, supplier_id, document_type, original_filename, stored_filename, path,"
+            " mime_type, file_size, sha256, uploaded_at, uploaded_by, processing_status, is_current)"
+            f" SELECT i.id, i.supplier_id, '{document_type}', 'a.pdf', 'a.pdf', 'invoices/1/a.pdf', 'application/pdf',"
+            " 1, repeat('0', 64), now(), i.uploaded_by, 'PROCESSED', true"
+            f" FROM invoices i WHERE i.invoice_number = '{number}'",
+        )
+    for minutes, decision in enumerate(decisions):
+        execute(
+            url,
+            "INSERT INTO reviews (invoice_id, reviewer_id, decision, comments, created_at)"
+            f" SELECT i.id, i.uploaded_by, '{decision}', 'Revision previa', now() + interval '{minutes} minutes'"
+            f" FROM invoices i WHERE i.invoice_number = '{number}'",
+        )
+
+
+def invoice_statuses(url: str) -> dict[str, str]:
+    return dict(query(url, "SELECT invoice_number, status FROM invoices"))
+
+
+def test_estatus_previos_al_envio_se_reasignan(empty_db):
+    config = alembic_config(empty_db)
+    command.upgrade(config, SUPPLIER_PROFILE)
+    insert_supplier(empty_db, NATIONAL_COLUMNS, NATIONAL_VALUES)
+    insert_user(empty_db, "previo@proveedor.mx", audited=False)
+    add_invoice(empty_db, "PREVALIDADA", "PREVALIDATED", NATIONAL_REQUIRED)
+    add_invoice(empty_db, "SIN-VOBO", "REQUIRES_CORRECTION", NATIONAL_REQUIRED[:3])
+    add_invoice(empty_db, "BORRADOR-COMPLETO", "DRAFT", NATIONAL_REQUIRED)
+    add_invoice(empty_db, "VALIDANDO", "VALIDATING")
+    # Devuelta por el PMO y prevalidada de nuevo sin reenviarse; el comentario posterior no es una decision.
+    add_invoice(empty_db, "DEVUELTA", "PREVALIDATED", NATIONAL_REQUIRED, ("REQUIRES_CORRECTION", "COMMENT"))
+    # Devuelta, reenviada y aceptada: ya no esta en un estatus previo al envio.
+    add_invoice(empty_db, "ACEPTADA", "ACCEPTED", NATIONAL_REQUIRED, ("REQUIRES_CORRECTION", "ACCEPTED"))
+    add_invoice(empty_db, "BORRADOR", "DRAFT")
+    command.upgrade(config, INVOICE_STATUS_MODEL)
+    assert invoice_statuses(empty_db) == {
+        "PREVALIDADA": "UPLOADED",
+        "SIN-VOBO": "DRAFT",
+        "BORRADOR-COMPLETO": "UPLOADED",
+        "VALIDANDO": "DRAFT",
+        "DEVUELTA": "REQUIRES_CORRECTION",
+        "ACEPTADA": "ACCEPTED",
+        "BORRADOR": "DRAFT",
+    }
+    migrated = query(
+        empty_db,
+        "SELECT i.invoice_number, a.old_value ->> 'status', a.new_value ->> 'status', a.user_id FROM audit_logs a"
+        " JOIN invoices i ON i.id::text = a.entity_id WHERE a.action = 'STATUS_MIGRATED' AND a.entity = 'Invoice'",
+    )
+    assert sorted(migrated) == [
+        ("BORRADOR-COMPLETO", "DRAFT", "UPLOADED", None),
+        ("DEVUELTA", "PREVALIDATED", "REQUIRES_CORRECTION", None),
+        ("PREVALIDADA", "PREVALIDATED", "UPLOADED", None),
+        ("SIN-VOBO", "REQUIRES_CORRECTION", "DRAFT", None),
+        ("VALIDANDO", "VALIDATING", "DRAFT", None),
+    ]
+
+
+def test_check_de_estatus_y_downgrade(empty_db):
+    config = alembic_config(empty_db)
+    command.upgrade(config, INVOICE_STATUS_MODEL)
+    insert_supplier(empty_db, NATIONAL_COLUMNS, NATIONAL_VALUES)
+    insert_user(empty_db, "previo@proveedor.mx", audited=False)
+    add_invoice(empty_db, "CARGADA", "UPLOADED", NATIONAL_REQUIRED)
+    with pytest.raises(IntegrityError, match="invoicestatus"):
+        execute(empty_db, "UPDATE invoices SET status = 'PREVALIDATED'")
+    command.downgrade(config, SUPPLIER_PROFILE)
+    assert invoice_statuses(empty_db) == {"CARGADA": "UPLOADED"}
+    execute(empty_db, "UPDATE invoices SET status = 'PREVALIDATED'")
+    execute(empty_db, "UPDATE invoices SET status = 'UPLOADED'")
+    command.upgrade(config, "head")
+    command.check(config)
