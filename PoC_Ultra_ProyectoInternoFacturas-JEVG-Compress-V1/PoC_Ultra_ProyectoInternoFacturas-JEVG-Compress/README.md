@@ -363,10 +363,20 @@ Un proveedor nace **"Registrado"** (carga masiva o formulario individual), sin u
   - si ya tenía su propio usuario `PROVIDER`, se autoriza sin credenciales nuevas.
 - **Credenciales (HU-03):** por cada proveedor autorizado sin usuario se crea un usuario `PROVIDER` con su correo del catálogo y una contraseña temporal aleatoria de 20 caracteres. El portal guarda sólo su hash. Después de confirmar la autorización se envía el correo "Credenciales de acceso" con el usuario, la contraseña y la dirección `/login` del servidor.
 - **Resumen:** tras autorizar, el listado muestra a cada proveedor con "Credenciales enviadas", "Envío fallido" (con el error), "Ya tenía usuario", "Omitido" o "No autorizado". Los proveedores cuyo último envío falló llevan la marca "Credenciales no enviadas".
-- **Expediente:** la sección "Acceso al portal" muestra el usuario, el último acceso y el último envío de credenciales. **"Reenviar credenciales"** genera una contraseña nueva (la anterior deja de funcionar), sólo mientras el proveedor no haya iniciado sesión.
+- **Expediente:** la sección "Acceso al portal" muestra el usuario, el último acceso, si la contraseña sigue siendo la temporal y el último envío de credenciales. **"Reenviar credenciales"** genera una contraseña temporal nueva (la anterior deja de funcionar), sólo mientras el proveedor no la haya cambiado, aunque ya haya entrado con ella.
 - **Auditoría:** `SUPPLIER_STATUS_CHANGED`, `USER_CREATED` (origen `SUPPLIER_AUTHORIZATION`), `SUPPLIER_BULK_AUTHORIZED` y `SUPPLIER_CREDENTIALS_RESENT`, sin contraseñas. En el log técnico queda `supplier.bulk_authorize` sólo con contadores.
 - **ClickCloud (RN-HU03-01):** `app/services/secret_vault.py` es el punto de integración. Recibe la contraseña temporal antes de confirmar la transacción; si falla, la autorización se revierte. Hoy el adaptador activo (`NullSecretVault`) no guarda nada: falta la API de ClickCloud.
-- **Pendiente de HU-10:** nada obliga todavía al proveedor a cambiar la contraseña temporal en su primer acceso, y la contraseña no expira.
+- **Primer acceso:** el proveedor debe cambiar la contraseña temporal antes de usar el portal; ver la sección siguiente.
+
+## Primer acceso y cambio de contraseña
+
+Toda contraseña que asigna otra persona deja al usuario con la marca `must_change_password` (HU-10, RF-06): la del proveedor autorizado, la del reenvío de credenciales y la del alta en **Administración › Usuarios**. Los usuarios demo del seed no la tienen.
+
+- **Cambio obligatorio:** con la marca, el inicio de sesión lleva a **Cambiar contraseña** (`/account/password`) y cualquier otra página o acción redirige ahí sin ejecutarse. Sólo quedan disponibles esa página y "Cerrar sesión".
+- **Validación:** pide la contraseña actual (la temporal), la nueva y su confirmación. La nueva debe cumplir la política de contraseñas (8 a 128 caracteres, letra, número y carácter especial, fuera de la lista de comunes), coincidir con la confirmación y ser distinta de la actual. Una contraseña actual incorrecta cuenta como intento fallido del correo: comparte la limitación de intentos del login.
+- **Al guardar:** se apaga la marca, se revocan todas las sesiones del usuario (quien hubiera entrado con la temporal queda fuera), se abre una sesión nueva y se registra `PASSWORD_CHANGED` en la auditoría, sin contraseñas, con `forced` verdadero o falso.
+- **Cambio voluntario:** cualquier usuario puede cambiar su contraseña desde "Cambiar contraseña" en el menú lateral.
+- **Migración `0008_password_change_required`:** marca a los usuarios que se crearon desde la aplicación (autorización o alta en Usuarios); en su siguiente acceso deben cambiar la contraseña. La contraseña temporal no expira y no hay recuperación de contraseña (fuera del MVP).
 
 ## Archivos y seguridad de PoC
 
@@ -467,7 +477,7 @@ Los XML bajo `data/demo_documents/` son estructuralmente útiles para el parser,
 - Las Reglas de validación y los catálogos son editables, pero los pesos del score siguen en el código y no se pueden crear reglas nuevas desde la interfaz. Los catálogos se usan en la validación del CFDI; la moneda del contrato sigue siendo texto libre de tres letras.
 - Las facturas de proveedores internacionales sólo cumplen la parte documental: sin CFDI, las reglas XML y SUP-003 las dejan en "Requiere corrección" hasta que HU-16 defina sus validaciones y su expediente.
 - El portal envía las credenciales de los proveedores autorizados (HU-03), pero todavía ningún cambio de estatus de factura dispara correos: eso llega con HU-20 y HU-14. El envío es síncrono, sin cola ni reintentos automáticos.
-- La contraseña temporal no se resguarda aún en ClickCloud (falta su API) y su cambio en el primer acceso llega con HU-10.
+- La contraseña temporal no se resguarda aún en ClickCloud (falta su API), no expira y no hay recuperación de contraseña.
 - La verificación documental del Anexo A es presencia/vigencia referencial, no validación legal.
 - Bootstrap 5.3.3 y Bootstrap Icons están incluidos bajo `app/static/vendor/`; la interfaz tampoco requiere Internet.
 

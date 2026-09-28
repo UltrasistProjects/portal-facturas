@@ -32,6 +32,7 @@
       {% endif %}
     </nav>
     <div class="sidebar-footer"><span class="role-pill">{{ user.role.value }}</span><strong>{{ user.name }}</strong><small>{{ user.email }}</small>
+      <a class="btn-link" href="/account/password">Cambiar contraseña</a>
       <form method="post" action="/logout"><input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}"><button class="btn-link">Cerrar sesion</button></form>
     </div>
   </aside>

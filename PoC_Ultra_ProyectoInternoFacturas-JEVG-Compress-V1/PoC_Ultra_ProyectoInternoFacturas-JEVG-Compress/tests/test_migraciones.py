@@ -424,3 +424,47 @@ def test_downgrade_de_reglas_modificadas(empty_db, sql):
     with pytest.raises(NotImplementedError, match="Restaure un respaldo"):
         command.downgrade(config, SUPPLIER_CREDENTIALS)
     assert VALIDATION_TABLES <= tables(empty_db)
+
+PASSWORD_CHANGE = "0008_password_change_required"
+
+
+def insert_user(url: str, email: str, *, audited: bool) -> None:
+    """Usuario previo a HU-10; con `audited`, como lo crean la autorizacion de proveedores o /admin/users."""
+    execute(
+        url,
+        "INSERT INTO users (name, email, password_hash, role, is_active, created_at, last_login_at)"
+        f" VALUES ('Usuario previo', '{email}', 'hash', 'PROVIDER', true, now(), now())",
+    )
+    if audited:
+        execute(
+            url,
+            "INSERT INTO audit_logs (action, entity, entity_id, timestamp)"
+            f" SELECT 'USER_CREATED', 'User', id::text, now() FROM users WHERE email = '{email}'",
+        )
+
+
+def test_usuarios_creados_desde_la_aplicacion_quedan_marcados(empty_db):
+    config = alembic_config(empty_db)
+    command.upgrade(config, VALIDATION_RULES)
+    # Aunque ya inicio sesion, conserva la contrasena que le asigno otra persona: nadie podia cambiarla.
+    insert_user(empty_db, "autorizado@proveedor.mx", audited=True)
+    insert_user(empty_db, "demo@poc.local", audited=False)
+    command.upgrade(config, PASSWORD_CHANGE)
+    marks = dict(query(empty_db, "SELECT email, must_change_password FROM users"))
+    assert marks == {"autorizado@proveedor.mx": True, "demo@poc.local": False}
+
+
+def test_downgrade_del_cambio_de_contrasena(empty_db):
+    config = alembic_config(empty_db)
+    command.upgrade(config, PASSWORD_CHANGE)
+    insert_user(empty_db, "autorizado@proveedor.mx", audited=True)
+    command.downgrade(config, VALIDATION_RULES)
+    columns = {
+        name
+        for (name,) in query(empty_db, "SELECT column_name FROM information_schema.columns WHERE table_name = 'users'")
+    }
+    assert "must_change_password" not in columns
+    assert query(empty_db, "SELECT count(*) FROM users") == [(1,)]
+    command.upgrade(config, "head")
+    command.check(config)
+

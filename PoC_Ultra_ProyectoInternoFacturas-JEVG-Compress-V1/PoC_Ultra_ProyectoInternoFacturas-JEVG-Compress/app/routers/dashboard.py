@@ -9,10 +9,12 @@ from app.routers.common import templates
 
 router = APIRouter()
 RECENT_INVOICES = 10
+# Avisos que llegan por ?notice= tras una redireccion (el portal no tiene mensajes flash); otro valor se ignora.
+NOTICES = {"password_changed": "Contraseña actualizada"}
 
 
 @router.get("/")
-def dashboard(request: Request, db: Session = Depends(get_db), user=Depends(get_current_user)):
+def dashboard(request: Request, notice: str = "", db: Session = Depends(get_db), user=Depends(get_current_user)):
     # KPIs agregados en SQL (COUNT ... GROUP BY y SUM exacta): no se cargan todas las facturas en memoria.
     counts = status_counts(db, user)
     kpis = {
@@ -25,4 +27,6 @@ def dashboard(request: Request, db: Session = Depends(get_db), user=Depends(get_
         "prevalidated": counts.get(InvoiceStatus.PREVALIDATED, 0),
     }
     recent = search_invoices(db, user, per_page=RECENT_INVOICES).items
-    return templates.TemplateResponse(request, "dashboard.html", {"user": user, "invoices": recent, "kpis": kpis})
+    return templates.TemplateResponse(
+        request, "dashboard.html", {"user": user, "invoices": recent, "kpis": kpis, "notice": NOTICES.get(notice)}
+    )

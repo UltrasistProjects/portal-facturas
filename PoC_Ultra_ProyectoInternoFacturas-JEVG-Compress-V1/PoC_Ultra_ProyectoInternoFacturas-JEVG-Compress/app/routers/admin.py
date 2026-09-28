@@ -75,6 +75,7 @@ async def create_user(
         password_hash=hash_password(data.password),
         role=data.role,
         supplier_id=data.supplier_id if data.role == Role.PROVIDER else None,
+        must_change_password=True,  # la asigno el Administrador: se cambia en el primer acceso (HU-10)
     )
     db.add(created)
     db.flush()

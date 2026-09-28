@@ -285,6 +285,7 @@ def test_usuario_creado_al_autorizar(client, registered_suppliers):
     user = portal_user(registered.id)
     assert (user.email, user.role, user.is_active) == ("contacto.mixto@acceso-proveedor.mx", Role.PROVIDER, True)
     assert user.name == registered.business_name and user.last_login_at is None
+    assert user.must_change_password  # HU-10: la temporal se cambia en el primer acceso
     password = password_for(user.email)
     assert len(password) == 20 and verify_password(password, user.password_hash)
 
@@ -296,8 +297,9 @@ def test_inicio_de_sesion_con_la_contrasena_temporal(client, registered_supplier
     password = password_for(registered.email)
     client.post("/logout", data={"csrf_token": csrf(client, "/")})
     response = login(client, registered.email, password)
-    assert response.status_code == 303 and response.headers["location"] == "/"
-    assert registered.business_name in client.get("/").text  # nombre del usuario en el menu lateral
+    # HU-10: con la contrasena temporal, el inicio de sesion lleva al cambio obligatorio.
+    assert response.status_code == 303 and response.headers["location"] == "/account/password"
+    assert registered.email in client.get("/account/password").text
 
 
 def test_contrasena_temporal_fuera_de_registros(client, registered_suppliers):
@@ -436,7 +438,27 @@ def test_expediente_de_un_proveedor_recien_autorizado(client, registered_supplie
     page = client.get(f"/suppliers/{registered.id}").text
     assert "Acceso al portal" in page and registered.email in page
     assert "<dt>Último acceso</dt><dd>Nunca</dd>" in page
+    assert "<dt>Contraseña</dt><dd>Temporal, pendiente de cambio</dd>" in page
     assert "Credenciales enviadas el " in page and "Reenviar credenciales" in page
+
+
+def test_expediente_despues_del_primer_cambio(client, registered_suppliers):
+    [registered] = registered_suppliers()
+    login(client)
+    authorize(client, [registered.id])
+    password = password_for(registered.email)
+    client.post("/logout", data={"csrf_token": csrf(client, "/")})
+    login(client, registered.email, password)
+    data = {"current_password": password, "new_password": "Portal#2026x", "confirm_password": "Portal#2026x"}
+    response = client.post(
+        "/account/password", data={**data, "csrf_token": csrf(client, "/account/password")}, follow_redirects=False
+    )
+    assert response.status_code == 303
+    client.post("/logout", data={"csrf_token": csrf(client, "/")})
+    login(client)
+    page = client.get(f"/suppliers/{registered.id}").text
+    assert "<dt>Contraseña</dt><dd>Cambiada por el proveedor</dd>" in page
+    assert "<dt>Último acceso</dt><dd>Nunca</dd>" not in page and "Reenviar credenciales" not in page
 
 
 def test_expediente_de_un_proveedor_registrado(client, registered_suppliers):
@@ -473,6 +495,22 @@ def test_reenvio_tras_un_envio_fallido(client, registered_suppliers, vault, monk
     assert login(client, registered.email, new_password).status_code == 303
 
 
+def test_reenvio_a_quien_entro_sin_cambiar_la_contrasena(client, registered_suppliers, vault):
+    [registered] = registered_suppliers()
+    login(client)
+    authorize(client, [registered.id])
+    first_password = vault.calls[0]["password"]
+    # Entro con la temporal pero no la cambio (HU-10): aun puede recibir credenciales nuevas.
+    _set_user(registered.id, last_login_at=datetime.now(timezone.utc))
+    assert "Reenviar credenciales</button>" in client.get(f"/suppliers/{registered.id}").text
+    response = resend(client, registered.id)
+    assert response.status_code == 303
+    user = portal_user(registered.id)
+    new_password = vault.calls[1]["password"]
+    assert new_password != first_password and verify_password(new_password, user.password_hash)
+    assert user.must_change_password
+
+
 def _set_user(supplier_id: int, **values) -> None:
     with SessionLocal() as db:
         db.execute(update(User).where(User.supplier_id == supplier_id).values(**values))
@@ -485,7 +523,7 @@ def _set_user(supplier_id: int, **values) -> None:
         ("registered", "Sólo se reenvían credenciales a proveedores autorizados."),
         ("without_user", "El proveedor no tiene usuario del portal."),
         ("disabled", "El usuario del proveedor está deshabilitado."),
-        ("logged_in", "El proveedor ya inició sesión; no se generan credenciales nuevas."),
+        ("password_changed", "El proveedor ya cambió su contraseña temporal; no se generan credenciales nuevas."),
     ],
 )
 def test_condiciones_del_reenvio(client, registered_suppliers, setup, message):
@@ -493,9 +531,13 @@ def test_condiciones_del_reenvio(client, registered_suppliers, setup, message):
         status=SupplierStatus.ACTIVE if setup == "without_user" else SupplierStatus.REGISTERED
     )
     login(client)
-    if setup in {"disabled", "logged_in"}:
+    if setup in {"disabled", "password_changed"}:
         authorize(client, [target.id])
-        values = {"is_active": False} if setup == "disabled" else {"last_login_at": datetime.now(timezone.utc)}
+        values = (
+            {"is_active": False}
+            if setup == "disabled"
+            else {"must_change_password": False, "last_login_at": datetime.now(timezone.utc)}
+        )
         _set_user(target.id, **values)
     user = portal_user(target.id)
     before_hash, before_deliveries, before_audit = (

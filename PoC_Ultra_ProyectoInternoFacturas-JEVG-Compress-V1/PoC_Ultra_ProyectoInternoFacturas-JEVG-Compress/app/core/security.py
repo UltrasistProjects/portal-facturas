@@ -36,7 +36,17 @@ async def validate_csrf(request: Request) -> None:
         raise HTTPException(status_code=403, detail="Token CSRF invalido")
 
 
-def get_current_user(request: Request, db: Annotated[Session, Depends(get_db)]):
+# Unica pagina disponible mientras el usuario conserve una contrasena asignada por otra persona (HU-10).
+PASSWORD_CHANGE_URL = "/account/password"
+
+
+class PasswordChangeRequired(Exception):
+    """El usuario debe cambiar la contrasena que le asigno otra persona. app.main la traduce a un 303 hacia
+    PASSWORD_CHANGE_URL."""
+
+
+def get_authenticated_user(request: Request, db: Annotated[Session, Depends(get_db)]):
+    """Usuario de la sesion vigente, sin exigir el cambio de contrasena: solo la usan las rutas de ese cambio."""
     from app.models import User
     from app.services import session_service
 
@@ -48,6 +58,13 @@ def get_current_user(request: Request, db: Annotated[Session, Depends(get_db)]):
         db.commit()  # renovacion por actividad; no hay otros cambios pendientes a esta altura
     request.state.user_id = user.id
     bind_user(user.id)
+    return user
+
+
+def get_current_user(user=Depends(get_authenticated_user)):
+    """Dependencia de toda ruta autenticada: con la marca de contrasena asignada, ninguna se ejecuta (HU-10)."""
+    if user.must_change_password:
+        raise PasswordChangeRequired()
     return user
 
 

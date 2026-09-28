@@ -44,7 +44,7 @@ MSG_SUPPLIER_NOT_FOUND = "Proveedor no encontrado"
 MSG_NOT_AUTHORIZED = "Sólo se reenvían credenciales a proveedores autorizados."
 MSG_NO_USER = "El proveedor no tiene usuario del portal."
 MSG_USER_DISABLED = "El usuario del proveedor está deshabilitado."
-MSG_ALREADY_LOGGED_IN = "El proveedor ya inició sesión; no se generan credenciales nuevas."
+MSG_PASSWORD_CHANGED = "El proveedor ya cambió su contraseña temporal; no se generan credenciales nuevas."
 
 
 def _email(supplier: Supplier) -> str:
@@ -122,6 +122,7 @@ def _create_user(db: Session, supplier: Supplier, admin: User, vault: secret_vau
         role=Role.PROVIDER,
         supplier_id=supplier.id,
         is_active=True,
+        must_change_password=True,  # contrasena temporal: se cambia en el primer acceso (HU-10)
     )
     db.add(user)
     try:
@@ -272,8 +273,9 @@ def authorization_summary(db: Session, audit_id: int) -> AuthorizationSummary | 
 
 
 def can_resend(supplier: Supplier, user: User | None) -> bool:
+    """Mientras el usuario conserve la contrasena temporal (marca de HU-10), haya entrado o no con ella."""
     return (
-        supplier.status == SupplierStatus.ACTIVE and user is not None and user.is_active and user.last_login_at is None
+        supplier.status == SupplierStatus.ACTIVE and user is not None and user.is_active and user.must_change_password
     )
 
 
@@ -289,10 +291,11 @@ def resend_credentials(db: Session, supplier_id: int, admin: User, portal_url: s
         raise BusinessRuleError(MSG_NO_USER)
     if not user.is_active:
         raise BusinessRuleError(MSG_USER_DISABLED)
-    if user.last_login_at is not None:
-        raise BusinessRuleError(MSG_ALREADY_LOGGED_IN)
+    if not user.must_change_password:
+        raise BusinessRuleError(MSG_PASSWORD_CHANGED)
     password = generate_password()
     user.password_hash = hash_password(password)
+    user.must_change_password = True
     secret_vault.get_vault().store_temporary_password(supplier_id=supplier.id, username=user.email, password=password)
     audit(db, "SUPPLIER_CREDENTIALS_RESENT", ENTITY, supplier.id, admin.id, new={"user_id": user.id})
     db.commit()

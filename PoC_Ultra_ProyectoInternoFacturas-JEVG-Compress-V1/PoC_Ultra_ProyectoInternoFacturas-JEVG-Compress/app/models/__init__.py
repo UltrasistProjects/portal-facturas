@@ -5,7 +5,19 @@ from decimal import Decimal
 from enum import StrEnum
 from typing import Any
 
-from sqlalchemy import Boolean, CheckConstraint, Date, ForeignKey, Index, String, Text, UniqueConstraint, event, func
+from sqlalchemy import (
+    Boolean,
+    CheckConstraint,
+    Date,
+    ForeignKey,
+    Index,
+    String,
+    Text,
+    UniqueConstraint,
+    event,
+    false,
+    func,
+)
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import Mapped, Session, mapped_column, relationship
@@ -59,6 +71,9 @@ class User(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=now_utc)
     last_login_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
+    # Contrasena asignada por otra persona (autorizacion, reenvio de credenciales o alta en /admin/users): el usuario
+    # debe cambiarla antes de usar el portal (HU-10). El seed crea sin marca.
+    must_change_password: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
     supplier: Mapped[Supplier | None] = relationship(back_populates="users")
 
 
