@@ -16,7 +16,14 @@ import fitz
 from sqlalchemy import select
 
 from app.core.config import settings
-from app.core.constants import SUPPLIER_REQUIREMENTS, DocumentType, InvoiceStatus, Role, SupplierType
+from app.core.constants import (
+    SUPPLIER_REQUIREMENTS,
+    DocumentType,
+    InvoiceStatus,
+    Role,
+    SupplierClassification,
+    SupplierType,
+)
 from app.core.database import SessionLocal
 from app.core.demo import DEMO_ACCOUNTS
 from app.core.passwords import generate_password
@@ -106,6 +113,14 @@ def main(passwords: dict[str, str] | None = None) -> None:
             economic_proposal=True,
             bank_information="CLABE DEMO terminacion 0001",
             notes="Proveedor completamente ficticio para demostracion.",
+            classification=SupplierClassification.EXTERNAL,
+            main_activity="54",
+            incorporation_date=date(2021, 1, 1),
+            website="https://www.tecnologia-integral.example",
+            legal_rep_name="Ana Martinez Ruiz (DEMO)",
+            legal_rep_phone="555-0111",
+            contact_name="Luis Gomez Ortiz (DEMO)",
+            contact_phone="555-0101",
         )
         physical = Supplier(
             business_name="Carlos Hernandez Lopez (DEMO)",
@@ -118,6 +133,13 @@ def main(passwords: dict[str, str] | None = None) -> None:
             economic_proposal=True,
             bank_information="CLABE DEMO terminacion 0002",
             notes="Identidad y RFC ficticios para pruebas.",
+            classification=SupplierClassification.EXTERNAL,
+            main_activity="54",
+            # Persona fisica: su representante legal es ella misma.
+            legal_rep_name="Carlos Hernandez Lopez (DEMO)",
+            legal_rep_phone="555-0102",
+            contact_name="Carlos Hernandez Lopez (DEMO)",
+            contact_phone="555-0102",
         )
         db.add_all([moral, physical])
         db.flush()

@@ -34,6 +34,21 @@ class SupplierOrigin(StrEnum):
     INTERNATIONAL = "INTERNATIONAL"
 
 
+class SupplierClassification(StrEnum):
+    INTERNAL = "INTERNAL"
+    EXTERNAL = "EXTERNAL"
+
+
+SUPPLIER_CLASSIFICATION_LABELS = {
+    SupplierClassification.INTERNAL: "Interno",
+    SupplierClassification.EXTERNAL: "Externo",
+}
+
+# Telefono del proveedor, de su contacto y de su representante legal: la misma regla que la carga masiva (HU-01).
+PHONE_FORMAT = r"[0-9+() -]{7,30}"
+PHONE_FORMAT_MESSAGE = "debe tener de 7 a 30 caracteres: digitos, espacios, +, (, ) o -"
+
+
 class ContractStatus(StrEnum):
     ACTIVE = "ACTIVE"
     INACTIVE = "INACTIVE"
@@ -188,17 +203,22 @@ BUSINESS_RULES = {
 }
 
 
+# Expediente del proveedor (Anexo A) por tipo de persona: los documentos que se pueden cargar. Cuentan para el
+# expediente minimo (SUP-003) salvo los opcionales y la propuesta economica sin cotizacion; los comprobantes de
+# domicilio alternativos cuentan como uno.
 SUPPLIER_REQUIREMENTS = {
     SupplierType.PERSONA_MORAL: [
         "DUE_DILIGENCE",
         "INCORPORATION_ACT",
         "LEGAL_REP_ID",
+        "LEGAL_REP_ADDRESS_PROOF",
         "TAX_STATUS",
         "SAT_OPINION",
         "ADDRESS_PROOF",
         "LOCATION",
         "BANK_STATEMENT",
         "ECONOMIC_PROPOSAL",
+        "SUPPLIER_CONTRACT",
     ],
     SupplierType.PERSONA_FISICA: [
         "OFFICIAL_ID",
@@ -208,8 +228,34 @@ SUPPLIER_REQUIREMENTS = {
         "LOCATION",
         "BANK_STATEMENT",
         "ECONOMIC_PROPOSAL",
+        "SUPPLIER_CONTRACT",
     ],
 }
+SUPPLIER_DOCUMENT_LABELS = {
+    "DUE_DILIGENCE": "Debida diligencia",
+    "INCORPORATION_ACT": "Acta constitutiva",
+    "LEGAL_REP_ID": "Identificación del representante legal",
+    "LEGAL_REP_ADDRESS_PROOF": "Comprobante de domicilio del representante legal",
+    "OFFICIAL_ID": "Identificación oficial",
+    "TAX_STATUS": "Cédula fiscal",
+    "SAT_OPINION": "Opinión de cumplimiento",
+    "ADDRESS_PROOF": "Comprobante de domicilio",
+    "LOCATION": "Ubicación",
+    "BANK_STATEMENT": "Estado de cuenta bancario",
+    "ECONOMIC_PROPOSAL": "Propuesta económica",
+    "SUPPLIER_CONTRACT": "Contrato",
+}
+# Dependen de la etapa del proceso (el contrato formaliza el expediente completo) o del nivel de riesgo.
+OPTIONAL_SUPPLIER_DOCUMENTS = {"SUPPLIER_CONTRACT", "DUE_DILIGENCE", "LOCATION"}
+# Obligatoria solo si el alta responde a una cotizacion o licitacion (Supplier.economic_proposal).
+QUOTATION_DOCUMENT = "ECONOMIC_PROPOSAL"
+# Requisitos que se cumplen con cualquiera de los dos documentos: el domicilio de la empresa o el del representante.
+ALTERNATIVE_SUPPLIER_DOCUMENTS = {
+    "ADDRESS_PROOF": "LEGAL_REP_ADDRESS_PROOF",
+    "LEGAL_REP_ADDRESS_PROOF": "ADDRESS_PROOF",
+}
+# Documentos con vigencia: advertencia (SUP-004) si su fecha tiene mas de tres meses.
+DATED_SUPPLIER_DOCUMENTS = {"TAX_STATUS", "SAT_OPINION", "ADDRESS_PROOF", "LEGAL_REP_ADDRESS_PROOF", "BANK_STATEMENT"}
 
 
 class NotificationEvent(StrEnum):
@@ -241,13 +287,15 @@ class DeliveryStatus(StrEnum):
 
 
 class CatalogType(StrEnum):
-    """Catalogos de referencia administrables (HU-07). Sus claves las usan las Reglas de Validacion (HU-06)."""
+    """Catalogos de referencia administrables (HU-07). Las claves del SAT las usan las Reglas de Validacion (HU-06);
+    las actividades economicas (sectores del SCIAN), la actividad principal del proveedor."""
 
     CURRENCY = "CURRENCY"
     CFDI_USE = "CFDI_USE"
     PAYMENT_FORM = "PAYMENT_FORM"
     PAYMENT_METHOD = "PAYMENT_METHOD"
     TAX_REGIME = "TAX_REGIME"
+    INDUSTRY = "INDUSTRY"
 
 
 CATALOG_LABELS = {
@@ -256,12 +304,14 @@ CATALOG_LABELS = {
     CatalogType.PAYMENT_FORM: "Formas de pago",
     CatalogType.PAYMENT_METHOD: "Métodos de pago",
     CatalogType.TAX_REGIME: "Regímenes fiscales",
+    CatalogType.INDUSTRY: "Actividades económicas",
 }
-# Formato de la clave por catalogo (claves del SAT) y su descripcion para los mensajes de error.
+# Formato de la clave por catalogo (claves del SAT y del SCIAN) y su descripcion para los mensajes de error.
 CATALOG_CODE_FORMATS = {
     CatalogType.CURRENCY: (r"[A-Z]{3}", "debe tener tres letras"),
     CatalogType.CFDI_USE: (r"[A-Z]{1,2}[0-9]{2}", "debe tener una o dos letras seguidas de dos dígitos"),
     CatalogType.PAYMENT_FORM: (r"[0-9]{2}", "debe tener dos dígitos"),
     CatalogType.PAYMENT_METHOD: (r"[A-Z]{3}", "debe tener tres letras"),
     CatalogType.TAX_REGIME: (r"[0-9]{3}", "debe tener tres dígitos"),
+    CatalogType.INDUSTRY: (r"[0-9]{2,6}", "debe tener de 2 a 6 dígitos (clave del SCIAN)"),
 }

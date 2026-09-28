@@ -26,7 +26,7 @@ from sqlalchemy import func, select, tuple_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.core.constants import SupplierOrigin, SupplierStatus, SupplierType
+from app.core.constants import PHONE_FORMAT, SupplierOrigin, SupplierStatus, SupplierType
 from app.core.countries import COUNTRIES
 from app.models import Supplier, User
 from app.services.audit_service import audit
@@ -58,7 +58,7 @@ RFC_PATTERN = re.compile(r"^[A-ZÑ&]{3,4}[0-9]{6}[A-Z0-9]{3}$")
 GENERIC_RFCS = {"XAXX010101000", "XEXX010101000"}
 RFC_LENGTH = {SupplierType.PERSONA_MORAL: (12, "moral"), SupplierType.PERSONA_FISICA: (13, "física")}
 TAX_ID_PATTERN = re.compile(r"^[A-Z0-9 ./-]{1,40}$")
-PHONE_PATTERN = re.compile(r"^[0-9+() -]{7,30}$")
+PHONE_PATTERN = re.compile(PHONE_FORMAT)
 SPACES = re.compile(r"\s+")
 XML_DECLARATIONS = re.compile(rb"<!(doctype|entity)", re.IGNORECASE)
 COLUMN_ORDER = {header: index for index, header in enumerate(HEADERS)}

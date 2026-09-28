@@ -110,7 +110,8 @@ def summaries(db: Session) -> list[CatalogSummary]:
 
 
 def in_use(db: Session) -> dict[CatalogType, set[str]]:
-    """Claves que usan las Reglas de Validacion: no se pueden desactivar (D4)."""
+    """Claves que usan las Reglas de Validacion: no se pueden desactivar (D4). Una actividad economica si: el
+    proveedor la conserva y el formulario de edicion la sigue ofreciendo."""
     settings = db.get(ValidationSettings, 1)
     return {
         CatalogType.CURRENCY: set(),
@@ -118,6 +119,7 @@ def in_use(db: Session) -> dict[CatalogType, set[str]]:
         CatalogType.PAYMENT_FORM: {settings.payment_form},
         CatalogType.PAYMENT_METHOD: {settings.payment_method},
         CatalogType.TAX_REGIME: {settings.receiver_tax_regime},
+        CatalogType.INDUSTRY: set(),
     }
 
 

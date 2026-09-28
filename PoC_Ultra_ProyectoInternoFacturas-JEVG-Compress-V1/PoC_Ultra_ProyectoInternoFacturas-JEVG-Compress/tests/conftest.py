@@ -167,6 +167,20 @@ def login(client, email="admin@poc.local", password=None):
     )
 
 
+# Perfil del proveedor que exigen el alta individual y la edicion para una persona moral.
+SUPPLIER_PROFILE_FORM = {
+    "phone": "55 5555 0000",
+    "classification": "EXTERNAL",
+    "main_activity": "54",
+    "incorporation_date": "2026-01-01",
+    "website": "www.serviciosnuevos.example",
+    "legal_rep_name": "Ana Martinez Ruiz",
+    "legal_rep_phone": "55 1234 5678",
+    "contact_name": "Luis Gomez Ortiz",
+    "contact_phone": "(55) 8765-4321",
+}
+
+
 def invoice_by_number(invoice_number: str):
     from sqlalchemy import select
 
@@ -274,12 +288,12 @@ def registered_suppliers():
         db.commit()
 
 
-def validation_rules_migration():
-    """Modulo de la migracion 0007: sus constantes son la siembra de las Reglas de Validacion y los catalogos."""
+def migration_module(revision: str):
+    """Modulo de una migracion: sus constantes son la siembra de datos de referencia."""
     import importlib.util
 
-    path = ROOT / "alembic" / "versions" / "0007_validation_rules_catalogs.py"
-    spec = importlib.util.spec_from_file_location("migration_0007", path)
+    path = ROOT / "alembic" / "versions" / f"{revision}.py"
+    spec = importlib.util.spec_from_file_location(f"migration_{revision}", path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -287,18 +301,20 @@ def validation_rules_migration():
 
 @pytest.fixture()
 def restore_validation_rules():
-    """Devuelve las Reglas de Validacion (HU-06) y los catalogos (HU-07) a la instalacion inicial: la base de la
-    sesion es compartida y el motor de otras pruebas espera la configuracion sembrada."""
+    """Devuelve las Reglas de Validacion (HU-06) y los catalogos (HU-07), incluidas las actividades economicas, a la
+    instalacion inicial: la base de la sesion es compartida y el motor de otras pruebas espera la configuracion
+    sembrada."""
     yield
     from sqlalchemy import delete, update
 
     from app.core.database import SessionLocal
     from app.models import CatalogEntry, ValidationSettings
 
-    seed = validation_rules_migration()
+    seed = migration_module("0007_validation_rules_catalogs")
+    entries = {**seed.ENTRIES, **migration_module("0009_supplier_profile").ENTRIES}
     with SessionLocal() as db:
         db.execute(update(ValidationSettings).values(**{k: v for k, v in seed.SETTINGS.items() if k != "id"}))
-        for catalog, rows in seed.ENTRIES.items():
+        for catalog, rows in entries.items():
             codes = [code for code, _ in rows]
             db.execute(delete(CatalogEntry).where(CatalogEntry.catalog == catalog, CatalogEntry.code.not_in(codes)))
             for code, name in rows:

@@ -10,7 +10,7 @@ def supplier_rules(supplier, contract, requirement_rows):
         and contract.status == ContractStatus.ACTIVE
         and contract.start_date <= date.today() <= contract.end_date
     )
-    minimum = all(r["present"] for r in requirement_rows)
+    minimum = all(r["present"] for r in requirement_rows if r["required"])
     validity = all(not r["expired"] for r in requirement_rows)
     return [
         outcome(

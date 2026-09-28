@@ -1,17 +1,50 @@
+import re
 from datetime import date
 from decimal import Decimal
+from urllib.parse import urlsplit
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, ValidationError, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    EmailStr,
+    Field,
+    ValidationError,
+    ValidationInfo,
+    field_validator,
+    model_validator,
+)
 
-from app.core.constants import FORMAT_EXTENSIONS, DocumentRequirement, Role, SupplierType
+from app.core.constants import (
+    FORMAT_EXTENSIONS,
+    PHONE_FORMAT,
+    PHONE_FORMAT_MESSAGE,
+    DocumentRequirement,
+    Role,
+    SupplierClassification,
+    SupplierType,
+)
 from app.core.passwords import validate_password
 
+MIN_INCORPORATION_DATE = date(1900, 1, 1)
 FIELD_LABELS = {
     "name": "Nombre",
     "email": "Correo",
     "password": "Contrasena",
     "business_name": "Razon social",
     "rfc": "RFC",
+    "supplier_type": "Tipo de persona",
+    "phone": "Telefono",
+    "bank_information": "Informacion bancaria",
+    "confidentiality_agreement": "Confidencialidad",
+    "economic_proposal": "Alta por cotizacion o licitacion",
+    "classification": "Clasificacion",
+    "main_activity": "Actividad principal",
+    "incorporation_date": "Fecha de constitucion",
+    "website": "Pagina web",
+    "legal_rep_name": "Nombre del representante legal",
+    "legal_rep_phone": "Telefono del representante legal",
+    "contact_name": "Nombre del contacto",
+    "contact_phone": "Telefono del contacto",
     "invoice_number": "Numero de factura",
     "service_period": "Periodo de servicio (MM/AAAA)",
     "project_name": "Proyecto",
@@ -30,6 +63,8 @@ ERROR_MESSAGES = {
     "string_pattern_mismatch": "tiene un formato invalido",
     "greater_than": "debe ser mayor que cero",
     "decimal_max_places": "admite a lo sumo 2 decimales",
+    "date_from_datetime_parsing": "no es una fecha valida",
+    "enum": "no es una opcion valida",
 }
 
 
@@ -73,11 +108,74 @@ class UserCreate(BaseModel):
         return validate_password(value)
 
 
-class SupplierCreate(BaseModel):
+class SupplierProfile(BaseModel):
+    """Datos del proveedor que capturan el alta individual y la edicion. La base de datos los admite vacios (proveedores
+    previos y carga masiva); aqui se exigen los obligatorios. Los campos vacios del formulario no se envian: faltan, y
+    una casilla sin marcar es falso. `supplier_type` va primero porque decide si aplica la fecha de constitucion; la
+    edicion lo toma del proveedor. En persona fisica el representante legal puede ser la misma persona."""
+
     model_config = ConfigDict(str_strip_whitespace=True)
-    business_name: str = Field(min_length=2, max_length=250)
-    rfc: str = Field(min_length=12, max_length=13)
     supplier_type: SupplierType
+    business_name: str = Field(min_length=2, max_length=250)
+    phone: str
+    classification: SupplierClassification
+    main_activity: str = Field(max_length=10)
+    incorporation_date: date | None = Field(None, validate_default=True)
+    website: str | None = None
+    legal_rep_name: str = Field(min_length=2, max_length=150)
+    legal_rep_phone: str
+    contact_name: str = Field(min_length=2, max_length=150)
+    contact_phone: str
+    # Opcional al registrar; el pago, que ocurre fuera del portal, la requiere.
+    bank_information: str | None = Field(None, max_length=255)
+    confidentiality_agreement: bool = False
+    # Alta por cotizacion o licitacion: exige la propuesta economica en el expediente.
+    economic_proposal: bool = False
+
+    @field_validator("incorporation_date")
+    @classmethod
+    def legal_entity_date(cls, value: date | None, info: ValidationInfo) -> date | None:
+        """Obligatoria para persona moral; no aplica a persona fisica, que no la guarda."""
+        supplier_type = info.data.get("supplier_type")
+        if supplier_type == SupplierType.PERSONA_FISICA:
+            return None
+        if value is None and supplier_type == SupplierType.PERSONA_MORAL:
+            raise ValueError("es obligatorio para persona moral")
+        if value and not MIN_INCORPORATION_DATE <= value <= date.today():
+            raise ValueError("debe estar entre 1900 y hoy")
+        return value
+
+    @field_validator("website")
+    @classmethod
+    def http_url(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        url = value if "://" in value else f"https://{value}"
+        try:
+            parts = urlsplit(url)
+            valid = parts.scheme.lower() in ("http", "https") and "." in (parts.hostname or "")
+            parts.port  # ValueError si el puerto no es numerico o esta fuera de rango
+        except ValueError:
+            valid = False
+        if not valid or len(url) > 255 or any(char.isspace() for char in url):
+            raise ValueError("no es una direccion web valida (http o https, hasta 255 caracteres)")
+        return url
+
+    @field_validator("phone", "legal_rep_phone", "contact_phone")
+    @classmethod
+    def phone_format(cls, value: str) -> str:
+        if not re.fullmatch(PHONE_FORMAT, value):
+            raise ValueError(PHONE_FORMAT_MESSAGE)
+        return value
+
+
+class SupplierUpdate(SupplierProfile):
+    """Edicion del Administrador. La identidad fiscal (origen, RFC, identificador extranjero, pais y tipo de persona)
+    y el correo, que es el usuario del portal (HU-03), no se editan."""
+
+
+class SupplierCreate(SupplierProfile):
+    rfc: str = Field(min_length=12, max_length=13)
     email: EmailStr
 
     @field_validator("rfc")

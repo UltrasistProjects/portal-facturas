@@ -394,7 +394,14 @@ def test_instalacion_nueva_con_reglas_y_catalogos(empty_db):
     )
     assert settings == [("ULT940623AG0", "ULTRASIST", "", "03930", "601", "PPD", "99", ["G03", "I04"], True, 1, None)]
     counts = dict(query(empty_db, "SELECT catalog, count(*) FROM catalog_entries WHERE is_active GROUP BY catalog"))
-    assert counts == {"CURRENCY": 3, "CFDI_USE": 24, "PAYMENT_FORM": 22, "PAYMENT_METHOD": 2, "TAX_REGIME": 19}
+    assert counts == {
+        "CURRENCY": 3,
+        "CFDI_USE": 24,
+        "PAYMENT_FORM": 22,
+        "PAYMENT_METHOD": 2,
+        "TAX_REGIME": 19,
+        "INDUSTRY": 20,
+    }
     currencies = query(empty_db, "SELECT code FROM catalog_entries WHERE catalog = 'CURRENCY' ORDER BY code")
     assert currencies == [("EUR",), ("MXN",), ("USD",)]
 
@@ -424,6 +431,7 @@ def test_downgrade_de_reglas_modificadas(empty_db, sql):
     with pytest.raises(NotImplementedError, match="Restaure un respaldo"):
         command.downgrade(config, SUPPLIER_CREDENTIALS)
     assert VALIDATION_TABLES <= tables(empty_db)
+
 
 PASSWORD_CHANGE = "0008_password_change_required"
 
@@ -468,3 +476,60 @@ def test_downgrade_del_cambio_de_contrasena(empty_db):
     command.upgrade(config, "head")
     command.check(config)
 
+
+SUPPLIER_PROFILE = "0009_supplier_profile"
+PROFILE_COLUMNS = {
+    "classification",
+    "main_activity",
+    "incorporation_date",
+    "website",
+    "legal_rep_name",
+    "legal_rep_phone",
+    "contact_name",
+    "contact_phone",
+}
+
+
+def test_proveedores_previos_sin_datos_de_perfil(empty_db):
+    config = alembic_config(empty_db)
+    command.upgrade(config, PASSWORD_CHANGE)
+    insert_supplier(empty_db, NATIONAL_COLUMNS, NATIONAL_VALUES)
+    command.upgrade(config, SUPPLIER_PROFILE)
+    assert PROFILE_COLUMNS <= supplier_columns(empty_db)
+    columns = ", ".join(sorted(PROFILE_COLUMNS))
+    assert query(empty_db, f"SELECT {columns} FROM suppliers") == [(None,) * len(PROFILE_COLUMNS)]
+    industries = query(empty_db, "SELECT count(*) FROM catalog_entries WHERE catalog = 'INDUSTRY' AND is_active")
+    assert industries == [(20,)]
+    with pytest.raises(IntegrityError, match="supplierclassification"):
+        execute(empty_db, "UPDATE suppliers SET classification = 'OTRA'")
+
+
+def test_downgrade_del_perfil_sin_datos(empty_db):
+    config = alembic_config(empty_db)
+    command.upgrade(config, SUPPLIER_PROFILE)
+    insert_supplier(empty_db, NATIONAL_COLUMNS, NATIONAL_VALUES)
+    command.downgrade(config, PASSWORD_CHANGE)
+    assert not PROFILE_COLUMNS & supplier_columns(empty_db)
+    assert query(empty_db, "SELECT count(*) FROM catalog_entries WHERE catalog = 'INDUSTRY'") == [(0,)]
+    assert query(empty_db, "SELECT count(*) FROM suppliers") == [(1,)]
+    command.upgrade(config, "head")
+    command.check(config)
+
+
+@pytest.mark.parametrize(
+    "sql",
+    [
+        "UPDATE suppliers SET contact_name = 'Contacto previo'",
+        "UPDATE catalog_entries SET is_active = false WHERE catalog = 'INDUSTRY' AND code = '54'",
+        "INSERT INTO catalog_entries (catalog, code, name, is_active, created_at, updated_at)"
+        " VALUES ('INDUSTRY', '5415', 'Servicios de diseño de sistemas de cómputo', true, now(), now())",
+    ],
+)
+def test_downgrade_del_perfil_con_datos(empty_db, sql):
+    config = alembic_config(empty_db)
+    command.upgrade(config, SUPPLIER_PROFILE)
+    insert_supplier(empty_db, NATIONAL_COLUMNS, NATIONAL_VALUES)
+    execute(empty_db, sql)
+    with pytest.raises(NotImplementedError, match="Restaure un respaldo"):
+        command.downgrade(config, PASSWORD_CHANGE)
+    assert PROFILE_COLUMNS <= supplier_columns(empty_db)

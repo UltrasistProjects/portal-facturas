@@ -7,7 +7,7 @@ from app.core.demo import DEMO_ACCOUNTS
 from app.core.passwords import generate_password, password_problems
 from app.core.security import verify_password
 from app.models import Contract, EmailDelivery, Invoice, Supplier, User
-from tests.conftest import csrf, login, supplier_by_email
+from tests.conftest import SUPPLIER_PROFILE_FORM, csrf, login, supplier_by_email
 
 
 def create_user(client, email="nuevo@ultrasist.com.mx", password="Portal#2026x", **extra):
@@ -88,6 +88,7 @@ def create_supplier(client, **overrides):
         "rfc": "SNU260101AB1",
         "supplier_type": "PERSONA_MORAL",
         "email": "contacto@serviciosnuevos.mx",
+        **SUPPLIER_PROFILE_FORM,
         **overrides,
     }
     return client.post("/suppliers", data={**data, "csrf_token": csrf(client, "/suppliers")})

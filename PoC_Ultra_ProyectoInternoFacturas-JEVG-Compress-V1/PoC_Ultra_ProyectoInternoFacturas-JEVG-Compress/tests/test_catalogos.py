@@ -130,6 +130,7 @@ def test_listado_de_catalogos(client):
         ("Formas de pago", "PAYMENT_FORM", "22", "22"),
         ("Métodos de pago", "PAYMENT_METHOD", "2", "2"),
         ("Regímenes fiscales", "TAX_REGIME", "19", "19"),
+        ("Actividades económicas", "INDUSTRY", "20", "20"),
     ]
 
 

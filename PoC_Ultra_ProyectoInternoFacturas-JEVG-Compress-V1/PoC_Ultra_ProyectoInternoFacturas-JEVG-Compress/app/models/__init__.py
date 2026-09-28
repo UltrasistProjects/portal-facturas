@@ -36,6 +36,7 @@ from app.core.constants import (
     Role,
     RuleStatus,
     Severity,
+    SupplierClassification,
     SupplierOrigin,
     SupplierStatus,
     SupplierType,
@@ -103,6 +104,17 @@ class Supplier(Base):
     economic_proposal: Mapped[bool] = mapped_column(Boolean, default=False)
     bank_information: Mapped[str | None] = mapped_column(String(255))
     notes: Mapped[str | None] = mapped_column(Text)
+    # Perfil del proveedor. Admite NULL: los proveedores previos y los de la carga masiva lo completan al editarse;
+    # el alta individual y la edicion exigen los obligatorios (SupplierProfile).
+    classification: Mapped[SupplierClassification | None] = mapped_column(enum_column(SupplierClassification))
+    # Clave del catalogo de actividades economicas (catalog_entries, INDUSTRY): el servicio exige que este activa.
+    main_activity: Mapped[str | None] = mapped_column(String(10))
+    incorporation_date: Mapped[date | None] = mapped_column(Date)
+    website: Mapped[str | None] = mapped_column(String(255))
+    legal_rep_name: Mapped[str | None] = mapped_column(String(150))
+    legal_rep_phone: Mapped[str | None] = mapped_column(String(30))
+    contact_name: Mapped[str | None] = mapped_column(String(150))
+    contact_phone: Mapped[str | None] = mapped_column(String(30))
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=now_utc)
     updated_at: Mapped[datetime] = mapped_column(UTCDateTime, default=now_utc, onupdate=now_utc)
     users: Mapped[list[User]] = relationship(back_populates="supplier")
