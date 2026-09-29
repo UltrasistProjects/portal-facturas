@@ -42,12 +42,11 @@ El folio interno SHALL derivarse del identificador asignado por la base de datos
 - **THEN** su folio comienza con `FAC-2026-`
 
 ### Requirement: Reglas de estado centralizadas en el servicio de facturas
-Las reglas de flujo SHALL residir en `invoice_service` y en el servicio de envío, y los routers MUST limitarse a invocarlas:
+Las reglas de flujo SHALL residir en `invoice_service`, en el servicio de envío y en el de revisión, y los routers MUST limitarse a invocarlas:
 - el conjunto de estados editables (`DRAFT`, `UPLOADED`, `REQUIRES_CORRECTION`);
 - el recálculo de "Borrador" y "Cargada";
 - el envío y su resultado;
-- la prohibición de aceptar con bloqueos críticos;
-- el siguiente estado de ClickBalance;
+- la decisión del PMO y la prohibición de aceptar con bloqueos críticos;
 - el resumen de validación, que SHALL reutilizar `calculate_score`.
 
 #### Scenario: Aceptación con bloqueo crítico
@@ -125,20 +124,19 @@ El estatus de la factura SHALL pertenecer a este catálogo, con estas etiquetas 
 | `ACCEPTED` | Autorizada |
 | `REJECTED` | Rechazada |
 | `REQUIRES_CORRECTION` | Observaciones |
-| `READY_FOR_CLICKBALANCE` | Lista para ClickBalance |
-| `UPLOADED_TO_CLICKBALANCE` | Cargada a ClickBalance |
 
 Las únicas transiciones permitidas SHALL ser:
 - `DRAFT → UPLOADED` y `UPLOADED → DRAFT`, que asigna el sistema según los archivos obligatorios;
 - `UPLOADED → UNDER_REVIEW` y `REQUIRES_CORRECTION → UNDER_REVIEW`, por un envío que procede;
-- `UNDER_REVIEW → ACCEPTED | REJECTED | REQUIRES_CORRECTION`, por la decisión del PMO;
-- `ACCEPTED → READY_FOR_CLICKBALANCE → UPLOADED_TO_CLICKBALANCE`.
+- `UNDER_REVIEW → ACCEPTED | REJECTED | REQUIRES_CORRECTION`, por la decisión del PMO.
+
+"Autorizada" y "Rechazada" son estatus finales en el MVP: los pasos de ClickBalance del PoC se retiraron (HU-20).
 
 Cualquier otra transición SHALL rechazarse con HTTP 409 sin cambios. Cada transición SHALL auditarse como `STATUS_CHANGED` con el estatus anterior y el nuevo. Sólo la decisión del PMO SHALL asignar `REQUIRES_CORRECTION`.
 
 #### Scenario: Etiquetas en el listado
 - **WHEN** un usuario abre el listado de facturas
-- **THEN** el filtro de estatus ofrece "Borrador", "Cargada", "Enviada", "Autorizada", "Rechazada", "Observaciones", "Lista para ClickBalance" y "Cargada a ClickBalance", y ninguna otra opción
+- **THEN** el filtro de estatus ofrece "Borrador", "Cargada", "Enviada", "Autorizada", "Rechazada" y "Observaciones", y ninguna otra opción
 
 #### Scenario: El PMO pide correcciones
 - **WHEN** un usuario INTERNAL envía la decisión `REQUIRES_CORRECTION` sobre una factura "Enviada"
@@ -147,6 +145,14 @@ Cualquier otra transición SHALL rechazarse con HTTP 409 sin cambios. Cada trans
 #### Scenario: Una validación fallida no asigna Observaciones
 - **WHEN** el proveedor envía una factura "Cargada" cuyo XML falla XML-002
 - **THEN** la factura sigue "Cargada"
+
+#### Scenario: Autorizada es final
+- **WHEN** se intenta cualquier transición desde una factura "Autorizada"
+- **THEN** la respuesta es HTTP 409 y la factura sigue "Autorizada"
+
+#### Scenario: Migración de ClickBalance
+- **WHEN** se aplica `0011_retire_clickbalance` sobre una base con facturas "Lista para ClickBalance" y "Cargada a ClickBalance"
+- **THEN** quedan "Autorizada" y cada una tiene un registro `STATUS_MIGRATED` con el estatus anterior y el nuevo
 
 ### Requirement: Borrador y Cargada según los archivos obligatorios
 Una factura SHALL crearse en "Borrador". Cada carga o reemplazo de documento SHALL recalcular su estatus con el checklist de archivos mínimos vigente para el origen de su proveedor: "Cargada" si no falta ningún obligatorio y "Borrador" si falta alguno. El recálculo SHALL aplicar sólo a "Borrador" y "Cargada"; una factura en "Observaciones" SHALL conservar su estatus. Con los obligatorios completos, la carga documental SHALL mostrar "Factura cargada. Ya puede enviarla a validación".

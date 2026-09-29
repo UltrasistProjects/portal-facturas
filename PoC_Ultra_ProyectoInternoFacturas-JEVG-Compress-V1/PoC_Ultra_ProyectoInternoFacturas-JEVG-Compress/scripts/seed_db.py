@@ -34,6 +34,9 @@ from app.services.file_service import LocalFileStorage
 from app.services.pdf_service import analyze_pdf
 from app.services.validation_engine import run_validation
 
+# Observaciones del PMO de la factura demo OBSERVACIONES-001: las ve el proveedor para corregir y reenviar.
+OBSERVATIONS_NOTE = "Falta el Vo.Bo. firmado del lider de proyecto."
+
 
 def create_demo_pdf(path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -340,8 +343,9 @@ def main(passwords: dict[str, str] | None = None) -> None:
             ("ACEPTADA-001", "cfdi_demo_correcto.xml", InvoiceStatus.ACCEPTED, "Caso aceptado"),
             ("C-RFC-ERROR", "cfdi_demo_rfc_incorrecto.xml", InvoiceStatus.REJECTED, "Caso C RFC incorrecto"),
             ("D-SIN-VOBO", "cfdi_demo_correcto.xml", InvoiceStatus.DRAFT, "Caso D falta Vo.Bo."),
-            ("CLICK-READY", "cfdi_demo_correcto.xml", InvoiceStatus.READY_FOR_CLICKBALANCE, "Lista para ClickBalance"),
-            ("CLICK-DONE", "cfdi_demo_correcto.xml", InvoiceStatus.UPLOADED_TO_CLICKBALANCE, "Carga manual registrada"),
+            # HU-20: devuelta por el PMO con observaciones, y una segunda factura por decidir.
+            ("OBSERVACIONES-001", "cfdi_demo_correcto.xml", InvoiceStatus.REQUIRES_CORRECTION, OBSERVATIONS_NOTE),
+            ("ENVIADA-002", "cfdi_demo_correcto.xml", InvoiceStatus.UNDER_REVIEW, "Caso por decidir"),
             ("B-EXCEDE", "cfdi_demo_monto_excedido.xml", InvoiceStatus.UPLOADED, "Caso B excede contrato"),
             ("E-SEMANTICO", "cfdi_demo_correcto.xml", InvoiceStatus.UPLOADED, "Caso E semantico mock 0.93"),
         ]
@@ -349,9 +353,9 @@ def main(passwords: dict[str, str] | None = None) -> None:
             InvoiceStatus.UNDER_REVIEW,
             InvoiceStatus.ACCEPTED,
             InvoiceStatus.REJECTED,
-            InvoiceStatus.READY_FOR_CLICKBALANCE,
-            InvoiceStatus.UPLOADED_TO_CLICKBALANCE,
+            InvoiceStatus.REQUIRES_CORRECTION,
         }
+        decided = {InvoiceStatus.ACCEPTED, InvoiceStatus.REJECTED, InvoiceStatus.REQUIRES_CORRECTION}
         for index, (number, xml_name, final_status, note) in enumerate(scenarios, 1):
             invoice = Invoice(
                 internal_folio=f"FAC-2026-{index:05d}",
@@ -420,7 +424,7 @@ def main(passwords: dict[str, str] | None = None) -> None:
                 invoice.status = final_status
                 if final_status in submitted:
                     invoice.submitted_at = datetime.now(timezone.utc)
-                if final_status in {InvoiceStatus.ACCEPTED, InvoiceStatus.REJECTED}:
+                if final_status in decided:
                     invoice.reviewed_by = users[1].id
                     invoice.reviewed_at = datetime.now(timezone.utc)
                     db.add(
@@ -428,7 +432,9 @@ def main(passwords: dict[str, str] | None = None) -> None:
                             invoice_id=invoice.id,
                             reviewer_id=users[1].id,
                             decision=final_status.value,
-                            comments=f"Decision demo: {note}",
+                            comments=note
+                            if final_status == InvoiceStatus.REQUIRES_CORRECTION
+                            else f"Decision demo: {note}",
                         )
                     )
             db.add(

@@ -11,7 +11,7 @@ from app.core.config import settings
 from app.core.constants import NotificationEvent
 from app.core.database import SessionLocal
 from app.core.demo import DEMO_ACCOUNTS
-from app.models import User
+from app.models import Invoice, User
 from app.services import notification_templates
 from tests.conftest import ROOT, TEST_PASSWORDS, csrf, invoice_by_number, login, supplier_by_email
 
@@ -110,16 +110,21 @@ def test_pdf_danado(client):
     assert failure["level"] == "WARNING" and failure["error_type"] and failure["error"]
 
 
-def test_sin_datos_sensibles_en_el_log(client):
+def test_sin_datos_sensibles_en_el_log(client, restore_notification_recipients):
     offset = log_offset()
     login(client, "proveedor1@poc.local", "Secreta#Incorrecta1")
     login(client, "proveedor1@poc.local")
     invoice_flow(client, "LOG-002", "LOG00002-0000-4000-8000-000000000002")
     client.post("/logout", data={"csrf_token": csrf(client, "/")})
     login(client, "pmo@poc.local")
-    review = invoice_by_number("REVISION-001")
+    # Decision real del PMO (HU-20) sobre la factura de esta prueba, con su correo al proveedor.
+    review = invoice_by_number("LOG-002")
+    with SessionLocal() as db:
+        db.get(Invoice, review.id).status = "UNDER_REVIEW"
+        db.commit()
     token = csrf(client, f"/invoices/{review.id}")
-    client.post(f"/invoices/{review.id}/review", data={"decision": "COMMENT", "comments": "ok", "csrf_token": token})
+    data = {"decision": "REQUIRES_CORRECTION", "comments": "Corrija el periodo", "csrf_token": token}
+    assert client.post(f"/invoices/{review.id}/review", data=data, follow_redirects=False).status_code == 303
     events = events_since(offset)
     assert any(e.get("event") == "review.decided" for e in events)
     content = json.dumps(events)

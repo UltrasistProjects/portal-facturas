@@ -2,7 +2,6 @@
 
 ## Purpose
 Cabeceras de seguridad en todas las respuestas y manejo de errores sin fuga de trazas, con los errores de negocio traducidos a códigos HTTP 4xx.
-
 ## Requirements
 ### Requirement: Cabeceras de seguridad en todas las respuestas
 Toda respuesta HTTP, incluidas las de archivos estáticos y las de error, SHALL incluir:
@@ -43,9 +42,9 @@ Las violaciones de reglas de negocio (transición de estado no permitida, restri
 - **WHEN** un usuario autenticado envía `POST /invoices/{id}/submit` con CSRF válido sobre una factura en `DRAFT`
 - **THEN** la respuesta es HTTP 409 con el mensaje de transición no permitida y la factura sigue en `DRAFT`
 
-#### Scenario: ClickBalance desde un estado inválido
-- **WHEN** un usuario INTERNAL envía `POST /invoices/{id}/clickbalance` sobre una factura en `UNDER_REVIEW`
-- **THEN** la respuesta es HTTP 409 y el estado no cambia
+#### Scenario: Decisión sobre una factura ya revisada
+- **WHEN** un usuario INTERNAL envía una decisión sobre una factura "Autorizada"
+- **THEN** la respuesta es HTTP 409 con "La factura ya fue revisada" y el estado no cambia
 
 #### Scenario: Petición JSON
 - **WHEN** una violación de regla de negocio ocurre en una petición con `Accept: application/json`

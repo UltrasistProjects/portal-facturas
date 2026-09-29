@@ -60,8 +60,9 @@ def test_seed_con_el_modelo_de_estatus_del_ers():
         "REVISION-001": "UNDER_REVIEW",
         "ACEPTADA-001": "ACCEPTED",
         "C-RFC-ERROR": "REJECTED",
-        "CLICK-READY": "READY_FOR_CLICKBALANCE",
-        "CLICK-DONE": "UPLOADED_TO_CLICKBALANCE",
+        # HU-20: los escenarios de ClickBalance se reemplazaron por una devuelta y una segunda por decidir.
+        "OBSERVACIONES-001": "REQUIRES_CORRECTION",
+        "ENVIADA-002": "UNDER_REVIEW",
     }
     for number, status in expected.items():
         invoice = invoice_by_number(number)

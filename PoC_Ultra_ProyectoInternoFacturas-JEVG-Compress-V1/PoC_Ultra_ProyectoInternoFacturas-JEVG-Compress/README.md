@@ -179,7 +179,7 @@ tests/           pruebas críticas automatizadas
 
 ## Flujo funcional
 
-Login → alta de factura → carga/reemplazo documental → "Verificar" (opcional) → "Enviar a validación" (parser XML/PDF, reglas, score y evidencia) → decisión del PMO: autorizar, rechazar u observaciones → marcado manual para ClickBalance.
+Login → alta de factura → carga/reemplazo documental → "Verificar" (opcional) → "Enviar a validación" (parser XML/PDF, reglas, score y evidencia) → decisión del PMO: autorizar, rechazar u observaciones, con su correo (Recepción de Facturas o el proveedor).
 
 El proveedor registra, carga, verifica y envía sus facturas, y sólo ve las suyas. `INTERNAL` (PMO) revisa y decide. `ADMIN` añade administración de usuarios, proveedores, contratos, reglas visibles y Audit Log. `INTERNAL` y `ADMIN` consultan las facturas y descargan sus documentos, pero no las registran, cargan, verifican ni envían (403).
 
@@ -195,7 +195,6 @@ Modelo del ERS (§3.6), fijado por EP-01 para el proveedor y el PMO:
 | Autorizada | `ACCEPTED` | Decisión del PMO | No |
 | Rechazada | `REJECTED` | Decisión del PMO; es definitiva | No |
 | Observaciones | `REQUIRES_CORRECTION` | El PMO pidió correcciones | Sí: corrige y reenvía |
-| Lista para ClickBalance / Cargada a ClickBalance | `READY_FOR_CLICKBALANCE` / `UPLOADED_TO_CLICKBALANCE` | Marcado manual (lo resuelve HU-20) | No |
 
 - **Registro (HU-12):** el formulario usa el proveedor del usuario y sólo ofrece sus contratos activos; los de otros proveedores nunca llegan al navegador. Un proveedor que no está "Autorizado" no puede registrar (409). La factura nace en "Borrador" y cada carga o reemplazo de documento la pasa a "Cargada" o de vuelta a "Borrador" según los [archivos mínimos](#archivos-mínimos-por-tipo-de-proveedor); con los obligatorios completos, la carga documental avisa "Factura cargada. Ya puede enviarla a validación". "Observaciones" no se recalcula.
 - **Verificar:** ejecuta el motor y guarda sus resultados sin cambiar el estatus. El detalle lista las "Reglas que impiden el envío".
@@ -292,7 +291,12 @@ El PMO (rol `INTERNAL`) y el Administrador revisan las facturas enviadas (HU-18,
 - **Bandeja:** **Facturas** abre en "Enviada", con las que más han esperado primero (orden por fecha de envío, también en las páginas siguientes). "Todos los estados" u otro estatus vuelven al orden por fecha de creación. El filtro de origen separa facturas nacionales e internacionales. Cada fila muestra proveedor, folio y número, origen, proyecto, fecha de envío, monto, score con el número de advertencias y estatus. El proveedor conserva su listado de siempre.
 - **Ver documentos:** el ícono del ojo abre el documento en una pestaña del portal. Las páginas de un PDF se muestran como imágenes renderizadas en el servidor (hasta 20 páginas); las imágenes se muestran tal cual y el XML o el texto, escapados (hasta 200,000 caracteres). El navegador nunca abre el PDF ni el XML como documento, así que no depende de su visor ni se relaja la CSP. La autorización es la de la descarga, que sigue siendo un adjunto.
 - **Detalle:** para el PMO y el Administrador, un bloque "Proveedor" (origen, identificador fiscal, correo y estatus) y el "Historial" con los envíos del proveedor y las revisiones (decisión, observaciones y revisor) en orden cronológico.
-- **Decisión:** por ahora sigue en "Revisar expediente"; los tres botones y los correos llegan con HU-20.
+- **Decisión (HU-20):** en el panel "Decisión" del detalle de una factura "Enviada" (el botón "Decidir" del encabezado lleva ahí), con tres botones:
+  - **Autorizar** pide confirmación y envía a Recepción de Facturas el correo "Autorizada" (RN-HU20-02: número, proveedor y monto total con moneda);
+  - **Observaciones** y **Rechazar** exigen las observaciones (hasta 2,000 caracteres; RN-HU20-01) y envían al correo del proveedor el correo respectivo con la causa (RN-HU20-03). Con Observaciones el proveedor corrige y reenvía; Rechazada y Autorizada son finales.
+- **Una decisión por envío:** la factura se bloquea al decidir; una segunda decisión responde 409 "La factura ya fue revisada" sin revisión ni correo.
+- **Correo de la decisión:** sale después de confirmarla; el detalle muestra "Correo enviado a …" o el error. Si el último envío falló, "Reenviar notificación" lo intenta de nuevo (auditoría `INVOICE_NOTIFICATION_RESENT`).
+- **ClickBalance:** los pasos manuales del PoC se retiraron; la migración `0011_retire_clickbalance` pasó sus facturas a "Autorizada" con auditoría `STATUS_MIGRATED`.
 
 ## Plantillas de correo
 
@@ -502,19 +506,19 @@ Complete las variables Azure en `.env`, implemente la llamada HTTP/SDK dentro de
 
 ## Datos de demostración
 
-El seed crea 5 usuarios, 3 proveedores, 3 contratos, expedientes Anexo A, 11 facturas y Audit Log. Incluye: borrador sin documentos (`BORRADOR-001`), borrador sin Vo.Bo. (`D-SIN-VOBO`), cargadas listas para enviar (`A-CORRECTA`, `E-SEMANTICO`), cargada cuyo envío no procede porque excede el contrato (`B-EXCEDE`), enviada (`REVISION-001`), autorizada, rechazada por RFC incorrecto y los estados manuales de ClickBalance. Esas diez son de `proveedor1@poc.local`; la undécima, `INV-2026-0042`, es del proveedor internacional `proveedor3@poc.local` y está cargada, lista para enviar.
+El seed crea 5 usuarios, 3 proveedores, 3 contratos, expedientes Anexo A, 11 facturas y Audit Log. Incluye: borrador sin documentos (`BORRADOR-001`), borrador sin Vo.Bo. (`D-SIN-VOBO`), cargadas listas para enviar (`A-CORRECTA`, `E-SEMANTICO`), cargada cuyo envío no procede porque excede el contrato (`B-EXCEDE`), enviada (`REVISION-001`), una segunda enviada por decidir (`ENVIADA-002`), autorizada, rechazada por RFC incorrecto y una devuelta con observaciones del PMO (`OBSERVACIONES-001`). Esas diez son de `proveedor1@poc.local`; la undécima, `INV-2026-0042`, es del proveedor internacional `proveedor3@poc.local` y está cargada, lista para enviar.
 
 Los XML bajo `data/demo_documents/` son estructuralmente útiles para el parser, pero **no están timbrados ni son fiscalmente válidos**. El seed asigna a cada factura demo un UUID fiscal distinto y usa el PDF sintético versionado `data/demo_documents/factura_demo.pdf` (si faltara, lo genera en un directorio temporal sin modificar el repositorio).
 
 ## Limitaciones y fuera de alcance
 
 - Sin validación SAT online, timbrado ni generación CFDI.
-- Sin integración real ClickBalance o SAP Ariba; ClickBalance es un estado manual.
+- Sin integración con ClickBalance ni SAP Ariba: el flujo del portal termina en "Autorizada".
 - Sin pagos, banca, firma, SharePoint, Blob, Azure SQL, SSO, despliegue Azure, Kubernetes o colas.
 - Los adaptadores Azure son contratos preparados, no llamadas productivas.
 - Las Reglas de validación y los catálogos son editables, pero los pesos del score siguen en el código y no se pueden crear reglas nuevas desde la interfaz. Los catálogos se usan en la validación del CFDI; la moneda del contrato sigue siendo texto libre de tres letras.
 - Las reglas `INT` del Invoice internacional buscan texto literal y aún no se calibran con invoices reales; no hay extracción automática de datos del Invoice.
-- El portal envía las credenciales de los proveedores autorizados (HU-03), pero todavía ningún cambio de estatus de factura dispara correos: eso llega con HU-20 y HU-14. El envío es síncrono, sin cola ni reintentos automáticos.
+- Los correos (credenciales, decisión del PMO) se envían de forma síncrona, sin cola ni reintentos automáticos; un envío fallido se reenvía a mano. El correo de cancelación llega con HU-14.
 - La contraseña temporal no se resguarda aún en ClickCloud (falta su API), no expira y no hay recuperación de contraseña.
 - La verificación documental del Anexo A es presencia/vigencia referencial, no validación legal.
 - Bootstrap 5.3.3 y Bootstrap Icons están incluidos bajo `app/static/vendor/`; la interfaz tampoco requiere Internet.

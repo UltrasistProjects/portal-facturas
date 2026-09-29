@@ -11,10 +11,10 @@ from uuid import uuid4
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.core.constants import ALLOWED_TRANSITIONS, InvoiceStatus, ReviewDecision, RuleStatus, Severity
-from app.core.errors import BusinessRuleError, InvalidInputError, InvalidTransitionError
+from app.core.constants import ALLOWED_TRANSITIONS, InvoiceStatus, RuleStatus, Severity
+from app.core.errors import BusinessRuleError, InvalidTransitionError
 from app.core.timeutils import to_business
-from app.models import Invoice, Review
+from app.models import Invoice
 from app.services.audit_service import audit
 from app.services.validation_score_service import calculate_score
 
@@ -22,11 +22,6 @@ logger = logging.getLogger(__name__)
 
 # Estados en los que el expediente admite cambios de documentos, verificacion y envio (EP-01 DT-01).
 EDITABLE_STATUSES = frozenset({InvoiceStatus.DRAFT, InvoiceStatus.UPLOADED, InvoiceStatus.REQUIRES_CORRECTION})
-REVIEW_TARGETS = {
-    ReviewDecision.ACCEPTED: InvoiceStatus.ACCEPTED,
-    ReviewDecision.REJECTED: InvoiceStatus.REJECTED,
-    ReviewDecision.REQUIRES_CORRECTION: InvoiceStatus.REQUIRES_CORRECTION,
-}
 
 
 def provisional_folio() -> str:
@@ -79,12 +74,6 @@ def ensure_can_accept(invoice: Invoice) -> None:
         raise BusinessRuleError("No se puede aceptar con bloqueos criticos")
 
 
-def next_clickbalance_status(invoice: Invoice) -> InvoiceStatus:
-    if invoice.status == InvoiceStatus.ACCEPTED:
-        return InvoiceStatus.READY_FOR_CLICKBALANCE
-    return InvoiceStatus.UPLOADED_TO_CLICKBALANCE
-
-
 def validation_summary(validations: Iterable) -> dict:
     return calculate_score(list(validations))
 
@@ -101,23 +90,3 @@ def transition_invoice(db: Session, invoice: Invoice, target: InvoiceStatus, use
         invoice.reviewed_at = now
         invoice.reviewed_by = user_id
     audit(db, "STATUS_CHANGED", "Invoice", invoice.id, user_id, {"status": old.value}, {"status": target.value})
-
-
-def review_invoice(db: Session, invoice: Invoice, decision: str, comments: str, reviewer_id: int) -> None:
-    if decision == ReviewDecision.COMMENT:
-        db.add(
-            Review(invoice_id=invoice.id, reviewer_id=reviewer_id, decision=ReviewDecision.COMMENT, comments=comments)
-        )
-        audit(db, "COMMENT_ADDED", "Invoice", invoice.id, reviewer_id, new={"comments": comments})
-        logger.info("review.decided", extra={"event": "review.decided", "invoice_id": invoice.id, "decision": decision})
-        return
-    target = REVIEW_TARGETS.get(decision)
-    if target is None:
-        raise InvalidInputError("Decision invalida")
-    if target == InvoiceStatus.ACCEPTED:
-        ensure_can_accept(invoice)
-    transition_invoice(db, invoice, target, reviewer_id)
-    invoice.comments = comments
-    db.add(Review(invoice_id=invoice.id, reviewer_id=reviewer_id, decision=decision, comments=comments))
-    audit(db, decision, "Invoice", invoice.id, reviewer_id, new={"comments": comments})
-    logger.info("review.decided", extra={"event": "review.decided", "invoice_id": invoice.id, "decision": decision})

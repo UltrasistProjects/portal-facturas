@@ -5,7 +5,7 @@ from zoneinfo import ZoneInfo
 
 import pytest
 from sqlalchemy import func, select, text
-from sqlalchemy.exc import IntegrityError, StatementError
+from sqlalchemy.exc import DataError, IntegrityError, StatementError
 
 from app.core.constants import SupplierOrigin, SupplierType
 from app.core.database import SessionLocal
@@ -166,6 +166,12 @@ def test_numero_unico_por_proveedor(db):
 def test_check_rechaza_valores_invalidos_por_sql_directo(db, sql):
     with pytest.raises(IntegrityError, match="violates check constraint"):
         db.execute(text(sql))
+
+
+def test_estatus_de_clickbalance_retirado(db):
+    # HU-20: la columna quedo en VARCHAR(19) y los estatus de ClickBalance ya no caben (ni estan en el CHECK).
+    with pytest.raises(DataError, match="value too long"):
+        db.execute(text("UPDATE invoices SET status = 'READY_FOR_CLICKBALANCE'"))
 
 
 def test_enmienda_con_monto_no_positivo_rechazada(db):

@@ -1,7 +1,7 @@
 import pytest
 from alembic import command
 from sqlalchemy import create_engine, text
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import DataError, IntegrityError
 from sqlalchemy.pool import NullPool
 
 from scripts import pgtools
@@ -620,5 +620,45 @@ def test_check_de_estatus_y_downgrade(empty_db):
     assert invoice_statuses(empty_db) == {"CARGADA": "UPLOADED"}
     execute(empty_db, "UPDATE invoices SET status = 'PREVALIDATED'")
     execute(empty_db, "UPDATE invoices SET status = 'UPLOADED'")
+    command.upgrade(config, "head")
+    command.check(config)
+
+
+RETIRE_CLICKBALANCE = "0011_retire_clickbalance"
+
+
+def test_clickbalance_pasa_a_autorizada(empty_db):
+    config = alembic_config(empty_db)
+    command.upgrade(config, INVOICE_STATUS_MODEL)
+    insert_supplier(empty_db, NATIONAL_COLUMNS, NATIONAL_VALUES)
+    insert_user(empty_db, "previo@proveedor.mx", audited=False)
+    add_invoice(empty_db, "LISTA", "READY_FOR_CLICKBALANCE", NATIONAL_REQUIRED, ("ACCEPTED",))
+    add_invoice(empty_db, "CARGADA-CB", "UPLOADED_TO_CLICKBALANCE", NATIONAL_REQUIRED, ("ACCEPTED",))
+    add_invoice(empty_db, "AUTORIZADA", "ACCEPTED", NATIONAL_REQUIRED, ("ACCEPTED",))
+    command.upgrade(config, RETIRE_CLICKBALANCE)
+    assert invoice_statuses(empty_db) == {"LISTA": "ACCEPTED", "CARGADA-CB": "ACCEPTED", "AUTORIZADA": "ACCEPTED"}
+    migrated = query(
+        empty_db,
+        "SELECT i.invoice_number, a.old_value ->> 'status', a.new_value ->> 'status' FROM audit_logs a"
+        " JOIN invoices i ON i.id::text = a.entity_id WHERE a.action = 'STATUS_MIGRATED' AND a.entity = 'Invoice'",
+    )
+    assert sorted(migrated) == [
+        ("CARGADA-CB", "UPLOADED_TO_CLICKBALANCE", "ACCEPTED"),
+        ("LISTA", "READY_FOR_CLICKBALANCE", "ACCEPTED"),
+    ]
+    with pytest.raises(DataError, match="value too long"):
+        execute(empty_db, "UPDATE invoices SET status = 'READY_FOR_CLICKBALANCE'")
+
+
+def test_downgrade_del_retiro_de_clickbalance(empty_db):
+    config = alembic_config(empty_db)
+    command.upgrade(config, RETIRE_CLICKBALANCE)
+    insert_supplier(empty_db, NATIONAL_COLUMNS, NATIONAL_VALUES)
+    insert_user(empty_db, "previo@proveedor.mx", audited=False)
+    add_invoice(empty_db, "AUTORIZADA", "ACCEPTED", NATIONAL_REQUIRED, ("ACCEPTED",))
+    command.downgrade(config, INVOICE_STATUS_MODEL)
+    assert invoice_statuses(empty_db) == {"AUTORIZADA": "ACCEPTED"}
+    execute(empty_db, "UPDATE invoices SET status = 'READY_FOR_CLICKBALANCE'")
+    execute(empty_db, "UPDATE invoices SET status = 'ACCEPTED'")
     command.upgrade(config, "head")
     command.check(config)

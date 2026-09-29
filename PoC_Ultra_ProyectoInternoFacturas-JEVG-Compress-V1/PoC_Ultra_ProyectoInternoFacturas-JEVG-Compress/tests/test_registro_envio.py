@@ -27,9 +27,7 @@ LABELS = [
     "Autorizada",
     "Rechazada",
     "Observaciones",
-    "Lista para ClickBalance",
-    "Cargada a ClickBalance",
-]
+]  # Sin los pasos de ClickBalance, retirados con HU-20
 
 
 def unique(prefix: str = "HU12") -> str:

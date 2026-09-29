@@ -29,7 +29,7 @@ from app.models import Contract, Document, Invoice, ValidationResult
 from app.repositories.invoice_repository import get_visible_invoice, inbox_status, search_invoices, warning_counts
 from app.routers.common import templates
 from app.schemas import InvoiceCreate, validation_message
-from app.services import catalog_service
+from app.services import catalog_service, review_service
 from app.services import document_requirements_service as requirements
 from app.services import document_view_service as document_view
 from app.services import foreign_invoice_service as foreign
@@ -41,11 +41,8 @@ from app.services.invoice_service import (
     internal_folio,
     is_editable,
     lock_invoice,
-    next_clickbalance_status,
     provisional_folio,
-    review_invoice,
     sync_upload_status,
-    transition_invoice,
     validation_summary,
     violates,
 )
@@ -232,7 +229,14 @@ async def create_invoice(
 
 
 def _detail_page(
-    request: Request, db: Session, invoice, user, notice: str | None = None, submit_blocked=False, status_code=200
+    request: Request,
+    db: Session,
+    invoice,
+    user,
+    notice: str | None = None,
+    submit_blocked=False,
+    status_code=200,
+    notification: str = "",
 ):
     """Detalle de la factura. Tambien es la respuesta 409 de un envio que no procede (submit_blocked): muestra las
     reglas en FAIL que se acaban de guardar."""
@@ -282,6 +286,14 @@ def _detail_page(
             # Proveedor e historial de revision para el PMO y el Administrador (HU-19).
             "reviewer": reviewer,
             "history": history(db, invoice) if reviewer else [],
+            # Decision del PMO (HU-20): panel, resultado del correo de la URL y reenvio si el ultimo envio fallo.
+            "can_decide": reviewer and invoice.status == InvoiceStatus.UNDER_REVIEW,
+            "can_resend": reviewer and review_service.can_resend(db, invoice),
+            "delivery": review_service.invoice_delivery(db, invoice, int(notification))
+            if reviewer and notification.isdigit()
+            else None,
+            "delivery_error": reviewer and notification == "error",
+            "max_observations": review_service.MAX_OBSERVATIONS,
             "invoice_readable": (invoice_doc.metadata_json or {}).get("has_extractable_text") if invoice_doc else None,
         },
         status_code=status_code,
@@ -290,9 +302,14 @@ def _detail_page(
 
 @router.get("/{invoice_id}")
 def invoice_detail(
-    invoice_id: int, request: Request, notice: str = "", db: Session = Depends(get_db), user=Depends(get_current_user)
+    invoice_id: int,
+    request: Request,
+    notice: str = "",
+    notification: str = "",
+    db: Session = Depends(get_db),
+    user=Depends(get_current_user),
 ):
-    return _detail_page(request, db, _invoice_or_404(db, invoice_id, user), user, notice)
+    return _detail_page(request, db, _invoice_or_404(db, invoice_id, user), user, notice, notification=notification)
 
 
 def _documents_page(
@@ -585,15 +602,19 @@ async def submit(invoice_id: int, request: Request, db: Session = Depends(get_db
     return _detail_page(request, db, invoice, user, submit_blocked=True, status_code=409)
 
 
+reviewers_only = require_roles(Role.INTERNAL, Role.ADMIN)
+
+
 @router.get("/{invoice_id}/review")
-def review_page(
-    invoice_id: int,
-    request: Request,
-    db: Session = Depends(get_db),
-    user=Depends(require_roles(Role.INTERNAL, Role.ADMIN)),
-):
-    invoice = _invoice_or_404(db, invoice_id, user)
-    return templates.TemplateResponse(request, "invoices/review.html", {"user": user, "invoice": invoice})
+def review_page(invoice_id: int):
+    """La decision vive en el panel del detalle (HU-20); la pagina aparte se retiro."""
+    return RedirectResponse(f"/invoices/{invoice_id}#decision", status_code=303)
+
+
+def _notification_redirect(invoice: Invoice, delivery) -> RedirectResponse:
+    """Al detalle con el resultado del correo: el id del envio, o `error` si no pudo componerse."""
+    result = delivery.id if delivery else "error"
+    return RedirectResponse(f"/invoices/{invoice.id}?notification={result}#decision-result", status_code=303)
 
 
 @router.post("/{invoice_id}/review")
@@ -603,24 +624,23 @@ async def review_action(
     decision: str = Form(...),
     comments: str = Form(""),
     db: Session = Depends(get_db),
-    user=Depends(require_roles(Role.INTERNAL, Role.ADMIN)),
+    user=Depends(reviewers_only),
 ):
+    """Decision del PMO (HU-20): se confirma y despues sale el correo, que no la revierte si falla."""
     await validate_csrf(request)
     invoice = _invoice_or_404(db, invoice_id, user)
-    review_invoice(db, invoice, decision, comments, user.id)
+    review = review_service.decide(db, invoice, decision, comments, user.id)
     db.commit()
-    return RedirectResponse(f"/invoices/{invoice.id}", status_code=303)
+    return _notification_redirect(invoice, review_service.notify_decision(db, invoice, review))
 
 
-@router.post("/{invoice_id}/clickbalance")
-async def clickbalance(
-    invoice_id: int,
-    request: Request,
-    db: Session = Depends(get_db),
-    user=Depends(require_roles(Role.INTERNAL, Role.ADMIN)),
+@router.post("/{invoice_id}/notification")
+async def resend_notification(
+    invoice_id: int, request: Request, db: Session = Depends(get_db), user=Depends(reviewers_only)
 ):
+    """Reenvio del correo de la decision cuando el ultimo envio fallo (HU-20, D5)."""
     await validate_csrf(request)
     invoice = _invoice_or_404(db, invoice_id, user)
-    transition_invoice(db, invoice, next_clickbalance_status(invoice), user.id)
+    observations = review_service.prepare_resend(db, invoice, user.id)
     db.commit()
-    return RedirectResponse(f"/invoices/{invoice.id}", status_code=303)
+    return _notification_redirect(invoice, review_service.send_notification(db, invoice, observations, user.id))

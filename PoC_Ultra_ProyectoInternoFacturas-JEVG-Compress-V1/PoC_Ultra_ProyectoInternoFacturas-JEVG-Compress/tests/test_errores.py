@@ -34,13 +34,14 @@ def test_submit_en_borrador_responde_409_sin_cambiar_estado(client):
     assert invoice_by_number("BORRADOR-001").status == InvoiceStatus.DRAFT
 
 
-def test_clickbalance_desde_revision_responde_409(client):
-    invoice = invoice_by_number("REVISION-001")
+def test_decision_sobre_factura_ya_revisada_responde_409(client):
+    invoice = invoice_by_number("ACEPTADA-001")
     login(client, "pmo@poc.local")
     token = csrf(client, f"/invoices/{invoice.id}")
-    response = client.post(f"/invoices/{invoice.id}/clickbalance", data={"csrf_token": token}, follow_redirects=False)
-    assert response.status_code == 409
-    assert invoice_by_number("REVISION-001").status == InvoiceStatus.UNDER_REVIEW
+    data = {"decision": "REJECTED", "comments": "Tarde", "csrf_token": token}
+    response = client.post(f"/invoices/{invoice.id}/review", data=data, follow_redirects=False)
+    assert response.status_code == 409 and "La factura ya fue revisada" in response.text
+    assert invoice_by_number("ACEPTADA-001").status == InvoiceStatus.ACCEPTED
 
 
 def test_error_de_negocio_en_json(client):

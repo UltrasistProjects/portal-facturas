@@ -1,3 +1,4 @@
+import re
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from types import SimpleNamespace
@@ -121,7 +122,10 @@ def test_busqueda_por_razon_social(client):
     login(client, "pmo@poc.local")
     # status vacio = "Todos los estados": sin el, el PMO abre su bandeja de Enviadas (HU-18).
     page = client.get("/invoices", params={"q": "tecnologia INTEGRAL", "status": ""}).text
-    assert invoice_by_number("A-CORRECTA").internal_folio in page
+    # Cada fila es de ese proveedor (la primera celda del PMO es la razon social); otras pruebas agregan facturas
+    # suyas, asi que una factura concreta del seed puede no estar en la primera pagina.
+    suppliers = re.findall(r"<tr><td><strong>([^<]+)</strong>", page)
+    assert suppliers and set(suppliers) == {"Tecnologia Integral del Centro SA de CV"}
 
 
 def test_comodines_literales(client):

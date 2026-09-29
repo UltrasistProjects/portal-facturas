@@ -65,7 +65,7 @@ class ProcessingStatus(StrEnum):
 
 class InvoiceStatus(StrEnum):
     """Modelo de estatus del ERS (EP-01, DT-01). Se conservan las claves que ya significaban lo mismo; cambia la
-    etiqueta. READY_FOR_CLICKBALANCE y UPLOADED_TO_CLICKBALANCE los resuelve HU-20."""
+    etiqueta. Los pasos de ClickBalance del PoC se retiraron con HU-20: Autorizada y Rechazada son finales."""
 
     DRAFT = "DRAFT"
     UPLOADED = "UPLOADED"
@@ -73,8 +73,6 @@ class InvoiceStatus(StrEnum):
     ACCEPTED = "ACCEPTED"
     REJECTED = "REJECTED"
     REQUIRES_CORRECTION = "REQUIRES_CORRECTION"
-    READY_FOR_CLICKBALANCE = "READY_FOR_CLICKBALANCE"
-    UPLOADED_TO_CLICKBALANCE = "UPLOADED_TO_CLICKBALANCE"
 
 
 STATUS_LABELS = {
@@ -84,8 +82,6 @@ STATUS_LABELS = {
     InvoiceStatus.ACCEPTED: "Autorizada",
     InvoiceStatus.REJECTED: "Rechazada",
     InvoiceStatus.REQUIRES_CORRECTION: "Observaciones",
-    InvoiceStatus.READY_FOR_CLICKBALANCE: "Lista para ClickBalance",
-    InvoiceStatus.UPLOADED_TO_CLICKBALANCE: "Cargada a ClickBalance",
 }
 
 
@@ -186,8 +182,6 @@ ALLOWED_TRANSITIONS: dict[InvoiceStatus, set[InvoiceStatus]] = {
     InvoiceStatus.UPLOADED: {InvoiceStatus.DRAFT, InvoiceStatus.UNDER_REVIEW},
     InvoiceStatus.REQUIRES_CORRECTION: {InvoiceStatus.UNDER_REVIEW},
     InvoiceStatus.UNDER_REVIEW: {InvoiceStatus.ACCEPTED, InvoiceStatus.REJECTED, InvoiceStatus.REQUIRES_CORRECTION},
-    InvoiceStatus.ACCEPTED: {InvoiceStatus.READY_FOR_CLICKBALANCE},
-    InvoiceStatus.READY_FOR_CLICKBALANCE: {InvoiceStatus.UPLOADED_TO_CLICKBALANCE},
 }
 
 
