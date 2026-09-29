@@ -4,7 +4,7 @@ from pathlib import Path
 from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import FileResponse, RedirectResponse
+from fastapi.responses import FileResponse, RedirectResponse, Response
 from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -26,14 +26,16 @@ from app.core.database import get_db
 from app.core.errors import BusinessRuleError, DuplicateInvoiceError, InvalidInputError
 from app.core.security import get_current_user, require_roles, validate_csrf
 from app.models import Contract, Document, Invoice, ValidationResult
-from app.repositories.invoice_repository import get_visible_invoice, search_invoices
+from app.repositories.invoice_repository import get_visible_invoice, inbox_status, search_invoices, warning_counts
 from app.routers.common import templates
 from app.schemas import InvoiceCreate, validation_message
 from app.services import catalog_service
 from app.services import document_requirements_service as requirements
+from app.services import document_view_service as document_view
 from app.services import foreign_invoice_service as foreign
 from app.services.audit_service import audit
 from app.services.file_service import LocalFileStorage, log_upload, safe_download_name
+from app.services.invoice_history_service import history
 from app.services.invoice_service import (
     ensure_editable,
     internal_folio,
@@ -76,20 +78,27 @@ def _invoice_or_404(db: Session, invoice_id: int, user):
 def invoice_list(
     request: Request,
     q: str = "",
-    status: str = "",
+    status: str | None = None,
+    origin: str = "",
     page: int = 1,
     db: Session = Depends(get_db),
     user=Depends(get_current_user),
 ):
-    result = search_invoices(db, user, q, status, page)
+    # Sin `status`, el PMO y el Administrador abren la bandeja de "Enviadas" (HU-18); los enlaces lo llevan explicito.
+    effective = inbox_status(user, status)
+    result = search_invoices(db, user, q, effective, page, origin=origin)
+    reviewer = user.role != Role.PROVIDER
     context = {
         "user": user,
         "invoices": result.items,
         "page": result,
-        "base_query": urlencode({"q": q, "status": status}),
+        "base_query": urlencode({"q": q, "status": effective, "origin": origin}),
         "q": q,
-        "selected_status": status,
+        "selected_status": effective,
+        "selected_origin": origin,
         "statuses": InvoiceStatus,
+        "origins": SupplierOrigin,
+        "warnings": warning_counts(db, [invoice.id for invoice in result.items]) if reviewer else {},
     }
     return templates.TemplateResponse(request, "invoices/list.html", context)
 
@@ -247,6 +256,7 @@ def _detail_page(
     editable = is_editable(invoice)
     international = foreign.is_international(invoice)
     invoice_doc = foreign.current_invoice_document(invoice) if international else None
+    reviewer = user.role != Role.PROVIDER
     return templates.TemplateResponse(
         request,
         "invoices/detail.html",
@@ -269,6 +279,9 @@ def _detail_page(
             # Datos del Invoice (HU-15/16): la legibilidad del texto se tomo al cargarlo; no se relee el PDF aqui.
             "international": international,
             "has_invoice_doc": invoice_doc is not None,
+            # Proveedor e historial de revision para el PMO y el Administrador (HU-19).
+            "reviewer": reviewer,
+            "history": history(db, invoice) if reviewer else [],
             "invoice_readable": (invoice_doc.metadata_json or {}).get("has_extractable_text") if invoice_doc else None,
         },
         status_code=status_code,
@@ -446,9 +459,8 @@ async def update_amounts(
     return RedirectResponse(f"/invoices/{invoice.id}/documents?notice=amounts_saved", status_code=303)
 
 
-@router.get("/{invoice_id}/documents/{document_id}/download")
-def download_document(invoice_id: int, document_id: int, db: Session = Depends(get_db), user=Depends(get_current_user)):
-    invoice = _invoice_or_404(db, invoice_id, user)
+def _document_or_404(db: Session, invoice: Invoice, document_id: int) -> tuple[Document, Path]:
+    """Documento de esa factura y su archivo: la autorizacion de la descarga, compartida por la visualizacion."""
     doc = db.get(Document, document_id)
     if not doc or doc.invoice_id != invoice.id:
         raise HTTPException(404, "Documento no encontrado")
@@ -458,8 +470,74 @@ def download_document(invoice_id: int, document_id: int, db: Session = Depends(g
         raise HTTPException(404, "Archivo no disponible") from None
     if not path.is_file():
         raise HTTPException(404, "Archivo no disponible")
+    return doc, path
+
+
+@router.get("/{invoice_id}/documents/{document_id}/download")
+def download_document(invoice_id: int, document_id: int, db: Session = Depends(get_db), user=Depends(get_current_user)):
+    doc, path = _document_or_404(db, _invoice_or_404(db, invoice_id, user), document_id)
     # Nunca el MIME almacenado: la descarga no debe interpretarse en el navegador (junto con nosniff).
     return FileResponse(path, filename=safe_download_name(doc.original_filename), media_type="application/octet-stream")
+
+
+# Visualizacion en el portal (HU-19): paginas del PDF como PNG, imagenes y texto escapado (document_view_service).
+VIEW_CACHE = {"Cache-Control": "private, max-age=300"}
+
+
+@router.get("/{invoice_id}/documents/{document_id}/view")
+def view_document(
+    invoice_id: int, document_id: int, request: Request, db: Session = Depends(get_db), user=Depends(get_current_user)
+):
+    invoice = _invoice_or_404(db, invoice_id, user)
+    doc, path = _document_or_404(db, invoice, document_id)
+    view_kind = document_view.kind(doc.path)
+    context = {
+        "user": user,
+        "invoice": invoice,
+        "document": doc,
+        "type_name": requirements.type_names(db).get(doc.document_type, doc.document_type),
+        "kind": view_kind.value,
+        "pages": [],
+        "total_pages": None,
+        "max_pages": document_view.MAX_PAGES,
+        "text": None,
+        "truncated": False,
+        "text_limit": document_view.TEXT_LIMIT,
+    }
+    if view_kind == document_view.ViewKind.PDF:
+        total = document_view.pdf_page_count(path)
+        context["total_pages"] = total
+        context["pages"] = list(range(1, min(total or 0, document_view.MAX_PAGES) + 1))
+    elif view_kind == document_view.ViewKind.TEXT:
+        context["text"], context["truncated"] = document_view.read_text(path)
+    return templates.TemplateResponse(request, "invoices/document_view.html", context, headers=VIEW_CACHE)
+
+
+@router.get("/{invoice_id}/documents/{document_id}/pages/{number}")
+def document_page(
+    invoice_id: int, document_id: int, number: int, db: Session = Depends(get_db), user=Depends(get_current_user)
+):
+    doc, path = _document_or_404(db, _invoice_or_404(db, invoice_id, user), document_id)
+    png = (
+        document_view.render_page(path, number) if document_view.kind(doc.path) == document_view.ViewKind.PDF else None
+    )
+    if png is None:
+        raise HTTPException(404, "Página no disponible")
+    return Response(png, media_type="image/png", headers=VIEW_CACHE)
+
+
+@router.get("/{invoice_id}/documents/{document_id}/image")
+def document_image(invoice_id: int, document_id: int, db: Session = Depends(get_db), user=Depends(get_current_user)):
+    doc, path = _document_or_404(db, _invoice_or_404(db, invoice_id, user), document_id)
+    if document_view.kind(doc.path) != document_view.ViewKind.IMAGE:
+        raise HTTPException(404, "El documento no es una imagen")
+    return FileResponse(
+        path,
+        media_type=document_view.IMAGE_TYPES[path.suffix.lower()],
+        filename=safe_download_name(doc.original_filename),
+        content_disposition_type="inline",
+        headers=VIEW_CACHE,
+    )
 
 
 def _commit_validation(db: Session) -> None:

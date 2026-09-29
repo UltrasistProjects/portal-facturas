@@ -119,7 +119,8 @@ def test_resumen_del_detalle_usa_calculate_score(client):
 
 def test_busqueda_por_razon_social(client):
     login(client, "pmo@poc.local")
-    page = client.get("/invoices", params={"q": "tecnologia INTEGRAL"}).text
+    # status vacio = "Todos los estados": sin el, el PMO abre su bandeja de Enviadas (HU-18).
+    page = client.get("/invoices", params={"q": "tecnologia INTEGRAL", "status": ""}).text
     assert invoice_by_number("A-CORRECTA").internal_folio in page
 
 

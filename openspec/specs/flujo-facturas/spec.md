@@ -67,10 +67,10 @@ Las reglas de flujo SHALL residir en `invoice_service` y en el servicio de enví
 - **THEN** los contadores de aprobadas, advertencias, errores y bloqueos coinciden con los calculados por `calculate_score` para los mismos resultados
 
 ### Requirement: Listado de facturas filtrado y paginado en la base de datos
-El listado SHALL aplicar la búsqueda, el filtro por estado, el alcance por proveedor (rol PROVIDER), el orden por `created_at DESC` y la paginación (25 por página) en la consulta SQL, cargando el proveedor asociado sin consultas adicionales por fila. La búsqueda SHALL comparar, sin distinguir mayúsculas, contra folio interno, número de factura, proyecto y razón social del proveedor, y SHALL tratar `%` y `_` como caracteres literales.
+El listado SHALL aplicar la búsqueda, el filtro por estado, el filtro por origen del proveedor (`NATIONAL` o `INTERNATIONAL`; un valor desconocido se ignora), el alcance por proveedor (rol PROVIDER), el orden y la paginación (25 por página) en la consulta SQL, cargando el proveedor asociado sin consultas adicionales por fila. El orden SHALL ser `created_at DESC`, salvo en la bandeja del PMO (spec `revision-pmo`), donde las facturas "Enviada" se ordenan por `submitted_at` ascendente. La búsqueda SHALL comparar, sin distinguir mayúsculas, contra folio interno, número de factura, proyecto y razón social del proveedor, y SHALL tratar `%` y `_` como caracteres literales.
 
 #### Scenario: Búsqueda por razón social
-- **WHEN** un usuario INTERNAL busca `tecnologia integral`
+- **WHEN** un usuario INTERNAL busca `tecnologia integral` con "Todos los estados"
 - **THEN** el listado muestra las facturas de "Tecnologia Integral del Centro SA de CV"
 
 #### Scenario: Comodines literales
@@ -88,6 +88,10 @@ El listado SHALL aplicar la búsqueda, el filtro por estado, el alcance por prov
 #### Scenario: Alcance del proveedor
 - **WHEN** un PROVIDER consulta el listado con cualquier filtro
 - **THEN** sólo aparecen facturas de su proveedor
+
+#### Scenario: Filtro por origen
+- **WHEN** un usuario INTERNAL filtra por origen "Internacional" con "Todos los estados"
+- **THEN** sólo aparecen facturas de proveedores internacionales
 
 ### Requirement: Indicadores del tablero agregados en la base de datos
 El tablero SHALL calcular el conteo por estado con `COUNT ... GROUP BY status` y el monto total con `SUM` sobre centavos, respetando el alcance por proveedor. MUST NOT cargar todas las facturas en memoria.

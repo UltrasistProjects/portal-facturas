@@ -1,0 +1,14 @@
+{% extends "base.html" %}{% block title %}{{ type_name }} | {{ invoice.internal_folio }}{% endblock %}{% block content %}
+{% set base = '/invoices/' ~ invoice.id ~ '/documents/' ~ document.id %}
+<div class="breadcrumb"><a href="/invoices">Facturas</a><i class="bi bi-chevron-right"></i><a href="/invoices/{{ invoice.id }}">{{ invoice.internal_folio }}</a><i class="bi bi-chevron-right"></i>{{ type_name }}</div>
+<div class="page-heading"><div><span class="eyebrow">DOCUMENTO</span><h1>{{ type_name }}</h1><p>{{ document.original_filename }} · SHA {{ document.sha256[:10] }}…</p></div><div class="heading-actions"><a class="btn btn-outline-primary" href="{{ base }}/download"><i class="bi bi-download"></i> Descargar</a></div></div>
+<section class="panel document-viewer">
+{% if kind == 'PDF' %}
+  {% if total_pages is none %}<div class="alert alert-warning">No se pudo mostrar el documento. Descárguelo para revisarlo.</div>
+  {% else %}{% if total_pages > max_pages %}<div class="alert alert-info">Se muestran las primeras {{ max_pages }} de {{ total_pages }} páginas.</div>{% endif %}
+  {% for number in pages %}<img class="document-page" src="{{ base }}/pages/{{ number }}" alt="Página {{ number }} de {{ total_pages }}" loading="lazy">{% else %}<p class="empty-state">El PDF no tiene páginas.</p>{% endfor %}{% endif %}
+{% elif kind == 'IMAGE' %}<img class="document-page" src="{{ base }}/image" alt="{{ document.original_filename }}">
+{% elif kind == 'TEXT' %}{% if truncated %}<div class="alert alert-info">Se muestran los primeros {{ '{:,}'.format(text_limit) }} caracteres.</div>{% endif %}<pre class="document-text">{{ text }}</pre>
+{% else %}<p class="empty-state">Este formato no se puede mostrar. Descárguelo para revisarlo.</p>{% endif %}
+</section>
+{% endblock %}
