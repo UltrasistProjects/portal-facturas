@@ -223,7 +223,7 @@ Si negocio decide conservarlo, quedan como pasos internos posteriores a "Autoriz
 - "Ver" en el PDF del CFDI abre una pestaña nueva con `Content-Type: application/pdf` y `Content-Disposition: inline`.
 - "Ver" en un XML muestra su texto escapado, sin que el navegador lo interprete.
 - Un proveedor que pide ver un documento de otra factura recibe HTTP 404, igual que con una ruta manipulada.
-- En una factura internacional se ven los importes capturados y el resultado de INT-001 a INT-003.
+- En una factura internacional se ven los importes capturados y el resultado de INT-001 a INT-004.
 - En una factura con dos rondas de "Observaciones", el historial muestra las dos observaciones con su fecha.
 
 **Decide la HU:** qué CSP lleva la vista del PDF (riesgo de DT-03). Si el change de `factura-internacional` no se ha archivado todavía, el bloque "Datos del Invoice" pasa a ese change.

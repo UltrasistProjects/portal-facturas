@@ -2,6 +2,9 @@ from decimal import Decimal
 
 from app.schemas import ValidationOutcome
 
+# Reglas del CFDI y del expediente del Anexo A que no se evaluan para el proveedor internacional (HU-16).
+NOT_FOR_INTERNATIONAL = "No aplica a proveedores internacionales"
+
 
 def outcome(
     code: str,

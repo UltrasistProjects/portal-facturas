@@ -1,11 +1,14 @@
 from decimal import Decimal
 
-from app.rules.base import outcome
+from app.rules.base import NOT_FOR_INTERNATIONAL, not_applicable, outcome
 from app.services.contract_service import current_amendment_id
 from app.services.reconciliation_service import reconcile_amount
 
 
-def financial_rules(invoice, contract, xml_data, duplicate_uuid: bool, duplicate_number: bool):
+def financial_rules(
+    invoice, contract, xml_data, duplicate_uuid: bool, duplicate_number: bool, international: bool = False
+):
+    """Sin XML, los importes y la moneda son los de la factura: para el internacional, los capturados (HU-15)."""
     subtotal = Decimal(
         xml_data.get("subtotal") if xml_data and xml_data.get("subtotal") is not None else invoice.subtotal
     )
@@ -52,7 +55,10 @@ def financial_rules(invoice, contract, xml_data, duplicate_uuid: bool, duplicate
             contract.currency if contract else None,
             invoice.currency,
         ),
-        outcome(
+        # El Invoice no tiene UUID: su duplicado se controla por nombre de archivo (FIN-007, HU-15).
+        not_applicable("FIN-004", "FIN", "CRITICAL", NOT_FOR_INTERNATIONAL)
+        if international
+        else outcome(
             "FIN-004",
             "FIN",
             not duplicate_uuid,

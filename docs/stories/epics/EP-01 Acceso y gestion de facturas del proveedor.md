@@ -217,11 +217,13 @@ La minuta pide "evitar duplicados inicialmente por nombre de archivo".
 
 ### DT-08 · Validación internacional "en la medida de lo posible"
 
-- **Reglas que dejan de aplicar:** XML-001 a XML-010 y FIN-004 resultan `NOT_APPLICABLE` para el origen Internacional, con el mensaje "No aplica a proveedores internacionales".
+- **Reglas que dejan de aplicar:** XML-001 a XML-010 y FIN-004 resultan `NOT_APPLICABLE` para el origen Internacional, con el mensaje "No aplica a proveedores internacionales". SEM-001 resulta `NOT_EVALUATED`: el Invoice no tiene conceptos estructurados.
 - **Reglas nuevas (categoría `INT`):** se evalúan sobre el texto del PDF. Hoy `analyze_pdf` sólo guarda los primeros 2 000 caracteres en `text_preview`, así que el motor debe releer el PDF completo.
   - INT-001: el identificador fiscal del proveedor (`foreign_tax_id`) aparece en el Invoice.
   - INT-002: la Razón Social de ULTRASIST (Reglas de Validación) aparece en el Invoice.
-  - INT-003: la Dirección de ULTRASIST o, si está vacía, su Código Postal, aparece en el Invoice.
+  - INT-003: el Código Postal de ULTRASIST aparece en el Invoice como número aislado.
+  - INT-004: la Dirección de ULTRASIST aparece en el Invoice; "No aplica" si no está configurada.
+  - INT-002 e INT-003 respetan los interruptores de Razón Social y Código Postal de las Reglas de Validación. (Implementado así en `factura-internacional`; el borrador inicial juntaba dirección y código postal en una sola regla.)
 - **Severidad de las reglas INT:** `WARNING`. Nunca bloquean el envío, porque el texto puede no extraerse bien o venir con otro formato. Si el PDF no tiene capa de texto (por ejemplo, un escaneo), resultan `NOT_EVALUATED`.
 - **Expediente del proveedor:** que SUP-003 y SUP-004 apliquen o no al internacional lo decide P-06.
 - **Qué bloquea el envío internacional:** la regla DOC-008 y los demás documentos obligatorios, el duplicado por nombre (DT-07), FIN-005, SUP-001, SUP-002 y CON-001, y FIN-001 a FIN-003 calculadas con los importes capturados.
@@ -429,7 +431,7 @@ Ninguna bloquea el inicio de la épica. Cada una tiene un valor que se aplica mi
 | P-04 | ¿"Rechazada" es definitiva, de modo que el proveedor debe emitir un CFDI nuevo? | Sí. "Observaciones" es la vía para corregir la misma factura | HU-13, HU-17, EP-02 | Si no es definitiva, "Rechazada" debe admitir reenvío y la unicidad del UUID cambia |
 | P-05 | ¿Desde qué estatus puede cancelar el proveedor? ¿También desde "Autorizada", con el pago en curso? | Desde cualquier estatus excepto "Cancelada": el SAT pedirá a ULTRASIST aceptar la cancelación en todos los casos | HU-14 | Cambia las transiciones a "Cancelada" y lo que ve el PMO |
 | P-06 | ¿Qué expediente debe tener el proveedor internacional? (P-02 de HU-04) | SUP-003 y SUP-004 no aplican al internacional | HU-16 | Si se define, se agrega su lista y SUP-003 vuelve a aplicarle |
-| P-07 | Con las tres muestras de invoices extranjeros: ¿qué datos deben verificarse y con qué severidad? ¿Se requiere extracción automática con IA? | INT-001 a INT-003 como advertencias sobre el texto del PDF | HU-16 | Puede agregar reglas o subir severidades. La IA sería una HU aparte |
+| P-07 | Con las tres muestras de invoices extranjeros: ¿qué datos deben verificarse y con qué severidad? ¿Se requiere extracción automática con IA? | INT-001 a INT-004 como advertencias sobre el texto del PDF | HU-16 | Puede agregar reglas o subir severidades. La IA sería una HU aparte |
 | P-08 | El duplicado por nombre de archivo, ¿se busca dentro del mismo proveedor o en todo el portal? ¿Cuentan las facturas canceladas? | Mismo proveedor, sin contar las canceladas | HU-15 | Cambia la consulta de la regla |
 | P-09 | ¿La cancelación es inmediata ("Cancelada", ERS §3.6) o una solicitud que Recepción revisa y autoriza (la minuta dice "para revisión y autorización")? | Inmediata. La aceptación ocurre ante el SAT, fuera del portal | HU-14 | Si es una solicitud: estatus "Cancelación solicitada", una acción para Recepción (rol nuevo o PMO) y otra plantilla de correo |
 | P-10 | ¿Qué acuse entrega el proveedor internacional, que no cancela ante el SAT? | Cualquier PDF que documente la cancelación | HU-14 | Formatos o tipo de documento distintos por origen |

@@ -8,7 +8,7 @@ from types import SimpleNamespace
 import pytest
 from sqlalchemy import delete, select, update
 
-from app.core.constants import SupplierClassification, SupplierType
+from app.core.constants import SupplierClassification, SupplierOrigin, SupplierType
 from app.core.database import SessionLocal
 from app.models import AuditLog, CatalogEntry, Document, Supplier
 from app.rules.supplier_rules import supplier_rules
@@ -155,7 +155,9 @@ def test_alta_con_actividad_inactiva(client, restore_validation_rules):
     assert response.status_code == 400
     assert "Actividad principal: no es una actividad activa del catalogo" in html.unescape(response.text)
     assert supplier_by_rfc("PCO260101INA") is None
-    assert 'value="54"' not in client.get("/suppliers").text
+    # Solo el selector de actividad: la pagina tambien trae value="<id>" en las casillas de los proveedores.
+    activities = re.search(r'<select[^>]*name="main_activity".*?</select>', client.get("/suppliers").text, re.S)
+    assert 'value="54"' not in activities.group(0)
 
 
 # --- Edicion ------------------------------------------------------------------------------------------------------
@@ -326,7 +328,9 @@ def test_carga_de_los_documentos_nuevos(client):
 
 
 def test_vigencia_del_comprobante_del_representante_legal():
-    supplier = SimpleNamespace(supplier_type=SupplierType.PERSONA_MORAL, economic_proposal=False)
+    supplier = SimpleNamespace(
+        supplier_type=SupplierType.PERSONA_MORAL, economic_proposal=False, origin=SupplierOrigin.NATIONAL
+    )
     old = date.today() - timedelta(days=120)
     documents = [
         SimpleNamespace(document_type=code, is_current=True, document_date=old)
@@ -399,7 +403,9 @@ PHYSICAL_REQUIRED = ("OFFICIAL_ID", "TAX_STATUS", "SAT_OPINION", "ADDRESS_PROOF"
 
 def minimum_file(supplier_type: SupplierType, codes, quotation: bool = False) -> str:
     """Resultado de SUP-003 para un expediente con los documentos `codes`."""
-    supplier = SimpleNamespace(supplier_type=supplier_type, economic_proposal=quotation, status="ACTIVE")
+    supplier = SimpleNamespace(
+        supplier_type=supplier_type, economic_proposal=quotation, status="ACTIVE", origin=SupplierOrigin.NATIONAL
+    )
     documents = [SimpleNamespace(document_type=code, is_current=True, document_date=None) for code in codes]
     outcomes = supplier_rules(supplier, None, supplier_requirement_status(supplier, documents))
     return next(o.status for o in outcomes if o.rule_code == "SUP-003")
@@ -443,7 +449,9 @@ def test_notas_de_los_documentos_del_expediente(client):
 
 def test_obligatoriedad_de_los_comprobantes_de_domicilio():
     """Sin ninguno, los dos se marcan obligatorios; con uno, solo ese; con ambos, los dos cumplen el requisito."""
-    supplier = SimpleNamespace(supplier_type=SupplierType.PERSONA_MORAL, economic_proposal=False)
+    supplier = SimpleNamespace(
+        supplier_type=SupplierType.PERSONA_MORAL, economic_proposal=False, origin=SupplierOrigin.NATIONAL
+    )
 
     def required(*codes):
         documents = [SimpleNamespace(document_type=code, is_current=True, document_date=None) for code in codes]

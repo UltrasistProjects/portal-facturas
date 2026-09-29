@@ -1,8 +1,21 @@
-from app.rules.base import not_applicable, outcome
+from app.rules.base import NOT_FOR_INTERNATIONAL, not_applicable, outcome
 from app.services.validation_settings_service import RuleParameters, normalize_name
 
 # Una comparacion desactivada en Reglas de Validacion (HU-06) conserva su codigo y severidad pero no afecta el score.
 DISABLED = "Comparación desactivada en Reglas de Validación"
+# Severidad de cada regla del CFDI; la conservan sus resultados NOT_APPLICABLE.
+SEVERITIES = {
+    "XML-001": "CRITICAL",
+    "XML-002": "CRITICAL",
+    "XML-003": "ERROR",
+    "XML-004": "ERROR",
+    "XML-005": "ERROR",
+    "XML-006": "CRITICAL",
+    "XML-007": "ERROR",
+    "XML-008": "CRITICAL",
+    "XML-009": "ERROR",
+    "XML-010": "ERROR",
+}
 
 
 def _compare(
@@ -24,8 +37,11 @@ def _compare(
     )
 
 
-def xml_rules(data: dict | None, error: str | None, params: RuleParameters):
-    """Reglas del CFDI con la configuracion vigente de Reglas de Validacion y el catalogo de monedas (D3)."""
+def xml_rules(data: dict | None, error: str | None, params: RuleParameters, international: bool = False):
+    """Reglas del CFDI con la configuracion vigente de Reglas de Validacion y el catalogo de monedas (D3). El Invoice
+    del proveedor internacional no es un CFDI: todas resultan NOT_APPLICABLE (HU-16)."""
+    if international:
+        return [not_applicable(code, "XML", severity, NOT_FOR_INTERNATIONAL) for code, severity in SEVERITIES.items()]
     if data is None:
         return [outcome("XML-001", "XML", False, "CRITICAL", "XML valido", error or "XML invalido")]
     essentials = all(

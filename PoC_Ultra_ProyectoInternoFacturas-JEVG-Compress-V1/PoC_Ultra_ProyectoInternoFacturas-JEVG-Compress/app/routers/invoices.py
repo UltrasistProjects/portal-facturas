@@ -1,5 +1,6 @@
 import logging
 from decimal import Decimal
+from pathlib import Path
 from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
@@ -11,12 +12,14 @@ from sqlalchemy.orm import Session
 
 from app.core.constants import (
     DOCUMENT_REQUIREMENT_LABELS,
+    CatalogType,
     ContractStatus,
     DocumentType,
     InvoiceStatus,
     ProcessingStatus,
     Role,
     RuleStatus,
+    SupplierOrigin,
     SupplierStatus,
 )
 from app.core.database import get_db
@@ -26,7 +29,9 @@ from app.models import Contract, Document, Invoice, ValidationResult
 from app.repositories.invoice_repository import get_visible_invoice, search_invoices
 from app.routers.common import templates
 from app.schemas import InvoiceCreate, validation_message
+from app.services import catalog_service
 from app.services import document_requirements_service as requirements
+from app.services import foreign_invoice_service as foreign
 from app.services.audit_service import audit
 from app.services.file_service import LocalFileStorage, log_upload, safe_download_name
 from app.services.invoice_service import (
@@ -56,6 +61,7 @@ provider_only = require_roles(Role.PROVIDER)
 MSG_SUPPLIER_NOT_ACTIVE = "Su proveedor no está autorizado para registrar facturas"
 # Avisos que llegan por ?notice= tras una redireccion; otro valor se ignora (como en el tablero).
 NOTICES = {"submitted": "Factura enviada a validación"}
+DOCUMENT_NOTICES = {"amounts_saved": "Datos del Invoice guardados", "amounts_unchanged": "Sin cambios"}
 SUBMITTABLE_STATUSES = frozenset({InvoiceStatus.UPLOADED, InvoiceStatus.REQUIRES_CORRECTION})
 
 
@@ -93,9 +99,16 @@ def _ensure_supplier_active(user) -> None:
         raise BusinessRuleError(MSG_SUPPLIER_NOT_ACTIVE)
 
 
-def _new_invoice_page(request: Request, db: Session, user, error: str | None = None, status_code: int = 200):
+def _new_invoice_page(
+    request: Request,
+    db: Session,
+    user,
+    error: str | None = None,
+    status_code: int = 200,
+    values: dict | None = None,
+):
     """El proveedor de la factura es el del usuario y el formulario solo recibe sus contratos activos (DT-05): los
-    de otros proveedores nunca llegan al navegador."""
+    de otros proveedores nunca llegan al navegador. El internacional captura ademas los datos del Invoice (HU-15)."""
     contracts = list(
         db.scalars(
             select(Contract)
@@ -103,7 +116,17 @@ def _new_invoice_page(request: Request, db: Session, user, error: str | None = N
             .order_by(Contract.project_name)
         )
     )
-    context = {"user": user, "supplier": user.supplier, "contracts": contracts, "error": error}
+    international = user.supplier.origin == SupplierOrigin.INTERNATIONAL
+    defaults = {"currency": contracts[0].currency} if contracts else {}
+    context = {
+        "user": user,
+        "supplier": user.supplier,
+        "contracts": contracts,
+        "error": error,
+        "international": international,
+        "currencies": catalog_service.active_entries(db, CatalogType.CURRENCY) if international else [],
+        "values": {**defaults, **(values or {})},
+    }
     return templates.TemplateResponse(request, "invoices/new.html", context, status_code=status_code)
 
 
@@ -122,11 +145,29 @@ async def create_invoice(
     project_name: str = Form(...),
     purchase_order_number: str = Form(""),
     project_leader: str = Form(""),
+    invoice_date: str = Form(""),
+    subtotal: str = Form(""),
+    tax: str = Form(""),
+    total: str = Form(""),
+    currency: str = Form(""),
     db: Session = Depends(get_db),
     user=Depends(provider_only),
 ):
     await validate_csrf(request)
     _ensure_supplier_active(user)
+    submitted = {
+        "contract_id": str(contract_id),
+        "invoice_number": invoice_number,
+        "service_period": service_period,
+        "project_name": project_name,
+        "purchase_order_number": purchase_order_number,
+        "project_leader": project_leader,
+        "invoice_date": invoice_date,
+        "subtotal": subtotal,
+        "tax": tax,
+        "total": total,
+        "currency": currency,
+    }
     try:
         data = InvoiceCreate(
             invoice_number=invoice_number,
@@ -136,7 +177,13 @@ async def create_invoice(
             project_leader=project_leader or None,
         )
     except ValidationError as exc:
-        return _new_invoice_page(request, db, user, validation_message(exc), 400)
+        return _new_invoice_page(request, db, user, validation_message(exc), 400, submitted)
+    # Datos del Invoice (HU-15): solo del proveedor internacional; al nacional se los da el XML y se ignoran.
+    foreign_data = None
+    if user.supplier.origin == SupplierOrigin.INTERNATIONAL:
+        foreign_data, errors = foreign.parse_data(db, submitted)
+        if errors:
+            return _new_invoice_page(request, db, user, " ".join(errors), 400, submitted)
     # Un supplier_id recibido en el formulario se ignora: la factura es del proveedor del usuario.
     supplier_id = user.supplier_id
     contract = db.get(Contract, contract_id)
@@ -158,6 +205,8 @@ async def create_invoice(
         tax=Decimal("0"),
         total=Decimal("0"),
     )
+    if foreign_data:
+        foreign.apply_data(invoice, foreign_data)
     db.add(invoice)
     try:
         db.flush()
@@ -165,7 +214,7 @@ async def create_invoice(
         db.rollback()
         if violates(exc, "uq_invoices_supplier_number"):
             message = "Ya existe una factura con ese numero para el proveedor"
-            return _new_invoice_page(request, db, user, message, 409)
+            return _new_invoice_page(request, db, user, message, 409, submitted)
         raise
     invoice.internal_folio = internal_folio(invoice.id, invoice.created_at)
     audit(db, "INVOICE_CREATED", "Invoice", invoice.id, user.id, new={"folio": invoice.internal_folio})
@@ -196,6 +245,8 @@ def _detail_page(
     )
     summary = validation_summary(validations)
     editable = is_editable(invoice)
+    international = foreign.is_international(invoice)
+    invoice_doc = foreign.current_invoice_document(invoice) if international else None
     return templates.TemplateResponse(
         request,
         "invoices/detail.html",
@@ -215,6 +266,10 @@ def _detail_page(
             "blocking": [v for v in validations if v.status == RuleStatus.FAIL] if editable else [],
             "notice": NOTICES.get(notice) if notice else None,
             "submit_blocked": submit_blocked,
+            # Datos del Invoice (HU-15/16): la legibilidad del texto se tomo al cargarlo; no se relee el PDF aqui.
+            "international": international,
+            "has_invoice_doc": invoice_doc is not None,
+            "invoice_readable": (invoice_doc.metadata_json or {}).get("has_extractable_text") if invoice_doc else None,
         },
         status_code=status_code,
     )
@@ -227,8 +282,20 @@ def invoice_detail(
     return _detail_page(request, db, _invoice_or_404(db, invoice_id, user), user, notice)
 
 
-def _documents_page(request: Request, db: Session, invoice, user, error: str | None = None, status_code: int = 200):
-    """Carga documental con los tipos que aplican al origen del proveedor de la factura (HU-04)."""
+def _documents_page(
+    request: Request,
+    db: Session,
+    invoice,
+    user,
+    error: str | None = None,
+    status_code: int = 200,
+    notice: str | None = None,
+    amounts: dict | None = None,
+    amount_errors: list[str] | None = None,
+):
+    """Carga documental con los tipos que aplican al origen del proveedor de la factura (HU-04) y, si es
+    internacional, el formulario de los datos del Invoice (HU-15)."""
+    international = foreign.is_international(invoice)
     items = requirements.checklist(db, invoice)
     pending = requirements.pending_required(items)
     context = {
@@ -242,16 +309,23 @@ def _documents_page(request: Request, db: Session, invoice, user, error: str | N
         "formats_label": requirements.formats_label,
         "accept": ",".join(dict.fromkeys(ext for item in items for ext in requirements.extensions(item.document_type))),
         "error": error,
+        "notice": DOCUMENT_NOTICES.get(notice) if notice else None,
+        "international": international,
+        "amounts": amounts or (foreign.form_values(invoice) if international else {}),
+        "amount_errors": amount_errors or [],
+        "currencies": catalog_service.active_entries(db, CatalogType.CURRENCY) if international else [],
     }
     return templates.TemplateResponse(request, "invoices/documents.html", context, status_code=status_code)
 
 
 @router.get("/{invoice_id}/documents")
-def documents_page(invoice_id: int, request: Request, db: Session = Depends(get_db), user=Depends(provider_only)):
+def documents_page(
+    invoice_id: int, request: Request, notice: str = "", db: Session = Depends(get_db), user=Depends(provider_only)
+):
     invoice = _invoice_or_404(db, invoice_id, user)
     if not is_editable(invoice):
         return RedirectResponse(f"/invoices/{invoice.id}", status_code=303)
-    return _documents_page(request, db, invoice, user)
+    return _documents_page(request, db, invoice, user, notice=notice)
 
 
 @router.post("/{invoice_id}/documents")
@@ -272,6 +346,12 @@ async def upload_document(
         requirements.ensure_format(requirements.offered_type(db, invoice, document_type), upload.filename)
     except InvalidInputError as exc:
         return _documents_page(request, db, invoice, user, exc.message, 400)
+    if document_type == DocumentType.FOREIGN_INVOICE.value:
+        # HU-15: el nombre de archivo del Invoice no se repite entre las facturas del proveedor (bloqueo por proveedor).
+        try:
+            foreign.ensure_unique_filename(db, invoice, Path(upload.filename or "").name)
+        except BusinessRuleError as exc:
+            return _documents_page(request, db, invoice, user, exc.message, 409)
     try:
         stored = await LocalFileStorage().save_invoice_file(invoice.id, upload)
         metadata, pages, processing = {}, None, ProcessingStatus.PROCESSED
@@ -333,6 +413,37 @@ async def upload_document(
     )
     db.commit()
     return RedirectResponse(f"/invoices/{invoice.id}/documents", status_code=303)
+
+
+@router.post("/{invoice_id}/amounts")
+async def update_amounts(
+    invoice_id: int,
+    request: Request,
+    invoice_date: str = Form(""),
+    subtotal: str = Form(""),
+    tax: str = Form(""),
+    total: str = Form(""),
+    currency: str = Form(""),
+    db: Session = Depends(get_db),
+    user=Depends(provider_only),
+):
+    """Edicion de los datos del Invoice mientras la factura es editable (HU-15)."""
+    await validate_csrf(request)
+    invoice = _invoice_or_404(db, invoice_id, user)
+    lock_invoice(db, invoice)
+    ensure_editable(invoice)
+    if not foreign.is_international(invoice):
+        raise InvalidInputError(foreign.MSG_NOT_INTERNATIONAL)
+    values = {"invoice_date": invoice_date, "subtotal": subtotal, "tax": tax, "total": total, "currency": currency}
+    data, errors = foreign.parse_data(db, values)
+    if errors:
+        return _documents_page(request, db, invoice, user, status_code=400, amounts=values, amount_errors=errors)
+    old, new = foreign.apply_data(invoice, data)
+    if not new:
+        return RedirectResponse(f"/invoices/{invoice.id}/documents?notice=amounts_unchanged", status_code=303)
+    audit(db, "INVOICE_AMOUNTS_UPDATED", "Invoice", invoice.id, user.id, old=old, new=new)
+    db.commit()
+    return RedirectResponse(f"/invoices/{invoice.id}/documents?notice=amounts_saved", status_code=303)
 
 
 @router.get("/{invoice_id}/documents/{document_id}/download")

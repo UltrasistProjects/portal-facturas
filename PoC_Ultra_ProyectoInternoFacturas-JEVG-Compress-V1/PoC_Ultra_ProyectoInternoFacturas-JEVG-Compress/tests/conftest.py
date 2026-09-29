@@ -64,6 +64,7 @@ TEST_PASSWORDS = {
     "pmo@poc.local": "Test#Pmo2026",
     "proveedor1@poc.local": "Test#Proveedor2026",
     "proveedor2@poc.local": "Test#Proveedor2026",
+    "proveedor3@poc.local": "Test#Proveedor2026",
 }
 
 

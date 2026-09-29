@@ -1,5 +1,5 @@
 import re
-from datetime import date
+from datetime import date, datetime, timezone
 from decimal import Decimal
 from urllib.parse import urlsplit
 
@@ -24,6 +24,7 @@ from app.core.constants import (
     SupplierType,
 )
 from app.core.passwords import validate_password
+from app.core.timeutils import to_business
 
 MIN_INCORPORATION_DATE = date(1900, 1, 1)
 FIELD_LABELS = {
@@ -52,6 +53,10 @@ FIELD_LABELS = {
     "authorized_technology": "Tecnologia autorizada",
     "authorized_amount": "Monto autorizado",
     "currency": "Moneda",
+    "invoice_date": "Fecha de la factura",
+    "subtotal": "Subtotal",
+    "tax": "Impuestos",
+    "total": "Total",
     "end_date": "Vigencia",
     "new_amount": "Monto nuevo",
     "reason": "Motivo",
@@ -63,6 +68,11 @@ ERROR_MESSAGES = {
     "string_pattern_mismatch": "tiene un formato invalido",
     "greater_than": "debe ser mayor que cero",
     "decimal_max_places": "admite a lo sumo 2 decimales",
+    "decimal_max_digits": "es demasiado grande",
+    "decimal_parsing": "no es un importe valido",
+    "finite_number": "no es un importe valido",
+    "greater_than_equal": "no puede ser negativo",
+    "date_parsing": "no es una fecha valida",
     "date_from_datetime_parsing": "no es una fecha valida",
     "enum": "no es una opcion valida",
 }
@@ -70,6 +80,11 @@ ERROR_MESSAGES = {
 
 def validation_message(exc: ValidationError) -> str:
     """Mensaje en espanol para mostrar en el formulario."""
+    return " ".join(validation_messages(exc))
+
+
+def validation_messages(exc: ValidationError) -> list[str]:
+    """Un mensaje "<Campo>: <detalle>" por error, para listarlos juntos."""
     messages = []
     for error in exc.errors():
         field = str(error["loc"][0]) if error["loc"] else "end_date"
@@ -81,7 +96,7 @@ def validation_message(exc: ValidationError) -> str:
         else:
             detail = ERROR_MESSAGES.get(error["type"], "es invalido")
         messages.append(f"{label}: {detail}")
-    return " ".join(messages)
+    return messages
 
 
 class UserCreate(BaseModel):
@@ -229,6 +244,64 @@ class InvoiceCreate(BaseModel):
     total: Decimal = Decimal("0")
     currency: str = "MXN"
     model_config = ConfigDict(str_strip_whitespace=True)
+
+
+# Tolerancia de FIN-002 entre subtotal + impuestos y total.
+AMOUNT_TOLERANCE = Decimal("0.02")
+
+
+def _amount_text(value):
+    """Importe capturado en un formulario: admite el separador de miles "," y el simbolo "$"."""
+    if isinstance(value, str):
+        value = value.replace("$", "").replace(",", "").strip()
+        if not value:
+            raise ValueError("es obligatorio")
+    return value
+
+
+class ForeignInvoiceData(BaseModel):
+    """Datos del Invoice de un proveedor internacional (HU-15): sin XML, el proveedor los captura. Se guardan en las
+    columnas de la factura que el XML llena para el proveedor nacional."""
+
+    invoice_date: date
+    subtotal: Decimal = Field(gt=0, max_digits=16, decimal_places=2)
+    tax: Decimal = Field(ge=0, max_digits=16, decimal_places=2)
+    total: Decimal = Field(gt=0, max_digits=16, decimal_places=2)
+    currency: str = Field(pattern=r"^[A-Z]{3}$")
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    @field_validator("invoice_date", mode="before")
+    @classmethod
+    def date_required(cls, value):
+        if value is None or (isinstance(value, str) and not value.strip()):
+            raise ValueError("es obligatoria")
+        return value
+
+    @field_validator("invoice_date")
+    @classmethod
+    def not_future(cls, value: date) -> date:
+        if value > to_business(datetime.now(timezone.utc)).date():
+            raise ValueError("no puede ser posterior a hoy")
+        return value
+
+    @field_validator("subtotal", "tax", "total", mode="before")
+    @classmethod
+    def amount_text(cls, value):
+        return _amount_text(value)
+
+    @field_validator("total")
+    @classmethod
+    def total_matches(cls, value: Decimal, info: ValidationInfo) -> Decimal:
+        subtotal, tax = info.data.get("subtotal"), info.data.get("tax")
+        # Solo si subtotal e impuestos son validos: su propio error ya se reporta.
+        if subtotal is not None and tax is not None and abs(subtotal + tax - value) > AMOUNT_TOLERANCE:
+            raise ValueError("debe ser igual al subtotal más impuestos")
+        return value
+
+    @field_validator("currency", mode="before")
+    @classmethod
+    def currency_upper(cls, value):
+        return value.strip().upper() if isinstance(value, str) else value
 
 
 INVALID_REQUIREMENT = "Nivel de exigencia inválido"

@@ -18,6 +18,8 @@ DEMO_ACCOUNTS = (
     DemoAccount("PMO", "pmo@poc.local", "Pmo#Demo2026"),
     DemoAccount("Proveedor", "proveedor1@poc.local", "Proveedor#Demo2026"),
     DemoAccount("Proveedor fisico", "proveedor2@poc.local", "Proveedor#Demo2026", quick_access=False),
+    # Proveedor internacional (HU-15/16): factura con Invoice en PDF, sin CFDI.
+    DemoAccount("Proveedor internacional", "proveedor3@poc.local", "Proveedor#Demo2026", quick_access=False),
 )
 
 

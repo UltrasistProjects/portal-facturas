@@ -188,7 +188,17 @@ def login_international(client) -> None:
     login(client, INTERNATIONAL_EMAIL, INTERNATIONAL_PASSWORD)
 
 
-def create_invoice(client, supplier_id: int, contract_id: int, project_name: str):
+# Datos del Invoice que el alta exige al proveedor internacional (HU-15).
+FOREIGN_INVOICE_DATA = {
+    "invoice_date": "2026-08-31",
+    "subtotal": "1000.00",
+    "tax": "0.00",
+    "total": "1000.00",
+    "currency": "USD",
+}
+
+
+def create_invoice(client, supplier_id: int, contract_id: int, project_name: str, extra: dict | None = None):
     number = f"HU04-{uuid4().hex[:10]}"
     data = {
         "supplier_id": supplier_id,
@@ -196,6 +206,7 @@ def create_invoice(client, supplier_id: int, contract_id: int, project_name: str
         "invoice_number": number,
         "service_period": "08/2026",
         "project_name": project_name,
+        **(extra or {}),
         "csrf_token": csrf(client, "/invoices/new"),
     }
     assert client.post("/invoices/new", data=data, follow_redirects=False).status_code == 303
@@ -211,7 +222,9 @@ def national_invoice(client):
 
 def international_invoice(client, international):
     login_international(client)
-    return create_invoice(client, international.supplier_id, international.contract_id, "Consultoria internacional")
+    return create_invoice(
+        client, international.supplier_id, international.contract_id, "Consultoria internacional", FOREIGN_INVOICE_DATA
+    )
 
 
 def upload(client, invoice_id: int, document_type: str, filename: str, content: bytes):
@@ -300,7 +313,7 @@ def test_formato_no_admitido_por_el_tipo(client):
 
 def test_formato_admitido_se_carga(client, international):
     invoice = international_invoice(client, international)
-    assert upload(client, invoice.id, "FOREIGN_INVOICE", "invoice.pdf", PDF).status_code == 303
+    assert upload(client, invoice.id, "FOREIGN_INVOICE", f"invoice-{invoice.id}.pdf", PDF).status_code == 303
     assert len(stored_files(invoice.id)) == 1
 
 
@@ -783,7 +796,7 @@ def test_factura_internacional_sin_invoice(client, international):
 def test_tipo_soporte_obligatorio_en_la_prevalidacion(client, international, restore_catalog):
     hours = hours_type(client)
     invoice = international_invoice(client, international)
-    assert upload(client, invoice.id, "FOREIGN_INVOICE", "invoice.pdf", PDF).status_code == 303
+    assert upload(client, invoice.id, "FOREIGN_INVOICE", f"invoice-{invoice.id}.pdf", PDF).status_code == 303
     assert validate(client, invoice).status_code == 303
     [result] = rule_results(invoice.id, "DOC-009")
     assert (result.status, result.source_document, result.message) == ("FAIL", hours.code, "Falta Reporte de horas")

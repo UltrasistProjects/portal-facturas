@@ -65,6 +65,7 @@ Sólo aplican con `APP_ENV=development`:
 | INTERNAL / PMO | `pmo@poc.local` | `Pmo#Demo2026` |
 | Proveedor moral | `proveedor1@poc.local` | `Proveedor#Demo2026` |
 | Proveedor físico | `proveedor2@poc.local` | `Proveedor#Demo2026` |
+| Proveedor internacional | `proveedor3@poc.local` | `Proveedor#Demo2026` |
 
 - La fuente única de estas cuentas es `app/core/demo.py`.
 - El bloque de acceso rápido del login sólo aparece en `development`.
@@ -207,10 +208,11 @@ Modelo del ERS (§3.6), fijado por EP-01 para el proveedor y el PMO:
 
 - `DOC-001..009`: archivos mínimos según el origen del proveedor (XML y PDF del CFDI, orden de compra, Vo.Bo., Invoice y otros tipos obligatorios; ver [Archivos mínimos por tipo de proveedor](#archivos-mínimos-por-tipo-de-proveedor)), contrato/anexo disponible, complemento y procesabilidad.
 - `XML-001..010`: parseabilidad, RFC del receptor, método y forma de pago, UsoCFDI, UUID, moneda, esenciales, razón social y código postal del receptor, con los valores de [Reglas de validación](#reglas-de-validación).
-- `SUP-001..004`: proveedor activo, contrato vigente, expediente mínimo y vigencia aproximada.
+- `SUP-001..004`: proveedor activo, contrato vigente, expediente mínimo y vigencia aproximada (`SUP-003` y `SUP-004` no aplican al proveedor internacional).
 - `CON-001..004`: contrato, proyecto, periodo y heurística mes/tecnología.
 - `DAT-001`: recepción del día 1 al 20; advertencia no fatal.
-- `FIN-001..006`: límite autorizado, consistencia, moneda, UUID/número duplicados y diferencia absoluta/porcentual.
+- `FIN-001..006`: límite autorizado, consistencia, moneda, UUID/número duplicados y diferencia absoluta/porcentual. `FIN-007`: Invoice duplicado por nombre de archivo (sólo internacional).
+- `INT-001..004`: datos del proveedor y de ULTRASIST en el texto del Invoice (sólo internacional; advertencias). Ver [Facturas de proveedores internacionales](#facturas-de-proveedores-internacionales).
 - `SEM-001`: comparación semántica mediante adaptador; el mock reconoce Power Platform/Power Automate con confianza 0.93.
 
 `SEM-002..004` quedan reservadas como extensión. Los parámetros del motor (datos del receptor, método y forma de pago, usos de CFDI e interruptores) tienen una sola fuente, la tabla `validation_settings`, que el Administrador edita en `/admin/rules` y el motor lee en cada prevalidación. Las monedas aceptadas son las activas del catálogo de monedas. Sólo los pesos del score siguen en `BUSINESS_RULES` (`app/core/constants.py`).
@@ -270,12 +272,18 @@ El Administrador define en **Administración › Archivos mínimos** (`/admin/re
 - **Vigencia:** la configuración se lee en cada verificación y envío. Una factura que ya salió de los estados editables conserva sus resultados; una editable se evalúa con la configuración vigente al verificarse o enviarse. Si la configuración cambia, el estatus "Borrador"/"Cargada" se recalcula en la siguiente carga o en el envío.
 - **Concurrencia y auditoría:** el formulario lleva la huella `config_version`; si otro Administrador guardó antes, el guardado responde 409 sin cambios. Cada cambio queda en el Audit Log (`INVOICE_DOCUMENT_REQUIREMENTS_UPDATED`, `INVOICE_DOCUMENT_TYPE_CREATED`, `INVOICE_DOCUMENT_TYPE_UPDATED` e `INVOICE_DOCUMENT_TYPE_STATUS_CHANGED`) con los valores anterior y nuevo.
 
-**Probar con un proveedor internacional.** Los proveedores demo son nacionales; un internacional se prepara así:
+**Probar con un proveedor internacional.** La demo incluye uno: `proveedor3@poc.local` (ver [Facturas de proveedores internacionales](#facturas-de-proveedores-internacionales)). En su carga documental se ofrecen el Invoice y los soportes configurados, no el XML ni el PDF del CFDI.
 
-1. Como `ADMIN`, registrar el proveedor con la carga masiva (`/suppliers/import`), origen Internacional. Queda en estatus "Registrado".
-2. Autorizarlo desde **Proveedores** (filtro "Registrado", casilla y "Autorizar seleccionados"). Con el transporte `file`, sus credenciales quedan en un `.eml` de `outbox/`.
-3. Crear su contrato en **Contratos**.
-4. Iniciar sesión con el usuario y la contraseña temporal del correo, dar de alta una factura y abrir su carga documental: se ofrecen el Invoice y los soportes configurados, no el XML ni el PDF del CFDI.
+## Facturas de proveedores internacionales
+
+El proveedor extranjero (`suppliers.origin = INTERNATIONAL`) no emite CFDI: factura con un Invoice en PDF (HU-15, HU-16).
+
+- **Datos del Invoice:** al registrar la factura captura la fecha, el subtotal, los impuestos, el total y la moneda (catálogo de monedas activas). El total debe ser igual al subtotal más impuestos (tolerancia 0.02, como `FIN-002`). Se guardan en las mismas columnas que el XML llena para el nacional. Mientras la factura es editable ("Borrador", "Cargada" u "Observaciones") los corrige desde la carga documental; cada cambio se audita como `INVOICE_AMOUNTS_UPDATED`.
+- **Duplicados por nombre de archivo:** al cargar un Invoice cuyo nombre (sin distinguir mayúsculas ni espacios de los extremos) ya tiene otra factura del mismo proveedor, la carga responde 409 con el folio de esa factura y no escribe el archivo. Un bloqueo consultivo por proveedor serializa estas cargas y `FIN-007` (`CRITICAL`) lo verifica de nuevo al enviar.
+- **Validación:** `XML-001..010`, `FIN-004`, `SUP-003` y `SUP-004` resultan "No aplica a proveedores internacionales"; `SEM-001` no se evalúa. Las demás reglas se aplican con los importes capturados: por ejemplo, `FIN-001` bloquea un subtotal mayor al monto autorizado del contrato.
+- **Reglas del Invoice (`INT`):** buscan en el texto del PDF, sin acentos, mayúsculas, espacios ni signos: `INT-001` el identificador fiscal del proveedor, `INT-002` la razón social de ULTRASIST, `INT-003` su código postal y `INT-004` su dirección (si está configurada). `INT-002` e `INT-003` respetan los interruptores de [Reglas de validación](#reglas-de-validación). Son advertencias: no bloquean el envío. Un PDF sin texto legible (escaneado) las deja "No evaluadas".
+- **Pendiente con negocio:** se calibrarán con las tres muestras de invoices extranjeros acordadas en la minuta. El expediente del proveedor internacional (equivalente al Anexo A) está por definir.
+- **Demo:** `proveedor3@poc.local` es "Global Data Services Inc. (DEMO)" (US, identificador `98-7654321`), con el contrato "Analitica Global 2026" por 20,000.00 USD y la factura `INV-2026-0042` en "Cargada", lista para enviar.
 
 ## Plantillas de correo
 
@@ -485,7 +493,7 @@ Complete las variables Azure en `.env`, implemente la llamada HTTP/SDK dentro de
 
 ## Datos de demostración
 
-El seed crea 4 usuarios, 2 proveedores, 2 contratos, expedientes Anexo A, 10 facturas y Audit Log. Incluye: borrador sin documentos (`BORRADOR-001`), borrador sin Vo.Bo. (`D-SIN-VOBO`), cargadas listas para enviar (`A-CORRECTA`, `E-SEMANTICO`), cargada cuyo envío no procede porque excede el contrato (`B-EXCEDE`), enviada (`REVISION-001`), autorizada, rechazada por RFC incorrecto y los estados manuales de ClickBalance. Todas son de `proveedor1@poc.local`.
+El seed crea 5 usuarios, 3 proveedores, 3 contratos, expedientes Anexo A, 11 facturas y Audit Log. Incluye: borrador sin documentos (`BORRADOR-001`), borrador sin Vo.Bo. (`D-SIN-VOBO`), cargadas listas para enviar (`A-CORRECTA`, `E-SEMANTICO`), cargada cuyo envío no procede porque excede el contrato (`B-EXCEDE`), enviada (`REVISION-001`), autorizada, rechazada por RFC incorrecto y los estados manuales de ClickBalance. Esas diez son de `proveedor1@poc.local`; la undécima, `INV-2026-0042`, es del proveedor internacional `proveedor3@poc.local` y está cargada, lista para enviar.
 
 Los XML bajo `data/demo_documents/` son estructuralmente útiles para el parser, pero **no están timbrados ni son fiscalmente válidos**. El seed asigna a cada factura demo un UUID fiscal distinto y usa el PDF sintético versionado `data/demo_documents/factura_demo.pdf` (si faltara, lo genera en un directorio temporal sin modificar el repositorio).
 
@@ -496,7 +504,7 @@ Los XML bajo `data/demo_documents/` son estructuralmente útiles para el parser,
 - Sin pagos, banca, firma, SharePoint, Blob, Azure SQL, SSO, despliegue Azure, Kubernetes o colas.
 - Los adaptadores Azure son contratos preparados, no llamadas productivas.
 - Las Reglas de validación y los catálogos son editables, pero los pesos del score siguen en el código y no se pueden crear reglas nuevas desde la interfaz. Los catálogos se usan en la validación del CFDI; la moneda del contrato sigue siendo texto libre de tres letras.
-- Las facturas de proveedores internacionales sólo cumplen la parte documental: sin CFDI, las reglas XML y SUP-003 resultan `FAIL` y el envío no procede hasta que HU-15/HU-16 definan sus importes, validaciones y expediente.
+- Las reglas `INT` del Invoice internacional buscan texto literal y aún no se calibran con invoices reales; no hay extracción automática de datos del Invoice.
 - El portal envía las credenciales de los proveedores autorizados (HU-03), pero todavía ningún cambio de estatus de factura dispara correos: eso llega con HU-20 y HU-14. El envío es síncrono, sin cola ni reintentos automáticos.
 - La contraseña temporal no se resguarda aún en ClickCloud (falta su API), no expira y no hay recuperación de contraseña.
 - La verificación documental del Anexo A es presencia/vigencia referencial, no validación legal.

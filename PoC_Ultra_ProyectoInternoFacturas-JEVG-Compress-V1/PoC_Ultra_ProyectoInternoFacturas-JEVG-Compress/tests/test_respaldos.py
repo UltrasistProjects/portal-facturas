@@ -252,7 +252,7 @@ def test_reset_confirmado_respalda_y_reconstruye(workspace):
     assert "Respaldo previo" in result.stdout
     assert len(list(backups.iterdir())) == 1
     assert not ana_exists(database)
-    assert scalar(database, "SELECT count(*) FROM invoices") == 10
+    assert scalar(database, "SELECT count(*) FROM invoices") == 11  # 10 nacionales y 1 internacional (HU-15)
     assert scalar(database, "SELECT version_num FROM alembic_version") == head_revision()
 
 

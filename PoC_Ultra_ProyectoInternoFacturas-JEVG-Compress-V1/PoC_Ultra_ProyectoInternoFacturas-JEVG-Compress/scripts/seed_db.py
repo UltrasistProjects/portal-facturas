@@ -22,6 +22,7 @@ from app.core.constants import (
     InvoiceStatus,
     Role,
     SupplierClassification,
+    SupplierOrigin,
     SupplierType,
 )
 from app.core.database import SessionLocal
@@ -30,6 +31,7 @@ from app.core.passwords import generate_password
 from app.core.security import hash_password
 from app.models import AuditLog, Contract, Document, Invoice, Review, Supplier, User
 from app.services.file_service import LocalFileStorage
+from app.services.pdf_service import analyze_pdf
 from app.services.validation_engine import run_validation
 
 
@@ -42,6 +44,121 @@ def create_demo_pdf(path: Path) -> None:
     page.insert_text((72, 150), "08 Servicios desarrollo Power Automate / Total MXN 116,000.00", fontsize=11)
     doc.save(path)
     doc.close()
+
+
+def create_foreign_invoice_pdf(path: Path) -> None:
+    """Invoice demo del proveedor internacional: su texto trae los datos que buscan las reglas INT (HU-16)."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    doc = fitz.open()
+    page = doc.new_page()
+    lines = [
+        ("INVOICE INV-2026-0042 - FICTITIOUS DEMO DOCUMENT, NO FISCAL VALIDITY", 12),
+        ("From: Global Data Services Inc. (DEMO) - Tax ID 98-7654321 - Austin, TX, USA", 11),
+        ("Bill to: ULTRASIST SA DE CV - Ciudad de Mexico, C.P. 03930, Mexico", 11),
+        ("Invoice date: 2026-08-31 / Service period: August 2026", 11),
+        ("Data analytics consulting - Analitica Global 2026", 11),
+        ("Subtotal USD 18,000.00 / Tax USD 0.00 / Total USD 18,000.00", 11),
+    ]
+    for index, (text, size) in enumerate(lines):
+        page.insert_text((72, 90 + 25 * index), text, fontsize=size)
+    doc.save(path)
+    doc.close()
+
+
+def seed_international(db, workdir: Path, demo: Path, password: str, admin_id: int, folio: str) -> None:
+    """Proveedor internacional autorizado con su usuario, un contrato en USD y la factura INV-2026-0042 en "Cargada":
+    Invoice en PDF con los importes capturados, orden de compra y Vo.Bo. Su envio procede (HU-15/16)."""
+    supplier = Supplier(
+        business_name="Global Data Services Inc. (DEMO)",
+        rfc=None,
+        origin=SupplierOrigin.INTERNATIONAL,
+        foreign_tax_id="98-7654321",
+        country="US",
+        supplier_type=SupplierType.PERSONA_MORAL,
+        email="proveedor3@poc.local",
+        phone="+1 512 555 0142",
+        confidentiality_agreement=True,
+        economic_proposal=True,
+        notes="Proveedor extranjero completamente ficticio para demostracion.",
+        classification=SupplierClassification.EXTERNAL,
+        main_activity="54",
+        website="https://www.globaldata.example",
+        legal_rep_name="Jane Smith (DEMO)",
+        legal_rep_phone="+1 512 555 0100",
+        contact_name="John Doe (DEMO)",
+        contact_phone="+1 512 555 0142",
+    )
+    db.add(supplier)
+    db.flush()
+    user = User(
+        name="Proveedor Internacional Demo",
+        email="proveedor3@poc.local",
+        password_hash=hash_password(password),
+        role=Role.PROVIDER,
+        supplier_id=supplier.id,
+    )
+    contract = Contract(
+        supplier_id=supplier.id,
+        project_name="Analitica Global 2026",
+        project_leader="Laura PMO (DEMO)",
+        authorized_technology="Data Analytics",
+        authorized_amount=Decimal("20000.00"),
+        currency="USD",
+        start_date=date(2026, 1, 1),
+        end_date=date(2026, 12, 31),
+        status="ACTIVE",
+        notes="Contrato sintetico en dolares.",
+    )
+    db.add_all([user, contract])
+    db.flush()
+    invoice = Invoice(
+        internal_folio=folio,
+        supplier_id=supplier.id,
+        uploaded_by=user.id,
+        contract_id=contract.id,
+        invoice_number="INV-2026-0042",
+        invoice_date=date(2026, 8, 31),
+        service_period="08/2026",
+        purchase_order_number="PO-DEMO-042",
+        project_name=contract.project_name,
+        project_leader=contract.project_leader,
+        subtotal=Decimal("18000.00"),
+        tax=Decimal("0.00"),
+        total=Decimal("18000.00"),
+        currency="USD",
+        status=InvoiceStatus.DRAFT,
+    )
+    db.add(invoice)
+    db.flush()
+    invoice_pdf = workdir / "INV-2026-0042.pdf"
+    create_foreign_invoice_pdf(invoice_pdf)
+    sources = [
+        (DocumentType.FOREIGN_INVOICE, invoice_pdf),
+        (DocumentType.PURCHASE_ORDER, demo / "orden_compra_demo.txt"),
+        (DocumentType.APPROVAL, demo / "vobo_demo.txt"),
+    ]
+    for doc_type, source in sources:
+        document = add_document(
+            db, user_id=user.id, supplier_id=supplier.id, invoice_id=invoice.id, doc_type=doc_type.value, source=source
+        )
+        if doc_type == DocumentType.FOREIGN_INVOICE:
+            # Como la carga documental: el detalle muestra si el texto del Invoice es legible.
+            analysis = analyze_pdf(invoice_pdf)
+            document.page_count = analysis["page_count"]
+            document.metadata_json = {"demo": True, "has_extractable_text": analysis["has_extractable_text"]}
+    db.commit()
+    run_validation(db, invoice, user.id)
+    invoice.status = InvoiceStatus.UPLOADED
+    db.add(
+        AuditLog(
+            user_id=admin_id,
+            action="DEMO_SEEDED",
+            entity="Invoice",
+            entity_id=str(invoice.id),
+            new_value={"scenario": "Caso internacional: Invoice en PDF listo para enviar"},
+        )
+    )
+    db.commit()
 
 
 def add_document(
@@ -324,7 +441,10 @@ def main(passwords: dict[str, str] | None = None) -> None:
                 )
             )
             db.commit()
-        print("Seed completo: 4 usuarios, 2 proveedores, 2 contratos y 10 facturas demo.")
+        seed_international(
+            db, workdir, demo, passwords["proveedor3@poc.local"], users[0].id, f"FAC-2026-{len(scenarios) + 1:05d}"
+        )
+        print("Seed completo: 5 usuarios, 3 proveedores, 3 contratos y 11 facturas demo.")
 
 
 if __name__ == "__main__":

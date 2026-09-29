@@ -26,7 +26,7 @@
 <div class="two-column">
 <section class="panel"><div class="panel-header"><div><h2>Reglas XML</h2><p>Comparaciones que aplica la prevalidación.</p></div></div><div class="table-responsive"><table class="table enterprise-table"><thead><tr><th>Regla</th><th>Compara</th><th>Severidad</th><th>Estado</th></tr></thead><tbody>
 {% for check in checks %}<tr><td class="mono">{{ check.rule_code }}</td><td>{{ check.label }}</td><td>{{ check.severity.value }}</td><td>{% if settings[check.field] %}<span class="status status-delivery-sent">Activa</span>{% else %}<span class="status">Desactivada</span>{% endif %}</td></tr>
-{% endfor %}<tr><td class="mono">XML-007</td><td>Moneda</td><td>ERROR</td><td><span class="status status-delivery-sent">Activa</span></td></tr></tbody></table></div></section>
+{% endfor %}<tr><td class="mono">XML-007</td><td>Moneda</td><td>ERROR</td><td><span class="status status-delivery-sent">Activa</span></td></tr></tbody></table></div><p class="rules-note">En los Invoices de proveedores internacionales, las comparaciones de Razón social y Código postal también rigen INT-002 e INT-003, que buscan esos datos en el texto del Invoice; INT-004 busca la Dirección si está configurada. Son advertencias: no bloquean el envío.</p></section>
 <section class="panel"><div class="panel-header"><div><h2>Pesos del score</h2><p>Cada regla evaluada suma su peso al denominador; un FAIL o WARNING lo descuenta. Se definen en el código.</p></div></div><dl class="data-list weights-list">{% for severity, weight in weights.items() %}<dt>{{ severity.value }}</dt><dd>{{ weight }}</dd>{% endfor %}</dl></section>
 </div>
 {% endblock %}
