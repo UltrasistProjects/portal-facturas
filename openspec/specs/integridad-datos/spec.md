@@ -86,9 +86,10 @@ La base de datos SHALL rechazar:
 - `authorized_amount <= 0` en contratos y `new_amount <= 0` en enmiendas;
 - `end_date < start_date` en contratos;
 - `validation_score` fuera de 0..100;
-- `confidence` fuera de 0..1.
+- `confidence` fuera de 0..1;
+- una factura `CANCELLED` sin `cancelled_at`, `cancelled_by` o `cancellation_deadline`, con `cancellation_deadline` no posterior a `cancelled_at`, o una factura en otro estatus con alguno de esos datos.
 
-`invoices.status` SHALL ser una enumeración tipada (`DRAFT`, `UPLOADED`, `UNDER_REVIEW`, `ACCEPTED`, `REJECTED`, `REQUIRES_CORRECTION`), `suppliers.status` SHALL ser una enumeración tipada (`REGISTERED`, `ACTIVE`, `INACTIVE`), `suppliers.origin` SHALL ser una enumeración tipada (`NATIONAL`, `INTERNATIONAL`), `invoice_document_types.national_requirement` e `invoice_document_types.international_requirement` SHALL ser enumeraciones tipadas (`REQUIRED`, `OPTIONAL`, `NOT_APPLICABLE`), `notification_templates.event`, `notification_copies.event` y `email_deliveries.event` SHALL ser enumeraciones tipadas (`INVOICE_AUTHORIZED`, `INVOICE_REJECTED`, `INVOICE_OBSERVATIONS`, `INVOICE_CANCELLED`, `SUPPLIER_CREDENTIALS`), `notification_mailboxes.code` SHALL ser una enumeración tipada (`INVOICE_RECEPTION`), `email_deliveries.status` SHALL ser una enumeración tipada (`SENT`, `FAILED`), `catalog_entries.catalog` SHALL ser una enumeración tipada (`CURRENCY`, `CFDI_USE`, `PAYMENT_FORM`, `PAYMENT_METHOD`, `TAX_REGIME`, `INDUSTRY`) y `contracts.status` SHALL ser una enumeración tipada (`ACTIVE`, `INACTIVE`).
+`invoices.status` SHALL ser una enumeración tipada (`DRAFT`, `UPLOADED`, `UNDER_REVIEW`, `ACCEPTED`, `REJECTED`, `REQUIRES_CORRECTION`, `CANCELLED`), `suppliers.status` SHALL ser una enumeración tipada (`REGISTERED`, `ACTIVE`, `INACTIVE`), `suppliers.origin` SHALL ser una enumeración tipada (`NATIONAL`, `INTERNATIONAL`), `invoice_document_types.national_requirement` e `invoice_document_types.international_requirement` SHALL ser enumeraciones tipadas (`REQUIRED`, `OPTIONAL`, `NOT_APPLICABLE`), `notification_templates.event`, `notification_copies.event` y `email_deliveries.event` SHALL ser enumeraciones tipadas (`INVOICE_AUTHORIZED`, `INVOICE_REJECTED`, `INVOICE_OBSERVATIONS`, `INVOICE_CANCELLED`, `SUPPLIER_CREDENTIALS`), `notification_mailboxes.code` SHALL ser una enumeración tipada (`INVOICE_RECEPTION`), `email_deliveries.status` SHALL ser una enumeración tipada (`SENT`, `FAILED`), `catalog_entries.catalog` SHALL ser una enumeración tipada (`CURRENCY`, `CFDI_USE`, `PAYMENT_FORM`, `PAYMENT_METHOD`, `TAX_REGIME`, `INDUSTRY`) y `contracts.status` SHALL ser una enumeración tipada (`ACTIVE`, `INACTIVE`).
 
 #### Scenario: Estado inválido por SQL directo
 - **WHEN** se ejecuta `UPDATE invoices SET status = 'APROBADA'`
@@ -128,6 +129,10 @@ La base de datos SHALL rechazar:
 
 #### Scenario: Tipo de catálogo fuera de catálogo
 - **WHEN** se ejecuta `UPDATE catalog_entries SET catalog = 'COUNTRY'`
+- **THEN** la base de datos rechaza la operación
+
+#### Scenario: Cancelada sin fecha límite
+- **WHEN** se ejecuta `UPDATE invoices SET status = 'CANCELLED'` sobre una factura sin datos de cancelación
 - **THEN** la base de datos rechaza la operación
 
 ### Requirement: Índices para las consultas frecuentes
@@ -183,7 +188,7 @@ La base de datos SHALL imponer sobre `invoice_document_types`:
 - unicidad de `code` y de `lower(name)`;
 - `formats` con al menos un elemento, todos dentro de (`PDF`, `PNG`, `JPEG`, `XML`, `TXT`);
 - que un tipo del sistema (`is_system`) esté siempre activo;
-- los niveles fijos: `INVOICE_XML` e `INVOICE_PDF` con `national_requirement = 'REQUIRED'` e `international_requirement = 'NOT_APPLICABLE'`; `FOREIGN_INVOICE` con `national_requirement = 'NOT_APPLICABLE'` e `international_requirement = 'REQUIRED'`.
+- los niveles fijos: `INVOICE_XML` e `INVOICE_PDF` con `national_requirement = 'REQUIRED'` e `international_requirement = 'NOT_APPLICABLE'`; `FOREIGN_INVOICE` con `national_requirement = 'NOT_APPLICABLE'` e `international_requirement = 'REQUIRED'`; `CANCELLATION_ACK` con ambos niveles en `NOT_APPLICABLE`.
 
 #### Scenario: Nivel fijo cambiado por SQL
 - **WHEN** se ejecuta `UPDATE invoice_document_types SET national_requirement = 'OPTIONAL' WHERE code = 'INVOICE_XML'`
@@ -199,6 +204,10 @@ La base de datos SHALL imponer sobre `invoice_document_types`:
 
 #### Scenario: Formatos inválidos
 - **WHEN** se inserta un tipo con `formats` vacío o con `formats = '{DOCX}'`
+- **THEN** la base de datos rechaza la operación
+
+#### Scenario: Acuse exigido por SQL
+- **WHEN** se ejecuta `UPDATE invoice_document_types SET national_requirement = 'REQUIRED' WHERE code = 'CANCELLATION_ACK'`
 - **THEN** la base de datos rechaza la operación
 
 ### Requirement: Una plantilla por evento de notificación

@@ -17,6 +17,7 @@ from sqlalchemy import select
 
 from app.core.config import settings
 from app.core.constants import (
+    CANCELLATION_WINDOW,
     SUPPLIER_REQUIREMENTS,
     DocumentType,
     InvoiceStatus,
@@ -64,6 +65,18 @@ def create_foreign_invoice_pdf(path: Path) -> None:
     ]
     for index, (text, size) in enumerate(lines):
         page.insert_text((72, 90 + 25 * index), text, fontsize=size)
+    doc.save(path)
+    doc.close()
+
+
+def create_cancellation_ack_pdf(path: Path) -> None:
+    """Acuse de cancelacion demo de la factura CANCELADA-001 (HU-14)."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    doc = fitz.open()
+    page = doc.new_page()
+    page.insert_text((72, 90), "ACUSE DE CANCELACION FICTICIO - SIN VALIDEZ FISCAL", fontsize=12)
+    page.insert_text((72, 125), "Factura CANCELADA-001 / Tecnologia Integral del Centro SA de CV", fontsize=11)
+    page.insert_text((72, 150), "Estatus de la solicitud: En proceso (aceptacion del receptor pendiente)", fontsize=11)
     doc.save(path)
     doc.close()
 
@@ -348,12 +361,15 @@ def main(passwords: dict[str, str] | None = None) -> None:
             ("ENVIADA-002", "cfdi_demo_correcto.xml", InvoiceStatus.UNDER_REVIEW, "Caso por decidir"),
             ("B-EXCEDE", "cfdi_demo_monto_excedido.xml", InvoiceStatus.UPLOADED, "Caso B excede contrato"),
             ("E-SEMANTICO", "cfdi_demo_correcto.xml", InvoiceStatus.UPLOADED, "Caso E semantico mock 0.93"),
+            # HU-14: enviada y cancelada por el proveedor con su acuse; la siembra no envia el correo.
+            ("CANCELADA-001", "cfdi_demo_correcto.xml", InvoiceStatus.CANCELLED, "Caso cancelado por el proveedor"),
         ]
         submitted = {
             InvoiceStatus.UNDER_REVIEW,
             InvoiceStatus.ACCEPTED,
             InvoiceStatus.REJECTED,
             InvoiceStatus.REQUIRES_CORRECTION,
+            InvoiceStatus.CANCELLED,
         }
         decided = {InvoiceStatus.ACCEPTED, InvoiceStatus.REJECTED, InvoiceStatus.REQUIRES_CORRECTION}
         for index, (number, xml_name, final_status, note) in enumerate(scenarios, 1):
@@ -437,6 +453,22 @@ def main(passwords: dict[str, str] | None = None) -> None:
                             else f"Decision demo: {note}",
                         )
                     )
+                if final_status == InvoiceStatus.CANCELLED:
+                    ack_pdf = workdir / "acuse_cancelacion_CANCELADA-001.pdf"
+                    create_cancellation_ack_pdf(ack_pdf)
+                    # Sin autoflush: ck_invoices_cancellation exige el estatus y los datos de la cancelacion juntos.
+                    with db.no_autoflush:
+                        add_document(
+                            db,
+                            user_id=users[2].id,
+                            supplier_id=moral.id,
+                            invoice_id=invoice.id,
+                            doc_type=DocumentType.CANCELLATION_ACK.value,
+                            source=ack_pdf,
+                        )
+                        invoice.cancelled_at = datetime.now(timezone.utc)
+                        invoice.cancelled_by = users[2].id
+                        invoice.cancellation_deadline = invoice.cancelled_at + CANCELLATION_WINDOW
             db.add(
                 AuditLog(
                     user_id=users[0].id,
@@ -450,7 +482,7 @@ def main(passwords: dict[str, str] | None = None) -> None:
         seed_international(
             db, workdir, demo, passwords["proveedor3@poc.local"], users[0].id, f"FAC-2026-{len(scenarios) + 1:05d}"
         )
-        print("Seed completo: 5 usuarios, 3 proveedores, 3 contratos y 11 facturas demo.")
+        print("Seed completo: 5 usuarios, 3 proveedores, 3 contratos y 12 facturas demo.")
 
 
 if __name__ == "__main__":

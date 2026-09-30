@@ -1,3 +1,4 @@
+from datetime import timedelta
 from enum import StrEnum
 
 
@@ -65,7 +66,8 @@ class ProcessingStatus(StrEnum):
 
 class InvoiceStatus(StrEnum):
     """Modelo de estatus del ERS (EP-01, DT-01). Se conservan las claves que ya significaban lo mismo; cambia la
-    etiqueta. Los pasos de ClickBalance del PoC se retiraron con HU-20: Autorizada y Rechazada son finales."""
+    etiqueta. Los pasos de ClickBalance del PoC se retiraron con HU-20: Autorizada y Rechazada solo admiten la
+    cancelacion del proveedor (HU-14), y Cancelada es final."""
 
     DRAFT = "DRAFT"
     UPLOADED = "UPLOADED"
@@ -73,6 +75,7 @@ class InvoiceStatus(StrEnum):
     ACCEPTED = "ACCEPTED"
     REJECTED = "REJECTED"
     REQUIRES_CORRECTION = "REQUIRES_CORRECTION"
+    CANCELLED = "CANCELLED"
 
 
 STATUS_LABELS = {
@@ -82,7 +85,12 @@ STATUS_LABELS = {
     InvoiceStatus.ACCEPTED: "Autorizada",
     InvoiceStatus.REJECTED: "Rechazada",
     InvoiceStatus.REQUIRES_CORRECTION: "Observaciones",
+    InvoiceStatus.CANCELLED: "Cancelada",
 }
+
+# Plazo que tiene Recepcion de Facturas para aceptar ante el SAT la cancelacion del CFDI (HU-14): horas naturales
+# desde la cancelacion en el portal.
+CANCELLATION_WINDOW = timedelta(hours=72)
 
 
 class DocumentType(StrEnum):
@@ -99,6 +107,8 @@ class DocumentType(StrEnum):
     PAYMENT_COMPLEMENT_XML = "PAYMENT_COMPLEMENT_XML"
     PAYMENT_COMPLEMENT_PDF = "PAYMENT_COMPLEMENT_PDF"
     ADDITIONAL = "ADDITIONAL"
+    # Se carga solo al cancelar la factura (HU-14): "No aplica" fijo para ambos origenes.
+    CANCELLATION_ACK = "CANCELLATION_ACK"
 
 
 class DocumentRequirement(StrEnum):
@@ -124,7 +134,8 @@ FORMAT_EXTENSIONS: dict[str, tuple[str, ...]] = {
     "TXT": (".txt",),
 }
 
-# Niveles que el Administrador no puede cambiar (RD-04): el nacional factura con CFDI, el internacional con Invoice.
+# Niveles que el Administrador no puede cambiar (RD-04): el nacional factura con CFDI, el internacional con Invoice;
+# el acuse de cancelacion no se pide en la carga documental (HU-14).
 # Clave -> {origen: nivel}. La base de datos los garantiza con ck_invoice_document_types_fixed_levels.
 FIXED_REQUIREMENTS: dict[str, dict[SupplierOrigin, DocumentRequirement]] = {
     DocumentType.INVOICE_XML: {
@@ -139,11 +150,16 @@ FIXED_REQUIREMENTS: dict[str, dict[SupplierOrigin, DocumentRequirement]] = {
         SupplierOrigin.NATIONAL: DocumentRequirement.NOT_APPLICABLE,
         SupplierOrigin.INTERNATIONAL: DocumentRequirement.REQUIRED,
     },
+    DocumentType.CANCELLATION_ACK: {
+        SupplierOrigin.NATIONAL: DocumentRequirement.NOT_APPLICABLE,
+        SupplierOrigin.INTERNATIONAL: DocumentRequirement.NOT_APPLICABLE,
+    },
 }
 FIXED_REQUIREMENT_REASONS = {
     DocumentType.INVOICE_XML: "El proveedor nacional factura con CFDI",
     DocumentType.INVOICE_PDF: "El proveedor nacional factura con CFDI",
     DocumentType.FOREIGN_INVOICE: "El proveedor internacional factura con Invoice",
+    DocumentType.CANCELLATION_ACK: "Se carga al cancelar la factura",
 }
 
 
@@ -176,12 +192,20 @@ class ReviewDecision(StrEnum):
 
 
 # DRAFT <-> UPLOADED lo asigna el sistema segun los archivos obligatorios; UNDER_REVIEW, un envio que procede;
-# REQUIRES_CORRECTION ("Observaciones"), solo la decision del PMO.
+# REQUIRES_CORRECTION ("Observaciones"), solo la decision del PMO. El proveedor cancela desde cualquier estatus
+# distinto de CANCELLED (HU-14, EP-01 P-05); CANCELLED no tiene salidas.
 ALLOWED_TRANSITIONS: dict[InvoiceStatus, set[InvoiceStatus]] = {
-    InvoiceStatus.DRAFT: {InvoiceStatus.UPLOADED},
-    InvoiceStatus.UPLOADED: {InvoiceStatus.DRAFT, InvoiceStatus.UNDER_REVIEW},
-    InvoiceStatus.REQUIRES_CORRECTION: {InvoiceStatus.UNDER_REVIEW},
-    InvoiceStatus.UNDER_REVIEW: {InvoiceStatus.ACCEPTED, InvoiceStatus.REJECTED, InvoiceStatus.REQUIRES_CORRECTION},
+    InvoiceStatus.DRAFT: {InvoiceStatus.UPLOADED, InvoiceStatus.CANCELLED},
+    InvoiceStatus.UPLOADED: {InvoiceStatus.DRAFT, InvoiceStatus.UNDER_REVIEW, InvoiceStatus.CANCELLED},
+    InvoiceStatus.REQUIRES_CORRECTION: {InvoiceStatus.UNDER_REVIEW, InvoiceStatus.CANCELLED},
+    InvoiceStatus.UNDER_REVIEW: {
+        InvoiceStatus.ACCEPTED,
+        InvoiceStatus.REJECTED,
+        InvoiceStatus.REQUIRES_CORRECTION,
+        InvoiceStatus.CANCELLED,
+    },
+    InvoiceStatus.ACCEPTED: {InvoiceStatus.CANCELLED},
+    InvoiceStatus.REJECTED: {InvoiceStatus.CANCELLED},
 }
 
 

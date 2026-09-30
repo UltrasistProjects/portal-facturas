@@ -11,7 +11,7 @@ from uuid import uuid4
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.core.constants import ALLOWED_TRANSITIONS, InvoiceStatus, RuleStatus, Severity
+from app.core.constants import ALLOWED_TRANSITIONS, CANCELLATION_WINDOW, InvoiceStatus, RuleStatus, Severity
 from app.core.errors import BusinessRuleError, InvalidTransitionError
 from app.core.timeutils import to_business
 from app.models import Invoice
@@ -89,4 +89,8 @@ def transition_invoice(db: Session, invoice: Invoice, target: InvoiceStatus, use
     if target in {InvoiceStatus.ACCEPTED, InvoiceStatus.REJECTED, InvoiceStatus.REQUIRES_CORRECTION}:
         invoice.reviewed_at = now
         invoice.reviewed_by = user_id
+    if target == InvoiceStatus.CANCELLED:
+        invoice.cancelled_at = now
+        invoice.cancelled_by = user_id
+        invoice.cancellation_deadline = now + CANCELLATION_WINDOW
     audit(db, "STATUS_CHANGED", "Invoice", invoice.id, user_id, {"status": old.value}, {"status": target.value})

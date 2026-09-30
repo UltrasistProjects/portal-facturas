@@ -22,11 +22,12 @@ El catálogo SHALL incluir estos tipos del sistema con estos valores iniciales (
 - `CONTRACT_ANNEX` · Anexo del contrato · PDF, PNG, JPEG, TXT · Opcional · Opcional;
 - `PAYMENT_COMPLEMENT_XML` · Complemento de pago (XML) · XML · Opcional · No aplica;
 - `PAYMENT_COMPLEMENT_PDF` · Complemento de pago (PDF) · PDF · Opcional · No aplica;
-- `ADDITIONAL` · Documentación adicional · PDF, PNG, JPEG, XML, TXT · Opcional · Opcional.
+- `ADDITIONAL` · Documentación adicional · PDF, PNG, JPEG, XML, TXT · Opcional · Opcional;
+- `CANCELLATION_ACK` · Acuse de cancelación · PDF, XML · No aplica · No aplica (se carga sólo al cancelar la factura, HU-14).
 
 #### Scenario: Catálogo inicial tras la migración
 - **WHEN** se aplica la migración sobre una base con facturas y documentos existentes
-- **THEN** el catálogo contiene los 10 tipos del sistema, activos y con sus valores iniciales, y cada documento existente conserva su `document_type`
+- **THEN** el catálogo contiene los 11 tipos del sistema, activos y con sus valores iniciales, y cada documento existente conserva su `document_type`
 
 #### Scenario: Nombres en español
 - **WHEN** un proveedor abre la carga documental de una factura
@@ -75,7 +76,8 @@ Al guardar, el sistema SHALL validar todos los niveles recibidos y actualizar en
 ### Requirement: Archivos fijos por origen
 Estos niveles SHALL ser fijos:
 - `INVOICE_XML` e `INVOICE_PDF`: Obligatorio para Nacional y No aplica para Internacional;
-- `FOREIGN_INVOICE`: No aplica para Nacional y Obligatorio para Internacional.
+- `FOREIGN_INVOICE`: No aplica para Nacional y Obligatorio para Internacional;
+- `CANCELLATION_ACK`: No aplica para ambos orígenes, con el motivo "Se carga al cancelar la factura".
 
 La página de configuración SHALL mostrar esos niveles como texto con el ícono de candado y su motivo, sin selector. Una petición que intente cambiarlos SHALL rechazarse con HTTP 409 sin guardar ningún cambio.
 
@@ -86,6 +88,10 @@ La página de configuración SHALL mostrar esos niveles como texto con el ícono
 #### Scenario: Petición manipulada
 - **WHEN** la petición trae `OPTIONAL` como nivel Nacional de `INVOICE_XML`, junto con otros cambios válidos
 - **THEN** la respuesta es HTTP 409 con el mensaje "XML del CFDI tiene un nivel fijo para proveedores nacionales" y no se guarda ningún cambio
+
+#### Scenario: Acuse de cancelación fuera de la carga documental
+- **WHEN** el proveedor abre la carga documental de una factura
+- **THEN** no se ofrece "Acuse de cancelación" y la prevalidación no lo exige
 
 ### Requirement: Tipos de documento soporte definidos por el Administrador
 El Administrador SHALL poder dar de alta tipos de documento soporte con un nombre de 3 a 80 caracteres, una descripción opcional de hasta 300 caracteres, al menos un formato y un nivel para cada origen, preseleccionado en "No aplica". El sistema SHALL:

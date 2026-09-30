@@ -179,7 +179,7 @@ tests/           pruebas críticas automatizadas
 
 ## Flujo funcional
 
-Login → alta de factura → carga/reemplazo documental → "Verificar" (opcional) → "Enviar a validación" (parser XML/PDF, reglas, score y evidencia) → decisión del PMO: autorizar, rechazar u observaciones, con su correo (Recepción de Facturas o el proveedor).
+Login → alta de factura → carga/reemplazo documental → "Verificar" (opcional) → "Enviar a validación" (parser XML/PDF, reglas, score y evidencia) → decisión del PMO: autorizar, rechazar u observaciones, con su correo (Recepción de Facturas o el proveedor). En cualquier momento, el proveedor puede cancelar la factura con su acuse; Recepción de Facturas recibe el aviso.
 
 El proveedor registra, carga, verifica y envía sus facturas, y sólo ve las suyas. `INTERNAL` (PMO) revisa y decide. `ADMIN` añade administración de usuarios, proveedores, contratos, reglas visibles y Audit Log. `INTERNAL` y `ADMIN` consultan las facturas y descargan sus documentos, pero no las registran, cargan, verifican ni envían (403).
 
@@ -193,8 +193,9 @@ Modelo del ERS (§3.6), fijado por EP-01 para el proveedor y el PMO:
 | Cargada | `UPLOADED` | Archivos obligatorios completos | Sí |
 | Enviada | `UNDER_REVIEW` | El envío superó las validaciones | No |
 | Autorizada | `ACCEPTED` | Decisión del PMO | No |
-| Rechazada | `REJECTED` | Decisión del PMO; es definitiva | No |
+| Rechazada | `REJECTED` | Decisión del PMO; no admite otra decisión | No |
 | Observaciones | `REQUIRES_CORRECTION` | El PMO pidió correcciones | Sí: corrige y reenvía |
+| Cancelada | `CANCELLED` | El proveedor la canceló con su acuse; es final | No |
 
 - **Registro (HU-12):** el formulario usa el proveedor del usuario y sólo ofrece sus contratos activos; los de otros proveedores nunca llegan al navegador. Un proveedor que no está "Autorizado" no puede registrar (409). La factura nace en "Borrador" y cada carga o reemplazo de documento la pasa a "Cargada" o de vuelta a "Borrador" según los [archivos mínimos](#archivos-mínimos-por-tipo-de-proveedor); con los obligatorios completos, la carga documental avisa "Factura cargada. Ya puede enviarla a validación". "Observaciones" no se recalcula.
 - **Verificar:** ejecuta el motor y guarda sus resultados sin cambiar el estatus. El detalle lista las "Reglas que impiden el envío".
@@ -202,6 +203,17 @@ Modelo del ERS (§3.6), fijado por EP-01 para el proveedor y el PMO:
 - **Duplicados (RN-HU13-01):** el UUID del CFDI (folio fiscal) no se repite en ninguna otra factura, de ningún proveedor ni estatus, incluidas las rechazadas (FIN-004 y `uq_invoices_uuid`). El mensaje no revela datos de la otra factura.
 - **Concurrencia:** la carga, la verificación y el envío bloquean la fila de la factura, así que se ejecutan uno después del otro.
 - **Migración `0010_invoice_status_model`:** retira `VALIDATING`, `VALIDATION_FAILED` y `PREVALIDATED`. Las facturas previas al envío pasan a "Cargada" o "Borrador" según sus obligatorios, salvo las que el PMO devolvió y aún no se reenvían, que quedan en "Observaciones". Cada cambio queda en el Audit Log como `STATUS_MIGRATED`.
+
+### Cancelación de la factura
+
+El proveedor cancela su factura desde cualquier estatus excepto "Cancelada" (HU-14, RF-09), también si ya está "Autorizada" o "Rechazada": en México el receptor del CFDI tiene 72 horas para aceptar la cancelación ante el SAT.
+
+- **Sección "Cancelar factura"** al final del detalle, sólo para el proveedor. Pide el "Acuse de cancelación" (PDF o XML) y la casilla "Confirmo que la factura se canceló y adjunto su acuse". Sin confirmación, sin acuse o con otro formato responde 400 antes de escribir el archivo, y la factura no cambia. El acuse XML del SAT no se procesa como CFDI; al proveedor internacional le basta un PDF que documente la cancelación.
+- **Registro:** bloquea la fila, guarda el acuse como documento `CANCELLATION_ACK` y pasa la factura a "Cancelada" con `cancelled_at`, `cancelled_by` y `cancellation_deadline` (`cancelled_at` + 72 horas naturales). Audita `STATUS_CHANGED` e `INVOICE_CANCELLED` con el estatus anterior, el acuse y la fecha límite. Una segunda cancelación responde 409 "La factura ya está cancelada".
+- **Factura cancelada:** no admite documentos, verificación, envío ni decisión (409) y sale de la bandeja del PMO. El detalle muestra a todos los roles "Cancelada el … Recepción de Facturas debe aceptar la cancelación antes del …" (hora de negocio) y el acuse entre los documentos.
+- **Correo:** después de confirmar, el aviso "Cancelada" va al buzón "Recepción de Facturas" con número, proveedor, monto, folio y fecha límite. El proveedor ve "Se notificó a Recepción de Facturas" o "No se pudo notificar…", sin direcciones. Si falló, el PMO ve "Reenviar notificación" en el detalle, como con los correos de la decisión.
+- **Fuera de alcance:** registrar en el portal la aceptación de la cancelación (ocurre ante el SAT), el motivo SAT, la consulta del estatus del CFDI y revertir una cancelación.
+- **Migración `0012_invoice_cancellation`:** agrega las columnas con el `CHECK ck_invoices_cancellation`, el estatus `CANCELLED` y el tipo del sistema "Acuse de cancelación". Se detiene si un tipo soporte ya usa ese nombre; el downgrade se niega si hay facturas canceladas.
 
 ## Reglas implementadas
 
@@ -263,9 +275,9 @@ El Administrador define en **Administración › Archivos mínimos** (`/admin/re
 | Opcional | Se ofrece | No se exige |
 | No aplica | No se ofrece; el servidor rechaza la carga | No se exige |
 
-- **Catálogo** (`invoice_document_types`): 10 tipos del sistema, con nombre en español, descripción y formatos admitidos (PDF, PNG, JPEG, XML, TXT), más los tipos soporte que cree el Administrador. La carga documental rechaza con HTTP 400, antes de escribir el archivo, un tipo que no aplica a la factura o una extensión que el tipo no admite.
+- **Catálogo** (`invoice_document_types`): 11 tipos del sistema, con nombre en español, descripción y formatos admitidos (PDF, PNG, JPEG, XML, TXT), más los tipos soporte que cree el Administrador. La carga documental rechaza con HTTP 400, antes de escribir el archivo, un tipo que no aplica a la factura o una extensión que el tipo no admite.
 - **Valores iniciales:** Nacional exige XML y PDF del CFDI, orden de compra y Vo.Bo., y conserva el comportamiento anterior. Internacional exige Invoice (PDF), orden de compra y Vo.Bo. Contrato, anexo y documentación adicional son opcionales para ambos; los complementos de pago sólo aplican al Nacional.
-- **Niveles fijos:** XML y PDF del CFDI son obligatorios para el Nacional y no aplican al Internacional; el Invoice, al revés. La pantalla los muestra con candado, el servidor rechaza cambiarlos (409) y la base de datos los garantiza con un `CHECK`.
+- **Niveles fijos:** XML y PDF del CFDI son obligatorios para el Nacional y no aplican al Internacional; el Invoice, al revés. El "Acuse de cancelación" no aplica a ninguno: sólo se carga al [cancelar la factura](#cancelación-de-la-factura). La pantalla los muestra con candado, el servidor rechaza cambiarlos (409) y la base de datos los garantiza con un `CHECK`.
 - **Tipos soporte:** el Administrador los da de alta (nombre, descripción, formatos y un nivel por origen, "No aplica" por defecto), los edita y los desactiva o reactiva. Su clave es `SOPORTE_<id>`. Nunca se borran, y los documentos ya cargados siguen visibles y descargables en el detalle de la factura. Los tipos del sistema no se editan ni se desactivan.
 - **Reglas:** DOC-001 (XML del CFDI, `CRITICAL`), DOC-002 (PDF del CFDI), DOC-003 (orden de compra) y DOC-004 (Vo.Bo.) resultan `PASS`/`FAIL` cuando su tipo es obligatorio para el origen y `NOT_APPLICABLE` en otro caso. DOC-008 evalúa el Invoice (`CRITICAL`) y DOC-009 genera un resultado por cada otro tipo obligatorio, con su clave en la fuente.
 - **Vigencia:** la configuración se lee en cada verificación y envío. Una factura que ya salió de los estados editables conserva sus resultados; una editable se evalúa con la configuración vigente al verificarse o enviarse. Si la configuración cambia, el estatus "Borrador"/"Cargada" se recalcula en la siguiente carga o en el envío.
@@ -278,7 +290,7 @@ El Administrador define en **Administración › Archivos mínimos** (`/admin/re
 El proveedor extranjero (`suppliers.origin = INTERNATIONAL`) no emite CFDI: factura con un Invoice en PDF (HU-15, HU-16).
 
 - **Datos del Invoice:** al registrar la factura captura la fecha, el subtotal, los impuestos, el total y la moneda (catálogo de monedas activas). El total debe ser igual al subtotal más impuestos (tolerancia 0.02, como `FIN-002`). Se guardan en las mismas columnas que el XML llena para el nacional. Mientras la factura es editable ("Borrador", "Cargada" u "Observaciones") los corrige desde la carga documental; cada cambio se audita como `INVOICE_AMOUNTS_UPDATED`.
-- **Duplicados por nombre de archivo:** al cargar un Invoice cuyo nombre (sin distinguir mayúsculas ni espacios de los extremos) ya tiene otra factura del mismo proveedor, la carga responde 409 con el folio de esa factura y no escribe el archivo. Un bloqueo consultivo por proveedor serializa estas cargas y `FIN-007` (`CRITICAL`) lo verifica de nuevo al enviar.
+- **Duplicados por nombre de archivo:** al cargar un Invoice cuyo nombre (sin distinguir mayúsculas ni espacios de los extremos) ya tiene otra factura no cancelada del mismo proveedor, la carga responde 409 con el folio de esa factura y no escribe el archivo. Un bloqueo consultivo por proveedor serializa estas cargas y `FIN-007` (`CRITICAL`) lo verifica de nuevo al enviar.
 - **Validación:** `XML-001..010`, `FIN-004`, `SUP-003` y `SUP-004` resultan "No aplica a proveedores internacionales"; `SEM-001` no se evalúa. Las demás reglas se aplican con los importes capturados: por ejemplo, `FIN-001` bloquea un subtotal mayor al monto autorizado del contrato.
 - **Reglas del Invoice (`INT`):** buscan en el texto del PDF, sin acentos, mayúsculas, espacios ni signos: `INT-001` el identificador fiscal del proveedor, `INT-002` la razón social de ULTRASIST, `INT-003` su código postal y `INT-004` su dirección (si está configurada). `INT-002` e `INT-003` respetan los interruptores de [Reglas de validación](#reglas-de-validación). Son advertencias: no bloquean el envío. Un PDF sin texto legible (escaneado) las deja "No evaluadas".
 - **Pendiente con negocio:** se calibrarán con las tres muestras de invoices extranjeros acordadas en la minuta. El expediente del proveedor internacional (equivalente al Anexo A) está por definir.
@@ -293,7 +305,7 @@ El PMO (rol `INTERNAL`) y el Administrador revisan las facturas enviadas (HU-18,
 - **Detalle:** para el PMO y el Administrador, un bloque "Proveedor" (origen, identificador fiscal, correo y estatus) y el "Historial" con los envíos del proveedor y las revisiones (decisión, observaciones y revisor) en orden cronológico.
 - **Decisión (HU-20):** en el panel "Decisión" del detalle de una factura "Enviada" (el botón "Decidir" del encabezado lleva ahí), con tres botones:
   - **Autorizar** pide confirmación y envía a Recepción de Facturas el correo "Autorizada" (RN-HU20-02: número, proveedor y monto total con moneda);
-  - **Observaciones** y **Rechazar** exigen las observaciones (hasta 2,000 caracteres; RN-HU20-01) y envían al correo del proveedor el correo respectivo con la causa (RN-HU20-03). Con Observaciones el proveedor corrige y reenvía; Rechazada y Autorizada son finales.
+  - **Observaciones** y **Rechazar** exigen las observaciones (hasta 2,000 caracteres; RN-HU20-01) y envían al correo del proveedor el correo respectivo con la causa (RN-HU20-03). Con Observaciones el proveedor corrige y reenvía; Rechazada y Autorizada no admiten otra decisión (sólo la cancelación del proveedor).
 - **Una decisión por envío:** la factura se bloquea al decidir; una segunda decisión responde 409 "La factura ya fue revisada" sin revisión ni correo.
 - **Correo de la decisión:** sale después de confirmarla; el detalle muestra "Correo enviado a …" o el error. Si el último envío falló, "Reenviar notificación" lo intenta de nuevo (auditoría `INVOICE_NOTIFICATION_RESENT`).
 - **ClickBalance:** los pasos manuales del PoC se retiraron; la migración `0011_retire_clickbalance` pasó sus facturas a "Autorizada" con auditoría `STATUS_MIGRATED`.
@@ -506,7 +518,7 @@ Complete las variables Azure en `.env`, implemente la llamada HTTP/SDK dentro de
 
 ## Datos de demostración
 
-El seed crea 5 usuarios, 3 proveedores, 3 contratos, expedientes Anexo A, 11 facturas y Audit Log. Incluye: borrador sin documentos (`BORRADOR-001`), borrador sin Vo.Bo. (`D-SIN-VOBO`), cargadas listas para enviar (`A-CORRECTA`, `E-SEMANTICO`), cargada cuyo envío no procede porque excede el contrato (`B-EXCEDE`), enviada (`REVISION-001`), una segunda enviada por decidir (`ENVIADA-002`), autorizada, rechazada por RFC incorrecto y una devuelta con observaciones del PMO (`OBSERVACIONES-001`). Esas diez son de `proveedor1@poc.local`; la undécima, `INV-2026-0042`, es del proveedor internacional `proveedor3@poc.local` y está cargada, lista para enviar.
+El seed crea 5 usuarios, 3 proveedores, 3 contratos, expedientes Anexo A, 12 facturas y Audit Log. Incluye: borrador sin documentos (`BORRADOR-001`), borrador sin Vo.Bo. (`D-SIN-VOBO`), cargadas listas para enviar (`A-CORRECTA`, `E-SEMANTICO`), cargada cuyo envío no procede porque excede el contrato (`B-EXCEDE`), enviada (`REVISION-001`), una segunda enviada por decidir (`ENVIADA-002`), autorizada, rechazada por RFC incorrecto, una devuelta con observaciones del PMO (`OBSERVACIONES-001`) y una cancelada con su acuse (`CANCELADA-001`; la siembra no envía su correo). Esas once son de `proveedor1@poc.local`; la duodécima, `INV-2026-0042`, es del proveedor internacional `proveedor3@poc.local` y está cargada, lista para enviar.
 
 Los XML bajo `data/demo_documents/` son estructuralmente útiles para el parser, pero **no están timbrados ni son fiscalmente válidos**. El seed asigna a cada factura demo un UUID fiscal distinto y usa el PDF sintético versionado `data/demo_documents/factura_demo.pdf` (si faltara, lo genera en un directorio temporal sin modificar el repositorio).
 
@@ -518,7 +530,7 @@ Los XML bajo `data/demo_documents/` son estructuralmente útiles para el parser,
 - Los adaptadores Azure son contratos preparados, no llamadas productivas.
 - Las Reglas de validación y los catálogos son editables, pero los pesos del score siguen en el código y no se pueden crear reglas nuevas desde la interfaz. Los catálogos se usan en la validación del CFDI; la moneda del contrato sigue siendo texto libre de tres letras.
 - Las reglas `INT` del Invoice internacional buscan texto literal y aún no se calibran con invoices reales; no hay extracción automática de datos del Invoice.
-- Los correos (credenciales, decisión del PMO) se envían de forma síncrona, sin cola ni reintentos automáticos; un envío fallido se reenvía a mano. El correo de cancelación llega con HU-14.
+- Los correos (credenciales, decisión del PMO, cancelación) se envían de forma síncrona, sin cola ni reintentos automáticos; un envío fallido se reenvía a mano. No hay recordatorio antes de que venza el plazo de 72 horas de una cancelación.
 - La contraseña temporal no se resguarda aún en ClickCloud (falta su API), no expira y no hay recuperación de contraseña.
 - La verificación documental del Anexo A es presencia/vigencia referencial, no validación legal.
 - Bootstrap 5.3.3 y Bootstrap Icons están incluidos bajo `app/static/vendor/`; la interfaz tampoco requiere Internet.

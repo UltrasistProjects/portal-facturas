@@ -174,6 +174,42 @@ def test_estatus_de_clickbalance_retirado(db):
         db.execute(text("UPDATE invoices SET status = 'READY_FOR_CLICKBALANCE'"))
 
 
+CANCELLED_AT = "TIMESTAMPTZ '2026-09-25 16:30+00'"
+
+
+@pytest.mark.parametrize(
+    "values",
+    [
+        # Cancelada sin sus datos, o sin alguno de ellos.
+        "status = 'CANCELLED'",
+        f"status = 'CANCELLED', cancelled_at = {CANCELLED_AT}, cancelled_by = uploaded_by",
+        f"status = 'CANCELLED', cancelled_by = uploaded_by, cancellation_deadline = {CANCELLED_AT}",
+        # Fecha limite que no es posterior a la cancelacion.
+        f"status = 'CANCELLED', cancelled_at = {CANCELLED_AT}, cancelled_by = uploaded_by,"
+        f" cancellation_deadline = {CANCELLED_AT}",
+        # Datos de la cancelacion en una factura no cancelada.
+        f"cancelled_at = {CANCELLED_AT}",
+        "cancelled_by = uploaded_by",
+    ],
+)
+def test_datos_de_la_cancelacion_coherentes(db, values):
+    with pytest.raises(IntegrityError, match='violates check constraint "ck_invoices_cancellation"'):
+        db.execute(text(f"UPDATE invoices SET {values}"))
+
+
+def test_cancelada_con_sus_datos(db):
+    invoice = new_invoice(db)
+    db.flush()
+    db.execute(
+        text(
+            f"UPDATE invoices SET status = 'CANCELLED', cancelled_at = {CANCELLED_AT}, cancelled_by = uploaded_by,"
+            f" cancellation_deadline = {CANCELLED_AT} + interval '72 hours' WHERE id = :id"
+        ),
+        {"id": invoice.id},
+    )
+    assert db.scalar(text("SELECT status FROM invoices WHERE id = :id"), {"id": invoice.id}) == "CANCELLED"
+
+
 def test_enmienda_con_monto_no_positivo_rechazada(db):
     with pytest.raises(IntegrityError, match='violates check constraint "ck_contract_amendments_new_amount_positive"'):
         db.execute(
@@ -357,6 +393,9 @@ def insert_document_type(db, name: str, formats: str = "{PDF}") -> None:
         "UPDATE invoice_document_types SET international_requirement = 'OPTIONAL' WHERE code = 'INVOICE_PDF'",
         "UPDATE invoice_document_types SET national_requirement = 'OPTIONAL' WHERE code = 'FOREIGN_INVOICE'",
         "UPDATE invoice_document_types SET international_requirement = 'OPTIONAL' WHERE code = 'FOREIGN_INVOICE'",
+        # HU-14: el acuse de cancelacion no se exige en la carga documental.
+        "UPDATE invoice_document_types SET national_requirement = 'REQUIRED' WHERE code = 'CANCELLATION_ACK'",
+        "UPDATE invoice_document_types SET international_requirement = 'OPTIONAL' WHERE code = 'CANCELLATION_ACK'",
     ],
 )
 def test_nivel_fijo_cambiado_por_sql(db, sql):

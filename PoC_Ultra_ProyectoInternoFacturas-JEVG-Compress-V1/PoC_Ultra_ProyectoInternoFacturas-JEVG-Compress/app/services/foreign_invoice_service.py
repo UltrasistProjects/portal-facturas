@@ -14,7 +14,7 @@ from pydantic import ValidationError
 from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
-from app.core.constants import CatalogType, DocumentType, SupplierOrigin
+from app.core.constants import CatalogType, DocumentType, InvoiceStatus, SupplierOrigin
 from app.core.errors import BusinessRuleError
 from app.core.types import to_money
 from app.models import Document, Invoice
@@ -100,8 +100,8 @@ def lock_supplier(db: Session, supplier_id: int) -> None:
 
 
 def duplicate_folios(db: Session, invoice: Invoice, filename: str) -> list[str]:
-    """Folios de las otras facturas del proveedor con un Invoice vigente del mismo nombre de archivo (sin distinguir
-    mayusculas ni espacios de los extremos)."""
+    """Folios de las otras facturas no canceladas del proveedor con un Invoice vigente del mismo nombre de archivo
+    (sin distinguir mayusculas ni espacios de los extremos). Una factura cancelada libera el nombre (HU-14)."""
     return list(
         db.scalars(
             select(Invoice.internal_folio)
@@ -109,6 +109,7 @@ def duplicate_folios(db: Session, invoice: Invoice, filename: str) -> list[str]:
             .where(
                 Invoice.supplier_id == invoice.supplier_id,
                 Invoice.id != invoice.id,
+                Invoice.status != InvoiceStatus.CANCELLED,
                 Document.document_type == DocumentType.FOREIGN_INVOICE.value,
                 Document.is_current.is_(True),
                 func.lower(func.trim(Document.original_filename)) == filename.strip().lower(),

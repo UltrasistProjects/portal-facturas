@@ -16,6 +16,7 @@ from app.core.constants import (
     ContractStatus,
     DocumentType,
     InvoiceStatus,
+    NotificationEvent,
     ProcessingStatus,
     Role,
     RuleStatus,
@@ -29,6 +30,7 @@ from app.models import Contract, Document, Invoice, ValidationResult
 from app.repositories.invoice_repository import get_visible_invoice, inbox_status, search_invoices, warning_counts
 from app.routers.common import templates
 from app.schemas import InvoiceCreate, validation_message
+from app.services import cancellation_service as cancellation
 from app.services import catalog_service, review_service
 from app.services import document_requirements_service as requirements
 from app.services import document_view_service as document_view
@@ -228,6 +230,17 @@ async def create_invoice(
     return RedirectResponse(f"/invoices/{invoice.id}/documents", status_code=303)
 
 
+def _status_delivery(db: Session, invoice: Invoice, notification: str, reviewer: bool):
+    """Envio del correo cuyo resultado se muestra (id en la URL, solo si es de esta factura). El proveedor solo ve el
+    aviso de su cancelacion, y sin direcciones (HU-14)."""
+    if not notification.isdigit():
+        return None
+    delivery = review_service.invoice_delivery(db, invoice, int(notification))
+    if delivery and not reviewer and delivery.event != NotificationEvent.INVOICE_CANCELLED:
+        return None
+    return delivery
+
+
 def _detail_page(
     request: Request,
     db: Session,
@@ -237,9 +250,10 @@ def _detail_page(
     submit_blocked=False,
     status_code=200,
     notification: str = "",
+    cancel_error: str | None = None,
 ):
     """Detalle de la factura. Tambien es la respuesta 409 de un envio que no procede (submit_blocked): muestra las
-    reglas en FAIL que se acaban de guardar."""
+    reglas en FAIL que se acaban de guardar; y la 400 de una cancelacion rechazada (cancel_error)."""
     validations = list(
         db.scalars(
             select(ValidationResult)
@@ -261,6 +275,10 @@ def _detail_page(
     international = foreign.is_international(invoice)
     invoice_doc = foreign.current_invoice_document(invoice) if international else None
     reviewer = user.role != Role.PROVIDER
+    cancelled = invoice.status == InvoiceStatus.CANCELLED
+    can_cancel = not reviewer and not cancelled
+    ack_type = cancellation.acknowledgment_type(db) if can_cancel else None
+    delivery = _status_delivery(db, invoice, notification, reviewer)
     return templates.TemplateResponse(
         request,
         "invoices/detail.html",
@@ -289,11 +307,16 @@ def _detail_page(
             # Decision del PMO (HU-20): panel, resultado del correo de la URL y reenvio si el ultimo envio fallo.
             "can_decide": reviewer and invoice.status == InvoiceStatus.UNDER_REVIEW,
             "can_resend": reviewer and review_service.can_resend(db, invoice),
-            "delivery": review_service.invoice_delivery(db, invoice, int(notification))
-            if reviewer and notification.isdigit()
-            else None,
-            "delivery_error": reviewer and notification == "error",
+            "delivery": delivery,
+            "delivery_error": notification == "error" and (reviewer or cancelled),
             "max_observations": review_service.MAX_OBSERVATIONS,
+            # Cancelacion (HU-14): seccion del proveedor con su error, y aviso de factura cancelada para todos.
+            "cancelled": cancelled,
+            "can_cancel": can_cancel,
+            "cancel_error": cancel_error,
+            "ack_type": ack_type,
+            "ack_accept": ",".join(requirements.extensions(ack_type)) if ack_type else "",
+            "ack_formats": requirements.formats_label(ack_type) if ack_type else "",
             "invoice_readable": (invoice_doc.metadata_json or {}).get("has_extractable_text") if invoice_doc else None,
         },
         status_code=status_code,
@@ -644,3 +667,29 @@ async def resend_notification(
     observations = review_service.prepare_resend(db, invoice, user.id)
     db.commit()
     return _notification_redirect(invoice, review_service.send_notification(db, invoice, observations, user.id))
+
+
+@router.post("/{invoice_id}/cancel")
+async def cancel_invoice(
+    invoice_id: int,
+    request: Request,
+    confirm: str = Form(""),
+    upload: UploadFile | None = File(None),
+    db: Session = Depends(get_db),
+    user=Depends(provider_only),
+):
+    """Cancelacion por el proveedor con su acuse (HU-14): se confirma y despues sale el correo a Recepcion de
+    Facturas, que no la revierte si falla."""
+    await validate_csrf(request)
+    invoice = _invoice_or_404(db, invoice_id, user)
+    filename = upload.filename if upload else None
+    try:
+        cancellation.check_request(db, invoice, bool(confirm), filename)
+        await cancellation.cancel(db, invoice, upload, user.id)
+    except InvalidInputError as exc:
+        db.rollback()
+        return _detail_page(request, db, invoice, user, cancel_error=exc.message, status_code=400)
+    db.commit()
+    delivery = review_service.send_notification(db, invoice, None, user.id)
+    result = delivery.id if delivery else "error"
+    return RedirectResponse(f"/invoices/{invoice.id}?notification={result}#cancellation-result", status_code=303)

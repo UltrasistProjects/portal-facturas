@@ -171,6 +171,13 @@ class ContractAmendment(Base):
     author: Mapped[User] = relationship()
 
 
+INVOICE_CANCELLATION_CHECK = (
+    "(status = 'CANCELLED' AND cancelled_at IS NOT NULL AND cancelled_by IS NOT NULL"
+    " AND cancellation_deadline IS NOT NULL AND cancellation_deadline > cancelled_at)"
+    " OR (status <> 'CANCELLED' AND cancelled_at IS NULL AND cancelled_by IS NULL AND cancellation_deadline IS NULL)"
+)
+
+
 class Invoice(Base):
     __tablename__ = "invoices"
     __table_args__ = (
@@ -185,6 +192,8 @@ class Invoice(Base):
         CheckConstraint(
             "validation_score IS NULL OR validation_score BETWEEN 0 AND 100", name="ck_invoices_score_range"
         ),
+        # Una factura cancelada tiene fecha, autor y fecha limite posterior; las demas, ninguno (HU-14).
+        CheckConstraint(INVOICE_CANCELLATION_CHECK, name="ck_invoices_cancellation"),
     )
     id: Mapped[int] = mapped_column(primary_key=True)
     internal_folio: Mapped[str] = mapped_column(String(30), unique=True, index=True)
@@ -209,6 +218,9 @@ class Invoice(Base):
     reviewed_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
     reviewed_by: Mapped[int | None] = mapped_column(restrict("users.id"), index=True)
     comments: Mapped[str | None] = mapped_column(Text)
+    cancelled_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
+    cancelled_by: Mapped[int | None] = mapped_column(restrict("users.id"), index=True)
+    cancellation_deadline: Mapped[datetime | None] = mapped_column(UTCDateTime)
     supplier: Mapped[Supplier] = relationship(back_populates="invoices")
     contract: Mapped[Contract | None] = relationship()
     # Sin delete/delete-orphan: documentos, validaciones y revisiones son evidencia fiscal (AUDITORIA BD-12).
@@ -267,12 +279,15 @@ class InvoiceDocumentType(Base):
             name="ck_invoice_document_types_formats",
         ),
         CheckConstraint("is_active OR NOT is_system", name="ck_invoice_document_types_system_active"),
-        # Niveles fijos (RD-04): el nacional factura con CFDI y el internacional con Invoice.
+        # Niveles fijos (RD-04): el nacional factura con CFDI y el internacional con Invoice; el acuse de
+        # cancelacion solo se carga al cancelar (HU-14).
         CheckConstraint(
             "(code NOT IN ('INVOICE_XML', 'INVOICE_PDF')"
             " OR (national_requirement = 'REQUIRED' AND international_requirement = 'NOT_APPLICABLE'))"
             " AND (code <> 'FOREIGN_INVOICE'"
-            " OR (national_requirement = 'NOT_APPLICABLE' AND international_requirement = 'REQUIRED'))",
+            " OR (national_requirement = 'NOT_APPLICABLE' AND international_requirement = 'REQUIRED'))"
+            " AND (code <> 'CANCELLATION_ACK'"
+            " OR (national_requirement = 'NOT_APPLICABLE' AND international_requirement = 'NOT_APPLICABLE'))",
             name="ck_invoice_document_types_fixed_levels",
         ),
     )

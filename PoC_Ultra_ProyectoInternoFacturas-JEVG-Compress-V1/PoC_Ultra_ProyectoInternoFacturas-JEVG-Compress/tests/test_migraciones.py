@@ -662,3 +662,73 @@ def test_downgrade_del_retiro_de_clickbalance(empty_db):
     execute(empty_db, "UPDATE invoices SET status = 'ACCEPTED'")
     command.upgrade(config, "head")
     command.check(config)
+
+
+INVOICE_CANCELLATION = "0012_invoice_cancellation"
+CANCEL_SQL = (
+    "UPDATE invoices SET status = 'CANCELLED', cancelled_at = now(), cancelled_by = uploaded_by,"
+    " cancellation_deadline = now() + interval '72 hours'"
+)
+
+
+def test_cancelacion_en_el_esquema(empty_db):
+    config = alembic_config(empty_db)
+    command.upgrade(config, RETIRE_CLICKBALANCE)
+    insert_supplier(empty_db, NATIONAL_COLUMNS, NATIONAL_VALUES)
+    insert_user(empty_db, "previo@proveedor.mx", audited=False)
+    add_invoice(empty_db, "AUTORIZADA", "ACCEPTED", NATIONAL_REQUIRED, ("ACCEPTED",))
+    command.upgrade(config, INVOICE_CANCELLATION)
+    assert catalog(empty_db)["CANCELLATION_ACK"] == [
+        "Acuse de cancelación",
+        ["PDF", "XML"],
+        "NOT_APPLICABLE",
+        "NOT_APPLICABLE",
+        True,
+        True,
+    ]
+    assert query(empty_db, "SELECT cancelled_at, cancelled_by, cancellation_deadline FROM invoices") == [
+        (None, None, None)
+    ]
+    with pytest.raises(IntegrityError, match="ck_invoices_cancellation"):
+        execute(empty_db, "UPDATE invoices SET status = 'CANCELLED'")
+    execute(empty_db, CANCEL_SQL)
+    assert invoice_statuses(empty_db) == {"AUTORIZADA": "CANCELLED"}
+
+
+def test_nombre_del_acuse_ocupado_detiene_la_migracion(empty_db):
+    config = alembic_config(empty_db)
+    command.upgrade(config, RETIRE_CLICKBALANCE)
+    execute(
+        empty_db,
+        "INSERT INTO invoice_document_types (code, name, formats, is_system, is_active, national_requirement,"
+        " international_requirement, created_at, updated_at) VALUES ('SOPORTE_11', 'ACUSE DE Cancelación', '{PDF}',"
+        " false, true, 'OPTIONAL', 'OPTIONAL', now(), now())",
+    )
+    with pytest.raises(RuntimeError, match="SOPORTE_11 ya se llama «Acuse de cancelación»"):
+        command.upgrade(config, INVOICE_CANCELLATION)
+    assert query(empty_db, "SELECT version_num FROM alembic_version") == [(RETIRE_CLICKBALANCE,)]
+    execute(empty_db, "UPDATE invoice_document_types SET name = 'Acuse previo' WHERE code = 'SOPORTE_11'")
+    command.upgrade(config, INVOICE_CANCELLATION)
+
+
+def test_downgrade_de_la_cancelacion(empty_db):
+    config = alembic_config(empty_db)
+    command.upgrade(config, INVOICE_CANCELLATION)
+    insert_supplier(empty_db, NATIONAL_COLUMNS, NATIONAL_VALUES)
+    insert_user(empty_db, "previo@proveedor.mx", audited=False)
+    add_invoice(empty_db, "CANCELADA", "UPLOADED", NATIONAL_REQUIRED)
+    execute(empty_db, CANCEL_SQL)
+    with pytest.raises(NotImplementedError, match="Hay facturas canceladas"):
+        command.downgrade(config, RETIRE_CLICKBALANCE)
+    assert query(empty_db, "SELECT version_num FROM alembic_version") == [(INVOICE_CANCELLATION,)]
+    execute(
+        empty_db,
+        "UPDATE invoices SET status = 'UPLOADED', cancelled_at = NULL, cancelled_by = NULL,"
+        " cancellation_deadline = NULL",
+    )
+    command.downgrade(config, RETIRE_CLICKBALANCE)
+    assert "CANCELLATION_ACK" not in catalog(empty_db)
+    with pytest.raises(IntegrityError, match="invoicestatus"):
+        execute(empty_db, "UPDATE invoices SET status = 'CANCELLED'")
+    command.upgrade(config, "head")
+    command.check(config)
