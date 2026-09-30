@@ -732,3 +732,60 @@ def test_downgrade_de_la_cancelacion(empty_db):
         execute(empty_db, "UPDATE invoices SET status = 'CANCELLED'")
     command.upgrade(config, "head")
     command.check(config)
+
+
+PROVIDER_USER_SUPPLIER = "0013_provider_user_supplier"
+
+
+def test_usuarios_proveedor_sin_proveedor_se_deshabilitan(empty_db):
+    config = alembic_config(empty_db)
+    command.upgrade(config, INVOICE_CANCELLATION)
+    insert_supplier(empty_db, NATIONAL_COLUMNS, NATIONAL_VALUES)
+    insert_user(empty_db, "huerfano@proveedor.mx", audited=True)  # PROVIDER activo sin proveedor
+    insert_user(empty_db, "vinculado@proveedor.mx", audited=False)
+    execute(
+        empty_db, "UPDATE users SET supplier_id = (SELECT id FROM suppliers) WHERE email = 'vinculado@proveedor.mx'"
+    )
+    insert_user(empty_db, "interno@ultrasist.mx", audited=False)
+    execute(
+        empty_db,
+        "UPDATE users SET role = 'INTERNAL', supplier_id = (SELECT id FROM suppliers)"
+        " WHERE email = 'interno@ultrasist.mx'",
+    )
+    execute(
+        empty_db,
+        "INSERT INTO user_sessions (user_id, sid_hash, created_at, last_seen_at)"
+        " SELECT id, repeat('a', 64), now(), now() FROM users WHERE email = 'huerfano@proveedor.mx'",
+    )
+    command.upgrade(config, PROVIDER_USER_SUPPLIER)
+    users = {
+        email: (active, supplier)
+        for email, active, supplier in query(empty_db, "SELECT email, is_active, supplier_id IS NOT NULL FROM users")
+    }
+    assert users == {
+        "huerfano@proveedor.mx": (False, False),
+        "vinculado@proveedor.mx": (True, True),
+        "interno@ultrasist.mx": (True, False),
+    }
+    assert query(empty_db, "SELECT revoked_at IS NOT NULL FROM user_sessions") == [(True,)]
+    audited = query(
+        empty_db,
+        "SELECT u.email, a.action FROM audit_logs a JOIN users u ON u.id::text = a.entity_id"
+        " WHERE a.action IN ('USER_DEACTIVATED_WITHOUT_SUPPLIER', 'USER_SUPPLIER_CLEARED') ORDER BY u.email",
+    )
+    assert audited == [
+        ("huerfano@proveedor.mx", "USER_DEACTIVATED_WITHOUT_SUPPLIER"),
+        ("interno@ultrasist.mx", "USER_SUPPLIER_CLEARED"),
+    ]
+    with pytest.raises(IntegrityError, match="ck_users_provider_supplier"):
+        execute(empty_db, "UPDATE users SET is_active = true WHERE email = 'huerfano@proveedor.mx'")
+
+
+def test_downgrade_del_usuario_proveedor(empty_db):
+    config = alembic_config(empty_db)
+    command.upgrade(config, PROVIDER_USER_SUPPLIER)
+    command.downgrade(config, INVOICE_CANCELLATION)
+    insert_user(empty_db, "sin-proveedor@proveedor.mx", audited=False)  # sin el CHECK se admite
+    command.upgrade(config, "head")
+    assert query(empty_db, "SELECT is_active FROM users") == [(False,)]
+    command.check(config)

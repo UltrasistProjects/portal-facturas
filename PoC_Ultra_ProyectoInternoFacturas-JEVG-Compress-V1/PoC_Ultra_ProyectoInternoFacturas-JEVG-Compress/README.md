@@ -436,6 +436,14 @@ Errores frecuentes al enviar la prueba:
 
 Los tres modos (STARTTLS con usuario, TLS directo y certificado no confiable) se verificaron contra un servidor SMTP real con autenticación y un certificado propio.
 
+## Usuarios
+
+**Administración › Usuarios** (`/admin/users`) da de alta usuarios con una contraseña inicial que deben cambiar en su primer acceso (HU-10).
+
+- **Rol y proveedor:** un usuario `PROVIDER` siempre está vinculado a un proveedor existente: sin él, el alta responde 400 "Seleccione el proveedor del usuario". Los `INTERNAL` y `ADMIN` no tienen proveedor (se ignora si se envía). La base de datos lo garantiza con `CHECK ck_users_provider_supplier`.
+- **Vía recomendada para proveedores:** registrar al proveedor en `/suppliers` y autorizarlo: el portal crea su usuario con el proveedor ya vinculado y le envía las credenciales.
+- **Usuarios previos sin proveedor:** la migración `0013_provider_user_supplier` deshabilita a los `PROVIDER` que se crearon sin proveedor (auditoría `USER_DEACTIVATED_WITHOUT_SUPPLIER`, sesiones revocadas) y no pueden volver a habilitarse (409): se da de alta uno nuevo con su proveedor. Si el correo ya está ocupado por el usuario deshabilitado, use otro correo.
+
 ## Autorización y acceso de proveedores
 
 Un proveedor nace **"Registrado"** (carga masiva o formulario individual), sin usuario ni acceso al portal, y no puede facturar: SUP-001 exige el estatus operativo, que ahora se muestra como **"Autorizado"** (HU-02).

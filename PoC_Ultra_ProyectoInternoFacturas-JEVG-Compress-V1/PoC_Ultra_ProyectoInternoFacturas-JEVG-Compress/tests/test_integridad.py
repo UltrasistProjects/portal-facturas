@@ -570,3 +570,24 @@ def test_clave_repetida_en_un_catalogo(db):
                 " VALUES ('CURRENCY', 'MXN', 'Otro peso', true, now(), now())"
             )
         )
+
+
+@pytest.mark.parametrize(
+    "sql",
+    [
+        # Proveedor activo sin proveedor.
+        "UPDATE users SET supplier_id = NULL WHERE email = 'proveedor1@poc.local'",
+        # Interno con proveedor.
+        "UPDATE users SET supplier_id = (SELECT supplier_id FROM users WHERE email = 'proveedor1@poc.local')"
+        " WHERE email = 'pmo@poc.local'",
+    ],
+)
+def test_rol_y_proveedor_del_usuario(db, sql):
+    with pytest.raises(IntegrityError, match='violates check constraint "ck_users_provider_supplier"'):
+        db.execute(text(sql))
+
+
+def test_proveedor_deshabilitado_sin_proveedor_se_admite(db):
+    # Asi deja la migracion 0013 a los usuarios Proveedor previos sin proveedor.
+    db.execute(text("UPDATE users SET is_active = false, supplier_id = NULL WHERE email = 'proveedor1@poc.local'"))
+    assert db.scalar(text("SELECT supplier_id FROM users WHERE email = 'proveedor1@poc.local'")) is None

@@ -60,6 +60,7 @@ logger = logging.getLogger(__name__)
 # conservan el listado, el detalle y las descargas.
 provider_only = require_roles(Role.PROVIDER)
 MSG_SUPPLIER_NOT_ACTIVE = "Su proveedor no está autorizado para registrar facturas"
+MSG_USER_WITHOUT_SUPPLIER = "Su usuario no está vinculado a un proveedor. Contacte al Administrador"
 # Avisos que llegan por ?notice= tras una redireccion; otro valor se ignora (como en el tablero).
 NOTICES = {"submitted": "Factura enviada a validación"}
 DOCUMENT_NOTICES = {"amounts_saved": "Datos del Invoice guardados", "amounts_unchanged": "Sin cambios"}
@@ -103,7 +104,9 @@ def invoice_list(
 
 
 def _ensure_supplier_active(user) -> None:
-    if user.supplier is None or user.supplier.status != SupplierStatus.ACTIVE:
+    if user.supplier is None:
+        raise BusinessRuleError(MSG_USER_WITHOUT_SUPPLIER)
+    if user.supplier.status != SupplierStatus.ACTIVE:
         raise BusinessRuleError(MSG_SUPPLIER_NOT_ACTIVE)
 
 

@@ -5,7 +5,7 @@ Alta de factura validada, folio interno sin carrera, listado filtrado y paginado
 ## Requirements
 ### Requirement: Alta de factura con datos validados
 El alta de factura SHALL verificar, en este orden:
-1. que el proveedor del usuario esté "Autorizado" (`ACTIVE`); si no, HTTP 409 "Su proveedor no está autorizado para registrar facturas", también al abrir el formulario;
+1. que el usuario esté vinculado a un proveedor, y que éste esté "Autorizado" (`ACTIVE`); si no tiene proveedor, HTTP 409 "Su usuario no está vinculado a un proveedor. Contacte al Administrador"; si el proveedor no está autorizado, HTTP 409 "Su proveedor no está autorizado para registrar facturas"; también al abrir el formulario;
 2. los datos del formulario con el esquema `InvoiceCreate`:
    - `invoice_number` de 1 a 100 caracteres;
    - `service_period` con formato `MM/AAAA` y mes entre 01 y 12;
@@ -29,6 +29,10 @@ Los errores de datos SHALL mostrarse en el mismo formulario con HTTP 400. Un nú
 #### Scenario: Alta correcta
 - **WHEN** un proveedor autorizado crea una factura con datos válidos y un contrato propio activo
 - **THEN** la factura queda en "Borrador" y la respuesta redirige a su carga documental
+
+#### Scenario: Usuario sin proveedor
+- **WHEN** un usuario Proveedor sin proveedor abre el formulario de alta o lo envía
+- **THEN** la respuesta es HTTP 409 "Su usuario no está vinculado a un proveedor. Contacte al Administrador" y no se crea la factura
 
 ### Requirement: Folio interno sin colisiones
 El folio interno SHALL derivarse del identificador asignado por la base de datos a la factura, dentro de la misma transacción del alta, con el formato `FAC-{AAAA}-{id:05d}`. `AAAA` es el año de la fecha de creación en la zona horaria de negocio.

@@ -38,6 +38,10 @@ router = APIRouter(prefix="/admin")
 
 USERS_URL = "/admin/users"
 USER_NOTICES = {"created": "Usuario creado"}
+# Un usuario Proveedor siempre esta vinculado a su proveedor (usuario-proveedor-vinculado; ck_users_provider_supplier).
+MSG_SUPPLIER_REQUIRED = "Seleccione el proveedor del usuario"
+MSG_SUPPLIER_NOT_FOUND = "Proveedor inexistente"
+MSG_ORPHAN_PROVIDER = "El usuario no está vinculado a un proveedor: dé de alta uno nuevo con su proveedor"
 
 
 def _users_page(
@@ -49,6 +53,7 @@ def _users_page(
     q: str = "",
     page: int = 1,
     notice: str | None = None,
+    form: dict[str, str] | None = None,
 ):
     # Busqueda y paginacion en SQL (listados-paginados); el proveedor de cada usuario, en una consulta.
     q = q.strip()
@@ -63,6 +68,8 @@ def _users_page(
         "notice": notice,
         "suppliers": list(db.scalars(select(Supplier).order_by(Supplier.business_name))),
         "error": error,
+        # Alta rechazada: lo capturado se conserva, salvo la contrasena.
+        "form": form or {},
     }
     return templates.TemplateResponse(request, "admin/users.html", context, status_code=status_code)
 
@@ -91,18 +98,29 @@ async def create_user(
     user=Depends(require_roles(Role.ADMIN)),
 ):
     await validate_csrf(request)
+    form = {"name": name, "email": email, "role": role.value, "supplier_id": str(supplier_id or "")}
+
+    def rejected(message: str, status_code: int):
+        return _users_page(request, db, user, message, status_code, form=form)
+
     try:
         data = UserCreate(name=name, email=email, password=password, role=role, supplier_id=supplier_id)
     except ValidationError as exc:
-        return _users_page(request, db, user, validation_message(exc), 400)
+        return rejected(validation_message(exc), 400)
+    # El proveedor solo aplica al rol Proveedor, y ahi es obligatorio y debe existir.
+    supplier_id = data.supplier_id if data.role == Role.PROVIDER else None
+    if data.role == Role.PROVIDER and supplier_id is None:
+        return rejected(MSG_SUPPLIER_REQUIRED, 400)
+    if supplier_id is not None and db.get(Supplier, supplier_id) is None:
+        return rejected(MSG_SUPPLIER_NOT_FOUND, 400)
     if db.scalar(select(User.id).where(User.email == data.email)):
-        return _users_page(request, db, user, "Ya existe un usuario con ese correo.", 409)
+        return rejected("Ya existe un usuario con ese correo.", 409)
     created = User(
         name=data.name,
         email=data.email,
         password_hash=hash_password(data.password),
         role=data.role,
-        supplier_id=data.supplier_id if data.role == Role.PROVIDER else None,
+        supplier_id=supplier_id,
         must_change_password=True,  # la asigno el Administrador: se cambia en el primer acceso (HU-10)
     )
     db.add(created)
@@ -120,6 +138,8 @@ async def toggle_user(
     await validate_csrf(request)
     target = db.get(User, user_id)
     if target and target.id != user.id:
+        if not target.is_active and target.role == Role.PROVIDER and target.supplier_id is None:
+            raise BusinessRuleError(MSG_ORPHAN_PROVIDER)
         old = target.is_active
         target.is_active = not old
         if not target.is_active:

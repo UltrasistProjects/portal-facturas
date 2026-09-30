@@ -61,8 +61,16 @@ def restrict(target: str) -> ForeignKey:
     return ForeignKey(target, ondelete="RESTRICT")
 
 
+# Un usuario Proveedor activo tiene proveedor; un Interno o Administrador, ninguno. Un Proveedor deshabilitado sin
+# proveedor se admite: asi quedan los registros previos (0013_provider_user_supplier).
+USER_PROVIDER_SUPPLIER_CHECK = (
+    "(role = 'PROVIDER' AND (supplier_id IS NOT NULL OR NOT is_active)) OR (role <> 'PROVIDER' AND supplier_id IS NULL)"
+)
+
+
 class User(Base):
     __tablename__ = "users"
+    __table_args__ = (CheckConstraint(USER_PROVIDER_SUPPLIER_CHECK, name="ck_users_provider_supplier"),)
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(150))
     email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
