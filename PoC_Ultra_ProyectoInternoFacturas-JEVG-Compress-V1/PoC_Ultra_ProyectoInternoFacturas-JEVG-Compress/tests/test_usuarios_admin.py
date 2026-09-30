@@ -1,5 +1,5 @@
-"""Alta y habilitacion de usuarios con la regla rol-proveedor (spec administracion-usuarios; change
-usuario-proveedor-vinculado)."""
+"""Alta y habilitacion de usuarios con la regla rol-proveedor (spec administracion-usuarios; changes
+usuario-proveedor-vinculado y add-keycloak-authentication: las cuentas viven en el Keycloak simulado)."""
 
 from types import SimpleNamespace
 from uuid import uuid4
@@ -10,12 +10,10 @@ from sqlalchemy import delete, select
 from app.core.constants import Role, SupplierStatus
 from app.core.database import SessionLocal
 from app.core.errors import BusinessRuleError
-from app.core.security import hash_password
-from app.models import User
+from app.models import AuditLog, User
 from app.routers.invoices import _ensure_supplier_active
-from tests.conftest import csrf, login, supplier_by_email
-
-PASSWORD = "Temporal#2026"
+from app.services.keycloak_admin import UPDATE_PASSWORD
+from tests.conftest import csrf, identity_account, login, supplier_by_email
 
 
 @pytest.fixture()
@@ -31,7 +29,6 @@ def create(client, email: str, role: str, supplier_id="", name="Joshua Bolaños 
     data = {
         "name": name,
         "email": email,
-        "password": PASSWORD,
         "role": role,
         "supplier_id": str(supplier_id),
         "csrf_token": csrf(client, "/admin/users"),
@@ -49,11 +46,11 @@ def test_proveedor_sin_proveedor_rechazado(client, email):
     response = create(client, email, "Proveedor")
     assert response.status_code == 400 and "Seleccione el proveedor del usuario" in response.text
     assert stored(email) is None
-    # El formulario vuelve abierto con lo capturado, sin la contrasena.
+    # El formulario vuelve abierto con lo capturado; no tiene campo de contrasena (la asigna Keycloak).
     page = response.text
     assert '<details class="panel admin-create" open>' in page
     assert f'value="{email}"' in page and 'value="Joshua Bolaños Hernández"' in page
-    assert "<option selected>Proveedor</option>" in page and PASSWORD not in page
+    assert "<option selected>Proveedor</option>" in page and 'name="password"' not in page
 
 
 def test_proveedor_inexistente(client, email):
@@ -62,20 +59,45 @@ def test_proveedor_inexistente(client, email):
     assert response.status_code == 400 and "Proveedor inexistente" in response.text and stored(email) is None
 
 
-def test_proveedor_con_su_proveedor(client, email):
+def test_proveedor_con_su_proveedor(client, email, keycloak):
     supplier = supplier_by_email("proveedor1@poc.local")
     login(client)
-    assert create(client, email, "Proveedor", supplier.id).status_code == 303
+    response = create(client, email, "Proveedor", supplier.id)
+    assert response.status_code == 200 and "Usuario creado" in response.text
     created = stored(email)
     assert (created.role, created.supplier_id, created.is_active) == (Role.PROVEEDOR, supplier.id, True)
+    account = keycloak.account(email)
+    assert (account.id, account.roles, account.required_actions) == (
+        created.keycloak_sub,
+        {"Proveedor"},
+        [UPDATE_PASSWORD],
+    )
+    assert account.password in response.text and response.headers["cache-control"] == "no-store"
 
 
 @pytest.mark.parametrize("role", ["PMO", "Administrador"])
-def test_pmo_o_administrador_sin_proveedor(client, email, role):
+def test_pmo_o_administrador_sin_proveedor(client, email, role, keycloak):
     supplier = supplier_by_email("proveedor1@poc.local")
     login(client)
-    assert create(client, email, role, supplier.id).status_code == 303
-    assert stored(email).supplier_id is None
+    assert create(client, email, role, supplier.id).status_code == 200
+    assert stored(email).supplier_id is None and keycloak.account(email).roles == {role}
+
+
+def test_alta_con_correo_de_otro_rol_en_keycloak(client, email, keycloak):
+    keycloak.add_account(email, "Administrador")
+    login(client)
+    response = create(client, email, "PMO")
+    assert response.status_code == 409 and "otro rol del portal" in response.text
+    assert stored(email) is None and keycloak.account(email).password is None
+
+
+def test_alta_con_keycloak_caido(client, email, keycloak):
+    login(client)
+    keycloak.unavailable = True
+    response = create(client, email, "PMO")
+    assert response.status_code == 503
+    assert "El servicio de identidad no está disponible. Intente más tarde." in response.text
+    assert stored(email) is None
 
 
 def test_selector_sin_ninguno(client):
@@ -92,7 +114,6 @@ def orphan():
         user = User(
             name="Usuario huerfano",
             email=address,
-            password_hash=hash_password(PASSWORD),
             role=Role.PROVEEDOR,
             supplier_id=None,
             is_active=False,
@@ -104,6 +125,49 @@ def orphan():
     with SessionLocal() as db:
         db.execute(delete(User).where(User.id == user.id))
         db.commit()
+
+
+@pytest.fixture()
+def linked(email):
+    """Usuario PMO activo enlazado a su cuenta del Keycloak simulado."""
+    with SessionLocal() as db:
+        user = User(name="Usuario enlazado", email=email, role=Role.PMO, keycloak_sub=identity_account(email, Role.PMO))
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+    return user
+
+
+def toggle(client, user: User):
+    token = csrf(client, "/admin/users")
+    return client.post(f"/admin/users/{user.id}/toggle", data={"csrf_token": token}, follow_redirects=False)
+
+
+def test_deshabilitar_con_keycloak_caido(client, linked, keycloak):
+    login(client)
+    keycloak.unavailable = True
+    response = toggle(client, linked)
+    assert response.status_code == 303 and "ok=idp_sync_failed" in response.headers["location"]
+    assert stored(linked.email).is_active is False  # el portal le cierra el acceso de todos modos
+    assert keycloak.account(linked.email).enabled
+    with SessionLocal() as db:
+        entry = db.scalar(
+            select(AuditLog).where(AuditLog.action == "IDP_SYNC_FAILED", AuditLog.entity_id == str(linked.id))
+        )
+    assert entry.new_value == {"operation": "update_user", "error": "unavailable"}
+    keycloak.unavailable = False
+    assert "Keycloak no se actualizó" in client.get(response.headers["location"]).text
+
+
+def test_habilitar_con_keycloak_caido(client, linked, keycloak):
+    login(client)
+    toggle(client, linked)  # deshabilitado en el portal y en Keycloak
+    keycloak.unavailable = True
+    response = toggle(client, linked)
+    assert response.status_code == 503 and stored(linked.email).is_active is False
+    keycloak.unavailable = False
+    assert toggle(client, linked).status_code == 303
+    assert stored(linked.email).is_active is True and keycloak.account(linked.email).enabled
 
 
 def test_habilitar_proveedor_sin_proveedor(client, orphan):

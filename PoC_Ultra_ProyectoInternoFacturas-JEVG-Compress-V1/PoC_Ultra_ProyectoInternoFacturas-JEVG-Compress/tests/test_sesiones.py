@@ -8,10 +8,12 @@ from datetime import timedelta
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
+from app.core.config import settings
 from app.core.database import SessionLocal
 from app.models import User, UserSession
 from app.services import session_service
 from tests.conftest import ROOT, csrf, login
+from tests.idp import query
 
 COOKIE = "invoice_portal_session"
 
@@ -56,7 +58,9 @@ def test_expiracion_por_inactividad(client, monkeypatch):
     assert client.get("/", follow_redirects=False).status_code == 200  # la actividad renueva la sesion
     monkeypatch.setattr(session_service, "utcnow", lambda: start + timedelta(minutes=59 + 61))
     assert client.get("/", follow_redirects=False).status_code == 303
-    assert client.get("/login").status_code == 200  # sin ciclo de redirecciones
+    # Sin ciclo de redirecciones: /login descarta la sesion vencida y va a Keycloak.
+    response = client.get("/login", follow_redirects=False)
+    assert response.status_code == 302 and response.headers["location"].startswith(settings.keycloak_issuer)
 
 
 def test_expiracion_absoluta(client, monkeypatch):
@@ -69,7 +73,7 @@ def test_expiracion_absoluta(client, monkeypatch):
     assert client.get("/", follow_redirects=False).status_code == 303
 
 
-def test_deshabilitar_usuario_revoca_sus_sesiones():
+def test_deshabilitar_usuario_revoca_sus_sesiones(keycloak):
     from app.main import app
 
     with TestClient(app) as provider, TestClient(app) as admin:
@@ -80,6 +84,7 @@ def test_deshabilitar_usuario_revoca_sus_sesiones():
             target = db.scalar(select(User.id).where(User.email == "proveedor2@poc.local"))
         toggle = f"/admin/users/{target}/toggle"
         admin.post(toggle, data={"csrf_token": csrf(admin, "/admin/users")})
+        account = keycloak.account("proveedor2@poc.local")
         try:
             assert provider.get("/", follow_redirects=False).status_code == 303
             with SessionLocal() as db:
@@ -87,16 +92,38 @@ def test_deshabilitar_usuario_revoca_sus_sesiones():
                     select(UserSession).where(UserSession.user_id == target, UserSession.revoked_at.is_(None))
                 ).all()
             assert active == []
+            # Tambien en Keycloak: cuenta deshabilitada y sus sesiones SSO cerradas (no vuelve a entrar por SSO).
+            assert not account.enabled and account.id in keycloak.logouts
         finally:
             admin.post(toggle, data={"csrf_token": csrf(admin, "/admin/users")})  # rehabilita para otras pruebas
+        assert account.enabled
 
 
-def test_fijacion_de_sesion(client):
+def test_fijacion_de_sesion(client, keycloak):
     login(client)
-    first_cookie, first_sid = client.cookies.get(COOKIE), session_data(client)["sid"]
-    login(client, "pmo@poc.local")
-    assert session_data(client)["sid"] != first_sid
+    client.get("/")
+    first_cookie, first = client.cookies.get(COOKIE), session_data(client)
+    # Un nuevo viaje a Keycloak con la sesion vigente (cambio de contrasena) termina en el callback con esa cookie.
+    params = query(client.get("/account/password", follow_redirects=False).headers["location"])
+    code = keycloak.authorize("admin@poc.local", params)
+    client.get("/auth/callback", params={"code": code, "state": params["state"]}, follow_redirects=False)
+    client.get("/")
+    second = session_data(client)
+    assert second["sid"] != first["sid"] and second["csrf_token"] != first["csrf_token"]
     assert reuse(client, first_cookie).status_code == 303
+
+
+def test_id_token_solo_del_lado_del_servidor(client):
+    login(client)
+    sid = session_data(client)["sid"]
+    with SessionLocal() as db:
+        stored = db.scalar(select(UserSession).where(UserSession.sid_hash == session_service.hash_sid(sid)))
+    assert stored.id_token_hint and stored.id_token_hint.count(".") == 2  # JWT del ID token
+    assert stored.id_token_hint not in client.cookies.get(COOKIE)
+    client.post("/logout", data={"csrf_token": csrf(client, "/")}, follow_redirects=False)
+    with SessionLocal() as db:
+        revoked = db.get(UserSession, stored.id)
+    assert revoked.revoked_at is not None and revoked.id_token_hint is None
 
 
 def test_cookie_secure_segun_configuracion(tmp_path):
@@ -105,7 +132,14 @@ def test_cookie_secure_segun_configuracion(tmp_path):
         "print(next(m.kwargs['https_only'] for m in app.user_middleware if m.cls is SessionMiddleware))"
     )
     env = {k: v for k, v in os.environ.items() if k != "SESSION_HTTPS_ONLY"}
-    env.update({"APP_ENV": "production", "LOG_DIR": str(tmp_path), "PYTHONPATH": str(ROOT)})
+    env.update(
+        {
+            "APP_ENV": "production",
+            "LOG_DIR": str(tmp_path),
+            "PYTHONPATH": str(ROOT),
+            "KEYCLOAK_SERVER_URL": "https://sso.ultrasist.example",
+        }
+    )
     result = subprocess.run([sys.executable, "-c", code], env=env, cwd=ROOT, capture_output=True, text=True, check=True)
     assert result.stdout.strip().splitlines()[-1] == "True"
 

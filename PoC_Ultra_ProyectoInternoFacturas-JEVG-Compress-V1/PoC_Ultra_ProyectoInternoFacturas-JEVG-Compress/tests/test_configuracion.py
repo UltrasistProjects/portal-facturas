@@ -12,6 +12,8 @@ from tests.conftest import ROOT
 
 VALID_KEY = "k" * 32
 POSTGRES_URL = "postgresql+psycopg://portal:secreto@127.0.0.1:55432/portal"
+# En produccion Keycloak debe usarse por HTTPS; las pruebas corren contra http://keycloak.test.
+KEYCLOAK_TLS = "https://sso.ultrasist.example"
 
 
 def build(**values) -> Settings:
@@ -44,8 +46,9 @@ def test_valores_por_defecto_seguros(monkeypatch):
     monkeypatch.delenv("SESSION_HTTPS_ONLY", raising=False)
     assert build(secret_key=VALID_KEY).debug is False
     assert build(secret_key=VALID_KEY, app_env="development").session_https_only is False
-    assert build(secret_key=VALID_KEY, app_env="production").session_https_only is True
-    assert build(secret_key=VALID_KEY, app_env="production", session_https_only="false").session_https_only is False
+    production = {"app_env": "production", "keycloak_server_url": KEYCLOAK_TLS}
+    assert build(secret_key=VALID_KEY, **production).session_https_only is True
+    assert build(secret_key=VALID_KEY, **production, session_https_only="false").session_https_only is False
 
 
 def test_url_de_sqlite_rechazada_con_indicaciones():
@@ -120,9 +123,13 @@ def test_correo_por_omision_fuera_de_produccion(no_mail_env, tmp_path, monkeypat
 
 def test_correo_por_omision_en_produccion_exige_smtp(no_mail_env):
     with pytest.raises(ValidationError, match="SMTP_HOST es obligatoria con MAIL_BACKEND=smtp"):
-        build(secret_key=VALID_KEY, app_env="production")
+        build(secret_key=VALID_KEY, app_env="production", keycloak_server_url=KEYCLOAK_TLS)
     configured = build(
-        secret_key=VALID_KEY, app_env="production", smtp_host="smtp.ultrasist.com.mx", mail_from="a@b.mx"
+        secret_key=VALID_KEY,
+        app_env="production",
+        keycloak_server_url=KEYCLOAK_TLS,
+        smtp_host="smtp.ultrasist.com.mx",
+        mail_from="a@b.mx",
     )
     assert configured.mail_backend == "smtp"
 
@@ -221,3 +228,95 @@ def test_create_env_por_consola_avisa_del_reemplazo_de_sqlite(tmp_path):
         [sys.executable, str(tmp_path / "scripts" / "create_env.py")], capture_output=True, text=True, check=True
     )
     assert SQLITE_WARNING in result.stdout
+
+
+# --- Keycloak (add-keycloak-authentication, D20) --------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("name", ["KEYCLOAK_CLIENT_SECRET", "KEYCLOAK_ADMIN_CLIENT_SECRET", "KEYCLOAK_SERVER_URL"])
+def test_variable_de_keycloak_ausente_impide_arrancar(monkeypatch, name):
+    monkeypatch.delenv(name)
+    with pytest.raises(ValidationError, match=f"{name} es obligatoria"):
+        build(secret_key=VALID_KEY)
+
+
+def test_realm_obligatorio(monkeypatch):
+    monkeypatch.delenv("KEYCLOAK_REALM")
+    with pytest.raises(ValidationError, match="KEYCLOAK_REALM es obligatoria"):
+        build(secret_key=VALID_KEY)
+
+
+@pytest.mark.parametrize(
+    ("value", "reason"),
+    [("change-me-keycloak-admin-secret-value", "change-me"), ("s" * 31, "al menos 32")],
+)
+def test_secreto_de_keycloak_inseguro(value, reason):
+    with pytest.raises(ValidationError, match=reason) as error:
+        build(secret_key=VALID_KEY, keycloak_admin_client_secret=value)
+    assert value not in str(error.value)  # SecretStr: el valor no aparece en el mensaje
+
+
+def test_keycloak_sin_tls_en_produccion():
+    with pytest.raises(ValidationError, match="en produccion Keycloak debe usarse por HTTPS"):
+        build(secret_key=VALID_KEY, app_env="production", keycloak_server_url="http://keycloak:8080")
+
+
+def test_url_de_keycloak_invalida():
+    with pytest.raises(ValidationError, match="http:// o https://"):
+        build(secret_key=VALID_KEY, keycloak_server_url="keycloak.ultrasist.example")
+
+
+def test_urls_derivadas_de_keycloak():
+    configured = build(
+        secret_key=VALID_KEY, keycloak_server_url="https://sso.ultrasist.example:8443/", keycloak_realm="portal"
+    )
+    assert configured.keycloak_issuer == "https://sso.ultrasist.example:8443/realms/portal"
+    assert configured.keycloak_metadata_url.endswith("/realms/portal/.well-known/openid-configuration")
+    assert configured.keycloak_admin_url == "https://sso.ultrasist.example:8443/admin/realms/portal"
+    assert configured.keycloak_origin == "https://sso.ultrasist.example:8443"
+    assert configured.keycloak_timeout == 10
+
+
+def test_env_example_sin_secretos_de_keycloak():
+    values = parse_env((ROOT / ".env.example").read_text(encoding="utf-8").splitlines())
+    for name in (
+        "KEYCLOAK_CLIENT_SECRET",
+        "KEYCLOAK_ADMIN_CLIENT_SECRET",
+        "KC_BOOTSTRAP_ADMIN_PASSWORD",
+        "DEMO_PASSWORD",
+    ):
+        assert values[name] == "", name
+
+
+def test_create_env_genera_la_configuracion_de_keycloak(tmp_path):
+    (tmp_path / ".env.example").write_text(EXAMPLE, encoding="utf-8")
+    create_env(tmp_path)
+    values = env_values(tmp_path)
+    assert values["KEYCLOAK_SERVER_URL"] == "http://127.0.0.1:58080" and values["KEYCLOAK_REALM"] == "ultrasist-portal"
+    secrets = [
+        values[name]
+        for name in ("KEYCLOAK_CLIENT_SECRET", "KEYCLOAK_ADMIN_CLIENT_SECRET", "KC_BOOTSTRAP_ADMIN_PASSWORD")
+    ]
+    assert all(len(secret) >= 32 for secret in secrets) and len(set(secrets)) == 3
+    configured = build(
+        secret_key=VALID_KEY,
+        keycloak_server_url=values["KEYCLOAK_SERVER_URL"],
+        keycloak_client_secret=values["KEYCLOAK_CLIENT_SECRET"],
+        keycloak_admin_client_secret=values["KEYCLOAK_ADMIN_CLIENT_SECRET"],
+    )
+    assert configured.keycloak_client_secret.get_secret_value() == values["KEYCLOAK_CLIENT_SECRET"]
+    demo = values["DEMO_PASSWORD"]
+    assert len(demo) == 20 and any(c.isalpha() for c in demo) and any(c.isdigit() for c in demo)
+    assert any(not c.isalnum() for c in demo)
+
+
+def test_create_env_completa_keycloak_sin_tocar_valores_presentes(tmp_path):
+    (tmp_path / ".env.example").write_text(EXAMPLE, encoding="utf-8")
+    (tmp_path / ".env").write_text(
+        "KEYCLOAK_PORT=59000\nKEYCLOAK_CLIENT_SECRET=propio-" + "x" * 40 + "\n", encoding="utf-8"
+    )
+    create_env(tmp_path)
+    values = env_values(tmp_path)
+    assert values["KEYCLOAK_CLIENT_SECRET"] == "propio-" + "x" * 40
+    assert values["KEYCLOAK_SERVER_URL"] == "http://127.0.0.1:59000"
+    assert values["KEYCLOAK_ADMIN_CLIENT_SECRET"] and values["DEMO_PASSWORD"]

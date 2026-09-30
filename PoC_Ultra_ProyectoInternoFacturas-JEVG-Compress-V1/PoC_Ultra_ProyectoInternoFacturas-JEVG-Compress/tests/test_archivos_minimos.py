@@ -12,12 +12,11 @@ from sqlalchemy import delete, select
 from app.core.config import settings
 from app.core.constants import FORMAT_EXTENSIONS, Role, SupplierOrigin, SupplierStatus, SupplierType
 from app.core.database import SessionLocal
-from app.core.security import hash_password
 from app.models import AuditLog, Contract, Document, Invoice, InvoiceDocumentType, Supplier, User, ValidationResult
 from app.rules.document_rules import document_rules
 from app.services.file_service import ALLOWED_EXTENSIONS
 from app.services.validation_score_service import calculate_score
-from tests.conftest import ROOT, csrf, invoice_by_number, login, supplier_by_email
+from tests.conftest import ROOT, csrf, identity_account, invoice_by_number, login, supplier_by_email
 
 NATIONAL, INTERNATIONAL = SupplierOrigin.NATIONAL, SupplierOrigin.INTERNATIONAL
 
@@ -113,7 +112,7 @@ PDF = b"%PDF-1.7\n1 0 obj\n<<>>\nendobj\n%%EOF\n"
 PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 16
 TXT = b"Documento de prueba"
 XML = (ROOT / "data" / "demo_documents" / "cfdi_demo_correcto.xml").read_bytes()
-INTERNATIONAL_EMAIL, INTERNATIONAL_PASSWORD = "internacional@poc.local", "Test#Internacional2026"
+INTERNATIONAL_EMAIL = "internacional@poc.local"
 
 
 @pytest.fixture()
@@ -174,7 +173,7 @@ def international():
             user = User(
                 name="Proveedor internacional",
                 email=INTERNATIONAL_EMAIL,
-                password_hash=hash_password(INTERNATIONAL_PASSWORD),
+                keycloak_sub=identity_account(INTERNATIONAL_EMAIL, Role.PROVEEDOR),
                 role=Role.PROVEEDOR,
                 supplier_id=supplier.id,
             )
@@ -185,7 +184,7 @@ def international():
 
 
 def login_international(client) -> None:
-    login(client, INTERNATIONAL_EMAIL, INTERNATIONAL_PASSWORD)
+    login(client, INTERNATIONAL_EMAIL)
 
 
 # Datos del Invoice que el alta exige al proveedor internacional (HU-15).

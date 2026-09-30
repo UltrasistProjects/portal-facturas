@@ -1,62 +1,93 @@
+"""Credenciales demo (spec autenticacion-sesiones, add-keycloak-authentication): viven solo en el realm de Keycloak de
+desarrollo; ni el codigo, ni el README, ni las plantillas contienen contrasenas demo."""
+
 import pytest
 from fastapi.testclient import TestClient
+from pydantic import SecretStr
 
 from app.core.config import Settings, settings
 from app.core.database import SessionLocal
 from app.core.demo import DEMO_ACCOUNTS
 from app.core.startup import startup_problems
 from scripts.seed_db import seed_passwords
+from tests.conftest import ROOT, login
+
+# Contrasenas demo que publicaba la version anterior: no deben quedar en el repositorio.
+FORMER_DEMO_PASSWORDS = ("Admin#Demo2026", "Pmo#Demo2026", "Proveedor#Demo2026", "Admin123!")
 
 
-def test_login_en_desarrollo_muestra_acceso_rapido(client, monkeypatch):
-    monkeypatch.setattr(settings, "app_env", "development")
-    page = client.get("/login").text
-    assert 'data-demo="admin@poc.local|Admin#Demo2026"' in page
-    assert "proveedor2@poc.local" not in page
-
-
-@pytest.mark.parametrize("app_env", ["test", "production"])
-def test_login_fuera_de_desarrollo_no_expone_credenciales(client, monkeypatch, app_env):
+@pytest.mark.parametrize("app_env", ["development", "production"])
+def test_sin_acceso_rapido_en_las_paginas(client, monkeypatch, app_env):
     monkeypatch.setattr(settings, "app_env", app_env)
-    page = client.get("/login").text
-    assert "data-demo" not in page
-    for account in DEMO_ACCOUNTS:
-        assert account.password not in page
-    assert "Admin123!" not in page
+    assert "data-demo" not in client.get("/login", follow_redirects=False).text
+    login(client)
+    assert "data-demo" not in client.get("/").text
 
 
-def test_seed_fuera_de_desarrollo_genera_contrasenas_aleatorias(monkeypatch, capsys):
+def test_repositorio_sin_contrasenas_demo():
+    sources = [
+        ROOT / "README.md",
+        *(path for folder in ("app", "scripts", "infra") for path in (ROOT / folder).rglob("*")),
+    ]
+    for path in sources:
+        if path.is_file() and path.suffix in {".py", ".html", ".js", ".json", ".md", ".txt", ".yaml"}:
+            text = path.read_text(encoding="utf-8")
+            assert not any(password in text for password in FORMER_DEMO_PASSWORDS), path
+            assert "data-demo" not in text, path
+
+
+def test_seed_fuera_de_desarrollo_genera_contrasenas_temporales(monkeypatch, capsys):
     monkeypatch.setattr(settings, "app_env", "test")
-    first = seed_passwords()
+    first, temporary = seed_passwords()
     output = capsys.readouterr().out
-    second = seed_passwords()
-    demo = {account.password for account in DEMO_ACCOUNTS}
+    second, _ = seed_passwords()
+    assert temporary is True  # Keycloak pedira cambiarlas en el primer acceso
     assert set(first) == {account.email for account in DEMO_ACCOUNTS}
-    assert not demo & set(first.values())
-    assert first != second
+    assert first != second and len(set(first.values())) == len(first)
     for password in first.values():
         assert output.count(password) == 1
 
 
-def test_seed_en_desarrollo_usa_contrasenas_documentadas(monkeypatch):
+def test_seed_en_desarrollo_usa_demo_password(monkeypatch):
     monkeypatch.setattr(settings, "app_env", "development")
-    assert seed_passwords() == {account.email: account.password for account in DEMO_ACCOUNTS}
+    monkeypatch.setattr(settings, "demo_password", SecretStr("Demo#Prueba2026x"))
+    passwords, temporary = seed_passwords()
+    assert passwords == {account.email: "Demo#Prueba2026x" for account in DEMO_ACCOUNTS} and temporary is False
+
+
+def test_seed_en_desarrollo_sin_demo_password(monkeypatch):
+    monkeypatch.setattr(settings, "app_env", "development")
+    monkeypatch.setattr(settings, "demo_password", SecretStr(""))
+    with pytest.raises(SystemExit, match="DEMO_PASSWORD es obligatoria"):
+        seed_passwords()
+
+
+def test_cuentas_demo_en_keycloak(keycloak):
+    """El seed de la sesion crea las cuentas demo en Keycloak, con su rol y sin accion requerida."""
+    for account in DEMO_ACCOUNTS:
+        created = keycloak.account(account.email)
+        assert created.roles == {account.role.value} and created.required_actions == [] and created.enabled
+
+
+def production_settings(**values) -> Settings:
+    base = {
+        "secret_key": "k" * 32,
+        "app_env": "production",
+        "keycloak_server_url": "https://sso.ultrasist.example",
+        # Correo de produccion valido (HU-08): sin el, el transporte file de las pruebas seria otro problema.
+        "mail_backend": "smtp",
+        "smtp_host": "smtp.ultrasist.com.mx",
+        "mail_from": "portal@ultrasist.com.mx",
+    }
+    return Settings(_env_file=None, **{**base, **values})
 
 
 def test_arranque_en_produccion_detecta_configuracion_insegura():
-    production = Settings(_env_file=None, secret_key="k" * 32, app_env="production", session_https_only=False)
+    production = production_settings(session_https_only=False)
     with SessionLocal() as db:
         problems = startup_problems(production, db)
     assert any("SESSION_HTTPS_ONLY" in p for p in problems)
     assert any("admin@poc.local" in p for p in problems)
-
-
-# Correo de produccion valido (HU-08): sin el, el transporte file de las pruebas seria otro problema.
-SMTP = {"mail_backend": "smtp", "smtp_host": "smtp.ultrasist.com.mx", "mail_from": "portal@ultrasist.com.mx"}
-
-
-def production_settings(**values) -> Settings:
-    return Settings(_env_file=None, secret_key="k" * 32, app_env="production", **{**SMTP, **values})
 
 
 def test_arranque_en_produccion_con_cookie_segura_solo_reporta_cuentas_demo():

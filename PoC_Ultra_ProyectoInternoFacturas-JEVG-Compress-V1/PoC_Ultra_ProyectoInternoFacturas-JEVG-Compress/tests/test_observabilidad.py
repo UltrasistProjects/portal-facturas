@@ -10,10 +10,10 @@ from sqlalchemy import select, text
 from app.core.config import settings
 from app.core.constants import NotificationEvent
 from app.core.database import SessionLocal
-from app.core.demo import DEMO_ACCOUNTS
-from app.models import Invoice, User
+from app.models import Invoice, User, UserSession
 from app.services import notification_templates
 from tests.conftest import ROOT, TEST_PASSWORDS, csrf, invoice_by_number, login, supplier_by_email
+from tests.idp import query
 
 LOG_FILE = settings.log_dir / "app.log"
 CFDI = (ROOT / "data" / "demo_documents" / "cfdi_demo_correcto.xml").read_text(encoding="utf-8")
@@ -112,8 +112,12 @@ def test_pdf_danado(client):
 
 def test_sin_datos_sensibles_en_el_log(client, restore_notification_recipients):
     offset = log_offset()
-    login(client, "proveedor1@poc.local", "Secreta#Incorrecta1")
-    login(client, "proveedor1@poc.local")
+    rejected = login(client, "proveedor1@poc.local", nonce="nonce-ajeno")  # callback rechazado (LOGIN_FAILED)
+    assert rejected.status_code == 400
+    accepted = login(client, "proveedor1@poc.local")
+    codes = [query(str(response.request.url))["code"] for response in (rejected, accepted)]
+    with SessionLocal() as db:
+        id_token = db.scalar(select(UserSession.id_token_hint).order_by(UserSession.id.desc()).limit(1))
     invoice_flow(client, "LOG-002", "LOG00002-0000-4000-8000-000000000002")
     client.post("/logout", data={"csrf_token": csrf(client, "/")})
     login(client, "pmo@poc.local")
@@ -131,13 +135,16 @@ def test_sin_datos_sensibles_en_el_log(client, restore_notification_recipients):
     forbidden = [
         "password",
         "csrf",
-        "Secreta#Incorrecta1",
+        "nonce-ajeno",
+        *codes,
+        id_token,
+        settings.keycloak_client_secret.get_secret_value(),
+        settings.keycloak_admin_client_secret.get_secret_value(),
         "TIC210101ABC",
         "ULT940623AG0",
         "cfdi.xml",
         "factura.pdf",
         *TEST_PASSWORDS.values(),
-        *(account.password for account in DEMO_ACCOUNTS),
     ]
     for value in forbidden:
         assert value not in content, value

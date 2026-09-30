@@ -12,11 +12,10 @@ from sqlalchemy import func, select, update
 from app.core.config import settings
 from app.core.constants import InvoiceStatus, Role, SupplierOrigin, SupplierStatus, SupplierType
 from app.core.database import SessionLocal
-from app.core.security import hash_password
 from app.core.timeutils import to_business
 from app.models import AuditLog, Contract, Document, Invoice, Supplier, User, ValidationResult, ValidationSettings
 from app.services.foreign_invoice_service import MSG_NOT_INTERNATIONAL
-from tests.conftest import csrf, invoice_by_number, login
+from tests.conftest import csrf, identity_account, invoice_by_number, login
 
 INTERNATIONAL = "proveedor3@poc.local"  # proveedor internacional demo del seed (D11)
 AMOUNTS = {"invoice_date": "2026-09-15", "subtotal": "1,000.00", "tax": "0.00", "total": "1000", "currency": "USD"}
@@ -160,7 +159,7 @@ def other_international():
                 User(
                     name="Otro internacional",
                     email=email,
-                    password_hash=hash_password("Test#Internacional2026"),
+                    keycloak_sub=identity_account(email, Role.PROVEEDOR),
                     role=Role.PROVEEDOR,
                     supplier_id=supplier.id,
                 )
@@ -342,7 +341,7 @@ def test_mismo_nombre_en_otro_proveedor(client, other_international):
     login(client, INTERNATIONAL)
     assert upload(client, new_invoice(client).id, "FOREIGN_INVOICE", name, pdf(INVOICE_TEXT)).status_code == 303
     client.post("/logout", data={"csrf_token": csrf(client, "/")})
-    login(client, other_international, "Test#Internacional2026")
+    login(client, other_international)
     other = new_invoice(client, other_international)
     assert upload(client, other.id, "FOREIGN_INVOICE", name, pdf(INVOICE_TEXT)).status_code == 303
 

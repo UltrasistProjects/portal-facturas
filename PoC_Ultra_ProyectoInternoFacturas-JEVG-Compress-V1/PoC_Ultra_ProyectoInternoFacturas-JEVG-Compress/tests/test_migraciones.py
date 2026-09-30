@@ -18,7 +18,6 @@ DOMAIN_TABLES = {
     "documents",
     "validation_results",
     "audit_logs",
-    "login_attempts",
     "reviews",
     "user_sessions",
     "invoice_document_types",
@@ -33,7 +32,7 @@ NOTIFICATION_TABLES = {"notification_mailboxes", "notification_copies", "email_d
 VALIDATION_TABLES = {"validation_settings", "catalog_entries"}
 BASELINE_TABLES = (
     DOMAIN_TABLES - {"invoice_document_types", "notification_templates"} - NOTIFICATION_TABLES - VALIDATION_TABLES
-)
+) | {"login_attempts"}
 
 
 @pytest.fixture()
@@ -820,5 +819,73 @@ def test_roles_con_los_nombres_del_negocio(empty_db):
         execute(empty_db, "UPDATE users SET supplier_id = NULL WHERE email = 'proveedor@proveedor.mx'")
     command.downgrade(config, PROVIDER_USER_SUPPLIER)
     assert sorted(role for (role,) in query(empty_db, "SELECT role FROM users")) == ["ADMIN", "INTERNAL", "PROVIDER"]
+    command.upgrade(config, "head")
+    command.check(config)
+
+
+KEYCLOAK_IDENTITY = "0015_keycloak_identity"
+
+
+def test_identidad_en_keycloak_en_el_esquema(empty_db):
+    config = alembic_config(empty_db)
+    command.upgrade(config, BUSINESS_ROLE_NAMES)
+    execute(
+        empty_db,
+        "INSERT INTO users (name, email, password_hash, role, is_active, created_at)"
+        " VALUES ('Previo', 'previo@ultrasist.mx', 'hash', 'PMO', true, now())",
+    )
+    command.upgrade(config, KEYCLOAK_IDENTITY)
+    assert "login_attempts" not in tables(empty_db)
+    # Los usuarios previos conservan su hash hasta enlazarlos (scripts/link_keycloak_users.py).
+    assert query(empty_db, "SELECT password_hash, keycloak_sub FROM users") == [("hash", None)]
+    execute(empty_db, "UPDATE users SET keycloak_sub = 'sub-1', password_hash = NULL")
+    execute(
+        empty_db,
+        "INSERT INTO users (name, email, role, is_active, created_at, keycloak_sub)"
+        " VALUES ('Nuevo', 'nuevo@ultrasist.mx', 'PMO', true, now(), 'sub-2')",
+    )
+    with pytest.raises(IntegrityError, match="ix_users_keycloak_sub"):
+        execute(empty_db, "UPDATE users SET keycloak_sub = 'sub-1' WHERE email = 'nuevo@ultrasist.mx'")
+    columns = {
+        name
+        for (name,) in query(
+            empty_db, "SELECT column_name FROM information_schema.columns WHERE table_name = 'user_sessions'"
+        )
+    }
+    assert "id_token_hint" in columns
+    command.check(config)
+
+
+def test_downgrade_de_la_identidad_con_usuarios_sin_hash(empty_db):
+    config = alembic_config(empty_db)
+    command.upgrade(config, "head")
+    execute(
+        empty_db,
+        "INSERT INTO users (name, email, role, is_active, created_at, keycloak_sub)"
+        " VALUES ('Enlazado', 'enlazado@ultrasist.mx', 'PMO', true, now(), 'sub-1')",
+    )
+    with pytest.raises(NotImplementedError, match="Restaure un respaldo"):
+        command.downgrade(config, BUSINESS_ROLE_NAMES)
+    assert query(empty_db, "SELECT version_num FROM alembic_version") == [(KEYCLOAK_IDENTITY,)]
+    assert "login_attempts" not in tables(empty_db)
+
+
+def test_downgrade_de_la_identidad_sin_usuarios_enlazados(empty_db):
+    config = alembic_config(empty_db)
+    command.upgrade(config, "head")
+    execute(
+        empty_db,
+        "INSERT INTO users (name, email, password_hash, role, is_active, created_at)"
+        " VALUES ('Previo', 'previo@ultrasist.mx', 'hash', 'PMO', true, now())",
+    )
+    command.downgrade(config, BUSINESS_ROLE_NAMES)
+    assert "login_attempts" in tables(empty_db)
+    user_columns = {
+        name
+        for (name,) in query(empty_db, "SELECT column_name FROM information_schema.columns WHERE table_name = 'users'")
+    }
+    assert "keycloak_sub" not in user_columns
+    with pytest.raises(IntegrityError, match="password_hash"):
+        execute(empty_db, "UPDATE users SET password_hash = NULL")
     command.upgrade(config, "head")
     command.check(config)

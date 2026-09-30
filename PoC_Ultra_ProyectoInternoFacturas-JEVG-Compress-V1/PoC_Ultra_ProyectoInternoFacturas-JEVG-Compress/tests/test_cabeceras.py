@@ -3,7 +3,7 @@ import re
 import pytest
 from fastapi.testclient import TestClient
 
-from app.core.middleware import CONTENT_SECURITY_POLICY
+from app.core.middleware import CONTENT_SECURITY_POLICY, content_security_policy
 from tests.conftest import login
 
 EXPECTED = {
@@ -20,15 +20,22 @@ def assert_security_headers(response):
 
 
 def test_csp_exacta():
+    # form-action admite el origen de Keycloak: la redireccion de POST /logout va a su end_session_endpoint.
     assert CONTENT_SECURITY_POLICY == (
         "default-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'self'; "
-        "form-action 'self'; frame-ancestors 'none'"
+        "form-action 'self' http://keycloak.test; frame-ancestors 'none'"
     )
+
+
+def test_csp_admite_solo_el_origen_de_keycloak():
+    policy = content_security_policy("http://127.0.0.1:58080")
+    assert "form-action 'self' http://127.0.0.1:58080;" in policy
+    assert policy.count("http") == 1
 
 
 @pytest.mark.parametrize("path", ["/login", "/static/css/app.css", "/ruta-inexistente", "/health"])
 def test_cabeceras_en_paginas_estaticos_y_errores(client, path):
-    response = client.get(path)
+    response = client.get(path, follow_redirects=False)
     assert_security_headers(response)
     assert "strict-transport-security" not in response.headers
 
@@ -37,7 +44,7 @@ def test_hsts_solo_sobre_https():
     from app.main import app
 
     with TestClient(app, base_url="https://testserver") as client:
-        response = client.get("/login")
+        response = client.get("/login", follow_redirects=False)
     assert response.headers["strict-transport-security"] == "max-age=31536000"
 
 

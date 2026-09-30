@@ -15,7 +15,6 @@ from sqlalchemy import delete, select
 
 from app.core.constants import CatalogType, DeliveryStatus, Role, SupplierOrigin, SupplierStatus, SupplierType
 from app.core.database import SessionLocal
-from app.core.security import hash_password
 from app.models import CatalogEntry, Contract, EmailDelivery, Supplier, User
 from app.repositories.pagination import back_to
 from tests.conftest import csrf, login, supplier_by_email
@@ -48,7 +47,6 @@ def many_users():
             User(
                 name=f"{tag} Usuario {index:02d}",
                 email=f"{tag.lower()}.{index:02d}@lista.example",
-                password_hash=hash_password("Lista#Prueba2026"),
                 role=Role.PMO,
             )
             for index in range(TOTAL)
@@ -227,15 +225,15 @@ def test_alta_de_usuario_visible(client, many_users):
     data = {
         "name": "Joshua Bolaños Hernández",
         "email": email,
-        "password": "Temporal#2026",
         "role": "PMO",
         "supplier_id": "",
         "csrf_token": csrf(client, "/admin/users"),
     }
     try:
+        # El alta responde con la lista filtrada por el correo nuevo y su contrasena temporal, sin redireccion (D15).
         response = client.post("/admin/users", data=data, follow_redirects=False)
-        assert response.headers["location"] == f"/admin/users?q={email.replace('@', '%40')}&ok=created"
-        page = client.get(response.headers["location"]).text
+        assert response.status_code == 200 and response.headers["cache-control"] == "no-store"
+        page = response.text
         assert "Usuario creado" in page and rows(page).count("<tr>") == 1 and "Joshua Bolaños Hernández" in page
     finally:
         with SessionLocal() as db:

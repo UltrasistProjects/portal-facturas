@@ -44,6 +44,13 @@ os.environ.update(
         # Ninguna prueba envia correos reales: el transporte de archivo escribe en el directorio temporal.
         "MAIL_BACKEND": "file",
         "MAIL_OUTBOX_DIR": str(TEST_ROOT / "outbox"),
+        # Keycloak simulado (tests/idp.py): el host no existe y ninguna prueba sale a la red.
+        "KEYCLOAK_SERVER_URL": "http://keycloak.test",
+        "KEYCLOAK_REALM": "ultrasist-portal",
+        "KEYCLOAK_CLIENT_ID": "portal-facturas-web",
+        "KEYCLOAK_CLIENT_SECRET": secrets.token_urlsafe(48),
+        "KEYCLOAK_ADMIN_CLIENT_ID": "portal-facturas-admin",
+        "KEYCLOAK_ADMIN_CLIENT_SECRET": secrets.token_urlsafe(48),
     }
 )
 OUTBOX = TEST_ROOT / "outbox"
@@ -108,8 +115,22 @@ def head_revision() -> str:
     return ScriptDirectory.from_config(alembic_config()).get_current_head()
 
 
+@pytest.fixture(scope="session")
+def keycloak():
+    """Keycloak simulado de toda la sesion: cliente de administracion del portal y transporte OIDC de Authlib."""
+    from app.services import keycloak_admin, oidc
+    from tests.idp import FakeKeycloak
+
+    fake = FakeKeycloak()
+    previous = keycloak_admin.set_identity_admin(fake)
+    oidc.use_transport(fake.transport)
+    yield fake
+    oidc.use_transport(None)
+    keycloak_admin.set_identity_admin(previous)
+
+
 @pytest.fixture(scope="session", autouse=True)
-def test_database():
+def test_database(keycloak):
     before = _workspace_snapshot()
     from alembic import command
 
@@ -130,18 +151,11 @@ def test_database():
 
 
 @pytest.fixture(autouse=True)
-def reset_login_attempts():
-    """Todas las peticiones de TestClient vienen de la IP "testclient": sin limpiar, los fallos de login de unas
-    pruebas acercarian a otras al limite por IP."""
+def reset_keycloak(keycloak):
+    """Fallos simulados y registro de llamadas de una prueba no pasan a la siguiente."""
+    keycloak.reset()
     yield
-    from sqlalchemy import delete
-
-    from app.core.database import SessionLocal
-    from app.models import LoginAttempt
-
-    with SessionLocal() as db:
-        db.execute(delete(LoginAttempt))
-        db.commit()
+    keycloak.reset()
 
 
 @pytest.fixture()
@@ -161,10 +175,38 @@ def csrf(client, path: str = "/login") -> str:
     return match.group(1)
 
 
-def login(client, email="admin@poc.local", password=None):
-    password = TEST_PASSWORDS[email] if password is None else password
-    return client.post(
-        "/login", data={"email": email, "password": password, "csrf_token": csrf(client)}, follow_redirects=False
+def identity_account(email: str, role) -> str:
+    """Cuenta del Keycloak simulado para un usuario que crea la prueba (idempotente); devuelve su sub, que va en
+    User.keycloak_sub para que la prueba pueda iniciar sesion con login()."""
+    from app.services.keycloak_admin import get_identity_admin
+
+    keycloak = get_identity_admin()
+    existing = keycloak.accounts.get(next((k for k, a in keycloak.accounts.items() if a.email == email.lower()), ""))
+    account = existing or keycloak.add_account(email)
+    account.roles = {role.value}
+    return account.id
+
+
+def login(client, email="admin@poc.local", callback_params: dict | None = None, **claims):
+    """Inicio de sesion completo contra el Keycloak simulado: /login redirige a Keycloak, la cuenta de `email` se
+    autentica y /auth/callback recibe el codigo. `claims` altera el ID token (None quita un claim; `roles` reemplaza
+    los realm roles). Parte de una sesion nueva, como quien entra con otra cuenta; devuelve la respuesta del
+    callback."""
+    from app.services.keycloak_admin import get_identity_admin
+    from tests.idp import query
+
+    keycloak = get_identity_admin()
+    client.cookies.clear()
+    response = client.get("/login", follow_redirects=False)
+    location = response.headers.get("location", "")
+    if not location.startswith(keycloak.authorization_endpoint):
+        return response
+    params = query(location)
+    code = keycloak.authorize(email, params, **claims)
+    return client.get(
+        "/auth/callback",
+        params={"code": code, "state": params["state"], **(callback_params or {})},
+        follow_redirects=False,
     )
 
 
@@ -252,7 +294,7 @@ def registered_suppliers():
 
     from app.core.constants import SupplierStatus, SupplierType
     from app.core.database import SessionLocal
-    from app.models import AuditLog, LoginAttempt, Supplier, User, UserSession
+    from app.models import AuditLog, Supplier, User, UserSession
 
     created: list[int] = []
 
@@ -283,7 +325,6 @@ def registered_suppliers():
         user_ids = [u.id for u in users]
         db.execute(delete(UserSession).where(UserSession.user_id.in_(user_ids)))
         db.execute(delete(AuditLog).where(AuditLog.user_id.in_(user_ids)))
-        db.execute(delete(LoginAttempt).where(LoginAttempt.email.in_([u.email for u in users])))
         db.execute(delete(User).where(User.id.in_(user_ids)))
         db.execute(delete(Supplier).where(Supplier.id.in_(created)))
         db.commit()
