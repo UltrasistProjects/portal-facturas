@@ -1,81 +1,100 @@
+"""Inicio y cierre de sesion con Keycloak (OIDC) y cambio de contrasena en Keycloak (add-keycloak-authentication).
+
+El portal no recibe contrasenas: /login redirige a Keycloak, /auth/callback valida el ID token (app.services.oidc),
+enlaza al usuario local por su `sub` (D7), exige un rol del portal igual al local (D8) y abre la sesion del servidor
+(D9). El logout revoca la sesion local y termina la de Keycloak (D10).
+"""
+
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, Form, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.config import settings
-from app.core.constants import LoginResult
 from app.core.database import get_db
-from app.core.demo import quick_access_accounts
-from app.core.passwords import MAX_LENGTH, MIN_LENGTH, password_problems
-from app.core.security import (
-    PASSWORD_CHANGE_URL,
-    get_authenticated_user,
-    hash_password,
-    validate_csrf,
-    verify_password,
-)
+from app.core.security import get_current_user, validate_csrf
 from app.models import User
-from app.routers.common import templates
-from app.services import login_throttle, session_service
+from app.services import oidc, session_service
 from app.services.audit_service import audit
+from app.services.identity_service import portal_roles
 
 router = APIRouter()
 
-MSG_THROTTLED = "Demasiados intentos fallidos. Espere unos minutos e intente de nuevo."
-MSG_WRONG_CURRENT = "La contraseña actual no es correcta."
-MSG_MISMATCH = "La confirmación no coincide con la nueva contraseña."
-MSG_SAME = "La nueva contraseña debe ser distinta de la actual."
-PASSWORD_POLICY = (
-    f"Entre {MIN_LENGTH} y {MAX_LENGTH} caracteres, con al menos una letra, un número y un carácter especial. "
-    "No se aceptan contraseñas comunes."
-)
+PASSWORD_CHANGE_URL = "/account/password"
+UPDATE_PASSWORD = "UPDATE_PASSWORD"
+MSG_REJECTED = "No se pudo completar el inicio de sesión. Vuelva a intentarlo."
+MSG_ACCOUNT_DISABLED = "Su cuenta no está habilitada en el portal."
+MSG_ROLE = "Su cuenta no tiene un rol válido para el portal. Solicite al Administrador que revise su acceso."
+MSG_UNAVAILABLE = "El servicio de autenticación no está disponible."
 
 
-def render_login(request: Request, status_code: int = 200, **context):
-    context["demo_accounts"] = quick_access_accounts(settings.app_env)
-    return templates.TemplateResponse(request, "auth/login.html", context, status_code=status_code)
+def _ip(request: Request) -> str | None:
+    return request.client.host if request.client else None
+
+
+def _callback_url(request: Request) -> str:
+    return str(request.url_for("auth_callback"))
+
+
+def denial_reason(user: User | None, claims: dict) -> str | None:
+    """Motivo por el que un ID token valido no abre sesion (D7, D8), o None."""
+    if user is None:
+        return "unknown_account"
+    if not user.is_active:
+        return "inactive"
+    realm_access = claims.get("realm_access")
+    roles = portal_roles(realm_access.get("roles") or []) if isinstance(realm_access, dict) else set()
+    if not roles:
+        return "role_missing"
+    if roles != {user.role.value}:
+        return "role_mismatch"
+    return None
 
 
 @router.get("/login")
-def login_page(request: Request, db: Session = Depends(get_db)):
+async def login_page(request: Request, db: Session = Depends(get_db)):
     if session_service.resolve(db, request.session.get("sid")):
         return RedirectResponse("/", status_code=303)
     request.session.pop("sid", None)  # sesion vencida o revocada: evita el ciclo / <-> /login
-    return render_login(request)
+    try:
+        return await oidc.authorize_redirect(request, _callback_url(request))
+    except oidc.IdentityUnavailable:
+        raise HTTPException(503, MSG_UNAVAILABLE) from None
 
 
-@router.post("/login")
-async def login(request: Request, email: str = Form(...), password: str = Form(...), db: Session = Depends(get_db)):
-    await validate_csrf(request)
-    email = email.lower().strip()
-    ip = request.client.host if request.client else None
-    # Antes de verificar la contrasena: un intento bloqueado no consume Argon2 y no revela si el correo existe.
-    decision = login_throttle.check(db, email, ip)
-    if not decision.allowed:
-        login_throttle.record(db, email, ip, LoginResult.THROTTLED)
+@router.get("/auth/callback", name="auth_callback")
+async def auth_callback(request: Request, db: Session = Depends(get_db)):
+    ip = _ip(request)
+    try:
+        claims, id_token = await oidc.complete_login(request)
+    except oidc.LoginRejected as exc:
+        audit(db, "LOGIN_FAILED", "User", None, new={"reason": exc.reason}, ip=ip)
         db.commit()
-        response = render_login(request, 429, error=MSG_THROTTLED)
-        response.headers["Retry-After"] = str(decision.retry_after_seconds)
-        return response
-    user = db.scalar(select(User).where(User.email == email))
-    if not user or not user.is_active or not verify_password(password, user.password_hash):
-        audit(db, "LOGIN_FAILED", "User", user.id if user else None, new={"email": email}, ip=ip)
-        login_throttle.record(db, email, ip, LoginResult.FAILURE)
+        raise HTTPException(400, MSG_REJECTED) from None
+    except oidc.IdentityUnavailable:
+        raise HTTPException(503, MSG_UNAVAILABLE) from None
+    user = db.scalar(select(User).where(User.keycloak_sub == claims["sub"]))
+    reason = denial_reason(user, claims)
+    if reason:
+        details = {"reason": reason} if user else {"reason": reason, "email": claims.get("email")}
+        audit(db, "LOGIN_DENIED", "User", user.id if user else None, new=details, ip=ip)
         db.commit()
-        return render_login(request, 400, error="Credenciales invalidas o usuario deshabilitado")
-    login_throttle.record(db, email, ip, LoginResult.SUCCESS)
-    # Identificador nuevo en cada login (antifijacion); el que traia la cookie deja de autenticar.
+        raise HTTPException(403, MSG_ROLE if reason.startswith("role_") else MSG_ACCOUNT_DISABLED)
+    # Identificador y token CSRF nuevos en cada inicio de sesion (antifijacion); el anterior deja de autenticar.
     session_service.revoke(db, request.session.get("sid"))
     request.session.clear()
-    request.session["sid"] = session_service.create(db, user.id, ip, request.headers.get("user-agent"))
+    user_agent = request.headers.get("user-agent")
+    request.session["sid"] = session_service.create(db, user.id, ip, user_agent, id_token_hint=id_token)
     user.last_login_at = datetime.now(timezone.utc)
     audit(db, "LOGIN_SUCCESS", "User", user.id, user.id, ip=ip)
+    target = "/"
+    # Regreso de "Cambiar contrasena" (kc_action=UPDATE_PASSWORD): Keycloak informa el resultado de la accion.
+    if request.query_params.get("kc_action_status") == "success":
+        audit(db, "PASSWORD_CHANGED", "User", user.id, user.id, new={"forced": False}, ip=ip)
+        target = "/?notice=password_changed"
     db.commit()
-    # Con una contrasena asignada por otra persona, directo al cambio (HU-10); desde / tambien llegaria ahi.
-    return RedirectResponse(PASSWORD_CHANGE_URL if user.must_change_password else "/", status_code=303)
+    return RedirectResponse(target, status_code=303)
 
 
 @router.post("/logout")
@@ -83,74 +102,22 @@ async def logout(request: Request, db: Session = Depends(get_db)):
     await validate_csrf(request)
     sid = request.session.get("sid")
     user_session = session_service.resolve(db, sid)
+    id_token_hint = session_service.id_token_hint(db, sid)
     if user_session:
         audit(db, "LOGOUT", "User", user_session.user_id, user_session.user_id)
     session_service.revoke(db, sid)
     db.commit()
     request.session.clear()
-    return RedirectResponse("/login", status_code=303)
+    # Termina tambien la sesion SSO de Keycloak; sin Keycloak, al menos la local ya quedo revocada.
+    end_session = await oidc.logout_url(id_token_hint, str(request.base_url))
+    return RedirectResponse(end_session or "/", status_code=303)
 
 
-# --- Cambio de contrasena (HU-10) ----------------------------------------------------------------------------------
-
-
-def render_password_page(request: Request, account: User, status_code: int = 200, errors: list[str] | None = None):
-    """Con la marca activa la pagina se muestra sin menu (bloque anonymous): sus enlaces solo devolverian aqui."""
-    context = {
-        "account": account,
-        "forced": account.must_change_password,
-        "user": None if account.must_change_password else account,
-        "errors": errors or [],
-        "policy": PASSWORD_POLICY,
-        "min_length": MIN_LENGTH,
-        "max_length": MAX_LENGTH,
-    }
-    return templates.TemplateResponse(request, "auth/change_password.html", context, status_code=status_code)
-
-
-@router.get(PASSWORD_CHANGE_URL)
-def password_page(request: Request, user: User = Depends(get_authenticated_user)):
-    return render_password_page(request, user)
-
-
-@router.post(PASSWORD_CHANGE_URL)
-async def change_password(
-    request: Request,
-    current_password: str = Form(""),
-    new_password: str = Form(""),
-    confirm_password: str = Form(""),
-    db: Session = Depends(get_db),
-    user: User = Depends(get_authenticated_user),
-):
-    await validate_csrf(request)
-    ip = request.client.host if request.client else None
-    # Verifica el mismo secreto que el login: comparte su limitacion de intentos (D4).
-    decision = login_throttle.check(db, user.email, ip)
-    if not decision.allowed:
-        login_throttle.record(db, user.email, ip, LoginResult.THROTTLED)
-        db.commit()
-        response = render_password_page(request, user, 429, [MSG_THROTTLED])
-        response.headers["Retry-After"] = str(decision.retry_after_seconds)
-        return response
-    if len(current_password) > MAX_LENGTH or not verify_password(current_password, user.password_hash):
-        login_throttle.record(db, user.email, ip, LoginResult.FAILURE)
-        db.commit()
-        return render_password_page(request, user, 400, [MSG_WRONG_CURRENT])
-    errors = password_problems(new_password)
-    if new_password != confirm_password:
-        errors.append(MSG_MISMATCH)
-    if new_password == current_password:
-        errors.append(MSG_SAME)
-    if errors:
-        return render_password_page(request, user, 400, errors)
-    forced = user.must_change_password
-    user.password_hash = hash_password(new_password)
-    user.must_change_password = False
-    login_throttle.record(db, user.email, ip, LoginResult.SUCCESS)
-    # Todas las sesiones del usuario, incluida esta, se revocan: quien entro con la contrasena anterior queda fuera.
-    session_service.revoke_all_for_user(db, user.id)
-    request.session.clear()
-    request.session["sid"] = session_service.create(db, user.id, ip, request.headers.get("user-agent"))
-    audit(db, "PASSWORD_CHANGED", "User", user.id, user.id, new={"forced": forced}, ip=ip)
-    db.commit()
-    return RedirectResponse("/?notice=password_changed", status_code=303)
+@router.get(PASSWORD_CHANGE_URL, dependencies=[Depends(get_current_user)])
+async def password_page(request: Request):
+    """Cambio de contrasena en Keycloak (accion iniciada por la aplicacion); el portal no muestra formularios de
+    contrasena. El primer acceso lo exige Keycloak con la accion requerida UPDATE_PASSWORD."""
+    try:
+        return await oidc.authorize_redirect(request, _callback_url(request), kc_action=UPDATE_PASSWORD)
+    except oidc.IdentityUnavailable:
+        raise HTTPException(503, MSG_UNAVAILABLE) from None

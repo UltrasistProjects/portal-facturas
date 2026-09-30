@@ -1,4 +1,4 @@
-# Contrasenas comunes rechazadas por app.core.passwords.validate_password (comparacion sin distinguir mayusculas).
+# Contrasenas y palabras comunes: lista base que se mantiene a mano. scripts/build_password_blacklist.py genera con ella common_passwords.txt, la lista que usa Keycloak (passwordBlacklist).
 # Fuente: SecLists, Passwords/Common-Credentials/10k-most-common.txt (primeras 1000 entradas)
 # https://github.com/danielmiessler/SecLists - Licencia MIT, (c) Daniel Miessler y colaboradores.
 # Al final se agregan terminos locales. Las lineas que comienzan con # son comentarios.

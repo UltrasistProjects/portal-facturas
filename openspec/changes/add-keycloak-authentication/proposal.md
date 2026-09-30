@@ -40,7 +40,7 @@ La remediación de la auditoría (2026-09-24) ya cerró SEC-01, SEC-03, SEC-04, 
 - **Código** (relativo a la raíz de la PoC):
   - `app/core/config.py`, `app/core/security.py`, `app/core/startup.py`, `app/core/middleware.py` (CSP), `app/core/demo.py`, `app/main.py`;
   - `app/routers/auth.py`, `app/routers/admin.py`, `app/routers/suppliers.py`;
-  - nuevos `app/services/keycloak_admin.py` y `app/services/oidc.py`; `app/services/supplier_access_service.py` y `app/services/session_service.py`;
+  - nuevos `app/services/keycloak_admin.py`, `app/services/oidc.py` e `app/services/identity_service.py`; `app/services/supplier_access_service.py` y `app/services/session_service.py`; `app/core/logging_config.py` (log de `httpx` sólo con advertencias);
   - se eliminan `app/services/secret_vault.py`, `app/services/login_throttle.py`, `app/templates/auth/login.html` y `app/templates/auth/change_password.html`;
   - `app/core/passwords.py` conserva sólo `generate_password`.
 - **Plantillas y JS:** `base.html` (menú "Cambiar contraseña"), `admin/users.html` (sin contraseña), `suppliers/detail.html`; `static/js/app.js` pierde el acceso rápido demo.
@@ -50,8 +50,8 @@ La remediación de la auditoría (2026-09-24) ya cerró SEC-01, SEC-03, SEC-04, 
   - `user_sessions.id_token_hint`;
   - se elimina `login_attempts`.
   - `password_hash` y `must_change_password` se eliminan en un cambio posterior, cuando todos los usuarios estén enlazados.
-- **Infraestructura:** `compose.yaml` (servicio `keycloak`), `infra/keycloak/realm-ultrasist-portal.json`, `.env.example`, `scripts/create_env.py`, `run_local.*`, `scripts/seed_db.py`, `scripts/reset_demo.py`; nuevo `scripts/link_keycloak_users.py`.
-- **Dependencias:** Authlib (cliente OIDC) y su cliente HTTP en producción; `httpx` deja de ser sólo de desarrollo. Se elimina `pwdlib[argon2]` cuando ningún código lo use (tras el cambio de limpieza).
+- **Infraestructura:** `compose.yaml` (servicio `keycloak`), `infra/keycloak/realm-ultrasist-portal.json`, `infra/keycloak/common_words.txt` (lista base, antes `app/core/common_passwords.txt`) e `infra/keycloak/common_passwords.txt` (generada), `.env.example`, `scripts/create_env.py`, `scripts/check.py`, `run_local.*`, `scripts/seed_db.py`, `scripts/reset_demo.py`; nuevos `scripts/link_keycloak_users.py` y `scripts/build_password_blacklist.py`.
+- **Dependencias:** Authlib 1.7.2 (cliente OIDC; trae `cryptography` y `joserfc`) y `httpx` 0.28.1 en producción; `httpx` deja de ser sólo de desarrollo. Se elimina `pwdlib[argon2]` en este mismo cambio: ningún código lo usa.
 - **Pruebas:** IdP simulado (JWKS y tokens firmados de prueba) y cliente de administración falso; se reescriben `test_auth`, `test_primer_acceso`, `test_login_throttle`, `test_sesiones`, `test_credenciales_demo`, `test_usuarios_admin` y `test_acceso_proveedores`, y el helper `login()` de `conftest.py`.
 - **Documentación:** `README.md` (Keycloak local, variables, flujo, alta de usuarios, sin contraseñas demo).
 - **Operación:** si Keycloak no está disponible, nadie puede iniciar sesión nueva ni autorizar proveedores. Las sesiones abiertas siguen funcionando hasta expirar.

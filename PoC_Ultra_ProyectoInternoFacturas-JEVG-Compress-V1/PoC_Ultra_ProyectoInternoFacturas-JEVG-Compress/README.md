@@ -19,8 +19,8 @@ La AI recomienda o aporta evidencia; el Rule Engine determina la prevalidación 
 
 - Python 3.12 recomendado (validado con 3.12.4).
 - Windows PowerShell/CMD o Linux/macOS con shell POSIX.
-- **Docker con Compose v2** para la base de datos: Docker Desktop en Windows y macOS; Docker Engine o Podman (con `podman compose` o el alias `docker`) en Linux. Sólo PostgreSQL corre en un contenedor; la aplicación corre en el host.
-- Puerto `55432` libre en `127.0.0.1` (configurable con `POSTGRES_PORT` en `.env`; el 5432 y el 5433 suelen estar ocupados por otras instancias).
+- **Docker con Compose v2** para PostgreSQL y Keycloak: Docker Desktop en Windows y macOS; Docker Engine o Podman (con `podman compose` o el alias `docker`) en Linux. Sólo PostgreSQL y Keycloak corren en contenedores; la aplicación corre en el host.
+- Puertos `55432` (PostgreSQL) y `58080` (Keycloak) libres en `127.0.0.1` (configurables con `POSTGRES_PORT` y `KEYCLOAK_PORT` en `.env`; el 5432 y el 5433 suelen estar ocupados por otras instancias).
 - No requiere Node.js, Azure ni conexión a servicios externos para operar.
 
 ## Instalación en Windows PowerShell
@@ -31,12 +31,12 @@ python -m venv .venv
 python -m pip install --upgrade pip
 pip install --require-hashes -r requirements.lock
 python scripts/create_env.py
-docker compose up -d --wait db
+docker compose up -d --wait db keycloak
 python scripts/init_db.py
 uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
-También puede ejecutar `scripts\create_venv.ps1` y después `run_local.ps1`. `run_local` crea o completa `.env`, levanta PostgreSQL (`docker compose up -d --wait db`), aplica las migraciones y siembra la demo sólo si la base está vacía. **Conserva los datos entre arranques.**
+También puede ejecutar `scripts\create_venv.ps1` y después `run_local.ps1`. `run_local` crea o completa `.env`, levanta PostgreSQL y Keycloak (`docker compose up -d --wait db keycloak`), aplica las migraciones y siembra la demo sólo si la base está vacía. **Conserva los datos entre arranques.** El primer arranque de Keycloak tarda alrededor de un minuto (descarga la imagen e importa el realm).
 
 En CMD use `.venv\Scripts\activate` y `run_local.bat`.
 
@@ -48,31 +48,29 @@ source .venv/bin/activate
 python -m pip install --upgrade pip
 pip install --require-hashes -r requirements.lock
 python scripts/create_env.py
-docker compose up -d --wait db
+docker compose up -d --wait db keycloak
 python scripts/init_db.py
 uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
-O bien `./run_local.sh`, que hace lo mismo. Abra <http://127.0.0.1:8000>. El health check está en <http://127.0.0.1:8000/health>.
+O bien `./run_local.sh`, que hace lo mismo. Abra <http://127.0.0.1:8000>: el portal lo lleva a la página de inicio de sesión de Keycloak. El health check está en <http://127.0.0.1:8000/health>.
 
-## Credenciales demo
+## Cuentas demo
 
-Sólo aplican con `APP_ENV=development`:
+Existen sólo en el Keycloak local; el seed las crea (o las vuelve a enlazar) al sembrar la demo:
 
-| Rol | Usuario | Contraseña |
-|---|---|---|
-| Administrador | `admin@poc.local` | `Admin#Demo2026` |
-| PMO | `pmo@poc.local` | `Pmo#Demo2026` |
-| Proveedor moral | `proveedor1@poc.local` | `Proveedor#Demo2026` |
-| Proveedor físico | `proveedor2@poc.local` | `Proveedor#Demo2026` |
-| Proveedor internacional | `proveedor3@poc.local` | `Proveedor#Demo2026` |
+| Rol | Usuario |
+|---|---|
+| Administrador | `admin@poc.local` |
+| PMO | `pmo@poc.local` |
+| Proveedor moral | `proveedor1@poc.local` |
+| Proveedor físico | `proveedor2@poc.local` |
+| Proveedor internacional | `proveedor3@poc.local` |
 
+- **Contraseña:** el valor de `DEMO_PASSWORD` en su `.env`. `scripts/create_env.py` la genera; ninguna contraseña demo está en el repositorio.
 - La fuente única de estas cuentas es `app/core/demo.py`.
-- El bloque de acceso rápido del login sólo aparece en `development`.
-- En `test` o `production`, el seed genera contraseñas aleatorias y las imprime una sola vez en consola.
+- En `test` o `production`, el seed genera contraseñas temporales aleatorias, las imprime una sola vez en consola y Keycloak pide cambiarlas en el primer acceso.
 - Con `APP_ENV=production`, la aplicación **no arranca** mientras exista alguna cuenta `@poc.local` activa.
-
-No reutilice estas contraseñas fuera de la PoC.
 
 ## Base de datos, migraciones y demo
 
@@ -104,6 +102,39 @@ No reutilice estas contraseñas fuera de la PoC.
 - antes de borrar genera un respaldo en `backups/`;
 - recrea el esquema (`DROP SCHEMA public CASCADE; CREATE SCHEMA public`), vacía `storage/`, aplica las migraciones y vuelve a sembrar. Detenga la aplicación antes: si mantiene bloqueos, el script falla a los 10 s en lugar de esperar.
 
+## Keycloak: inicio de sesión y cuentas
+
+El portal no recibe ni guarda contraseñas (RN-HU03-01). La autenticación la hace **Keycloak**, el proveedor de identidad (IdP), con OIDC Authorization Code + PKCE (S256).
+
+**Keycloak local.**
+
+- Servicio `keycloak` de `compose.yaml` (`quay.io/keycloak/keycloak:26.7.4`, modo `start-dev`), sólo en `127.0.0.1:${KEYCLOAK_PORT}` (58080 por defecto). Consola: <http://127.0.0.1:58080/admin>, con `KC_BOOTSTRAP_ADMIN_USERNAME` y `KC_BOOTSTRAP_ADMIN_PASSWORD` del `.env`.
+- Al arrancar importa el realm versionado `infra/keycloak/realm-ultrasist-portal.json` (roles `Administrador`, `Proveedor` y `PMO`; clientes `portal-facturas-web` y `portal-facturas-admin`; política de contraseñas; detección de fuerza bruta; eventos; sesión SSO de 60 min de inactividad y 8 h de máximo). El realm no contiene secretos: los de los clientes llegan como variables de entorno desde el `.env`, y sin ellas el contenedor no arranca.
+- Los datos viven en el volumen `portal-facturas_keycloak-data`. El realm sólo se importa si no existe: para aplicar cambios del JSON, `docker compose rm -sf keycloak`, `docker volume rm portal-facturas_keycloak-data` y vuelva a levantarlo (se pierden las cuentas; `python scripts/reset_demo.py` o `python scripts/link_keycloak_users.py` las recrean).
+
+**Inicio y cierre de sesión.**
+
+- `/login` redirige a Keycloak con `state`, `nonce` y `code_challenge`. El callback (`/auth/callback`) valida la firma del ID token con el JWKS del realm, `iss`, `aud`, `exp` (60 s de tolerancia) y `nonce`.
+- El usuario del portal se localiza **sólo por el `sub`** de su cuenta de Keycloak (`users.keycloak_sub`), nunca por correo. El token debe traer exactamente uno de los roles del portal, igual al del usuario local; si no, 403 y `LOGIN_DENIED` en la auditoría. Cambiar el rol de alguien exige cambiarlo en el portal y en Keycloak.
+- La sesión sigue siendo del servidor (`user_sessions`); el ID token se guarda allí sólo para el cierre de sesión. Los access y refresh tokens se descartan.
+- "Cerrar sesión" revoca la sesión local y termina la de Keycloak (`end_session_endpoint`).
+
+**Primer acceso y contraseñas.** Ver "Primer acceso y cambio de contraseña".
+
+**Keycloak no disponible.** Nadie puede iniciar sesión nueva (503 "El servicio de autenticación no está disponible.") ni autorizar proveedores, dar de alta usuarios o reenviar credenciales (503). Las sesiones ya abiertas siguen funcionando hasta expirar. `/health` no consulta Keycloak.
+
+**Migrar usuarios existentes.** Tras `alembic upgrade head` (revisión `0015_keycloak_identity`), `python scripts/link_keycloak_users.py --dry-run` informa qué haría y `python scripts/link_keycloak_users.py` enlaza o crea en Keycloak a cada usuario sin cuenta, con una contraseña temporal. Vacía su `password_hash`, audita `USER_LINKED_TO_IDP` y entrega la temporal: a los proveedores autorizados por el correo de credenciales y a los demás en consola, una sola vez. Es idempotente; un conflicto (el correo tiene otro rol del portal en Keycloak) se informa y el usuario queda sin enlazar. Haga un respaldo antes: tras enlazar, el downgrade de `0015` exige restaurarlo.
+
+**Despliegue en QA y producción.**
+
+- Instancia de Keycloak **dedicada**, por HTTPS (`KEYCLOAK_SERVER_URL` con `https://` es obligatoria en `production`), con el realm importado y las URIs de redirección (`/auth/callback`) y de cierre (`/`) del dominio real del portal.
+- Secretos de los clientes: generados en el servidor de Keycloak y copiados sólo a las variables de entorno del portal.
+- La lista `infra/keycloak/common_passwords.txt` debe instalarse en `data/password-blacklists/` del servidor (la exige la política `passwordBlacklist`).
+- *Rate limiting* por IP en el proxy inverso frente a Keycloak: Keycloak bloquea por cuenta, no por IP.
+- Correo de Keycloak (para funciones futuras como la recuperación de contraseña): el mismo servidor y remitente SMTP del portal (`smtpServer` del realm); la contraseña SMTP se configura en Keycloak, nunca en el JSON versionado.
+
+**Lista de contraseñas comunes.** Se mantiene a mano en `infra/keycloak/common_words.txt`. `python scripts/build_password_blacklist.py` genera `common_passwords.txt` con esas entradas y sus variantes decoradas (`password1!`, `portal2026!`): como la política exige dígito y carácter especial, sin variantes la lista no bloquearía ninguna contraseña. Una prueba verifica que el archivo generado esté al día.
+
 ## Respaldo y restauración
 
 Los documentos fiscales deben conservarse 5 años. Respalde la BD **y** `storage/`; uno sin el otro no sirve.
@@ -123,7 +154,7 @@ Los documentos fiscales deben conservarse 5 años. Respalde la BD **y** `storage
 
 ```powershell
 pip install -r requirements-dev.txt
-docker compose up -d --wait db   # las pruebas necesitan PostgreSQL
+docker compose up -d --wait db   # las pruebas necesitan PostgreSQL (no Keycloak)
 pytest                      # pruebas con umbral de cobertura (pyproject.toml) y coverage.xml para SonarQube
 python scripts/check.py     # ruff, formato, alembic check, pytest y pip-audit (--skip-audit sin conexión)
 ```
@@ -133,10 +164,12 @@ python scripts/check.py     # ruff, formato, alembic check, pytest y pip-audit (
 - Otro servidor: defina `TEST_DATABASE_URL` (`postgresql+psycopg://...`); se usa en lugar de `DATABASE_URL`. Si no tiene acceso al contenedor `db`, defina también `PG_CLIENT=local` para que las pruebas de respaldo usen `pg_dump`/`pg_restore` del host, que deben ser de la misma versión mayor que el servidor o más nuevos. El CI compartido necesitará una de estas dos opciones.
 - `scripts/check.py` ejecuta `alembic check` sobre otra base temporal, que elimina al terminar aunque el paso falle.
 - La cobertura mínima de `app/` es del 93 % (`--cov-fail-under`).
+- Ninguna prueba necesita Keycloak ni red: `tests/idp.py` simula su API de administración y su OIDC (discovery, JWKS firmado por sesión y token endpoint con PKCE) sobre un `httpx.MockTransport`. Los scripts que corren en un subproceso (`init_db`, `reset_demo`) lo usan mediante un servidor local en `127.0.0.1`.
 
 Cubre:
 
-- login, CSRF, limitación de intentos y política de contraseñas;
+- inicio de sesión OIDC (state, nonce, firma, `iss`, `aud`, `exp`, PKCE), enlace por `sub`, roles, cierre de sesión y cambio de contraseña en Keycloak;
+- aprovisionamiento en Keycloak (éxito, fallo parcial, cuenta existente, conflicto, Keycloak caído), migración de usuarios, y realm y política de contraseñas versionados;
 - sesiones revocables, RBAC y aislamiento entre proveedores;
 - carga y descarga de documentos (firmas de contenido, tamaño, path traversal);
 - parser CFDI y reglas XML/FIN/DAT, incluido el límite del día 20 en hora local;
@@ -154,7 +187,7 @@ Cubre:
   ```
 
 - Auditar vulnerabilidades conocidas: `pip-audit -r requirements.lock` (y `pip-audit -r requirements-dev.txt` para las herramientas).
-- Resultado de la auditoría del 2026-09-24: se corrigieron avisos en `starlette` (0.47.3 → 1.3.1, que obliga a subir `fastapi` a 0.133.1), `lxml` (6.1.3), `python-dotenv` (1.2.3), `python-multipart` (0.0.32) y `pytest` (9.0.3). Después se añadió el driver `psycopg[binary]` 3.3.6 (con libpq incluida en wheels para Windows, Linux y macOS). El lock no tiene avisos conocidos.
+- Resultado de la auditoría del 2026-09-24: se corrigieron avisos en `starlette` (0.47.3 → 1.3.1, que obliga a subir `fastapi` a 0.133.1), `lxml` (6.1.3), `python-dotenv` (1.2.3), `python-multipart` (0.0.32) y `pytest` (9.0.3). Después se añadió el driver `psycopg[binary]` 3.3.6 (con libpq incluida en wheels para Windows, Linux y macOS). El 2026-09-30 se añadió `Authlib` 1.7.2 (cliente OIDC; trae `cryptography` y `joserfc`) y `httpx` pasó a ser dependencia de producción. Se fijó la 1.7.2 porque la 1.8.0 cambia su cliente HTTP a `httpx2`. El lock no tiene avisos conocidos.
 
 ## Estructura
 
@@ -170,7 +203,8 @@ app/
   templates/     interfaz Jinja server-rendered
   static/        CSS y JavaScript Vanilla
 alembic/         migraciones explícitas (una revisión por cambio de modelo)
-compose.yaml     PostgreSQL local (servicio db)
+compose.yaml     PostgreSQL y Keycloak locales (servicios db y keycloak)
+infra/keycloak/  realm versionado sin secretos y lista de contraseñas comunes
 data/            documentos sintéticos versionados
 scripts/         .env, BD, seed, reset, respaldo/restauración, utilidades de PostgreSQL (pgtools), empaquetado y check
 storage/         uploads segregados por proveedor/factura
@@ -438,7 +472,10 @@ Los tres modos (STARTTLS con usuario, TLS directo y certificado no confiable) se
 
 ## Usuarios
 
-**Administración › Usuarios** (`/admin/users`) da de alta usuarios con una contraseña inicial que deben cambiar en su primer acceso (HU-10).
+**Administración › Usuarios** (`/admin/users`) da de alta usuarios en el portal y su cuenta en Keycloak, con una contraseña temporal que la respuesta del alta muestra **una sola vez** (`Cache-Control: no-store`); Keycloak pide cambiarla en el primer acceso. El formulario no pide contraseña.
+
+- **Keycloak:** si ya existe una cuenta con ese correo, se enlaza cuando no pertenece a otro usuario del portal y no tiene otro rol del portal (si no, 409). Sin Keycloak, el alta responde 503 y no crea nada.
+- **Habilitar y deshabilitar:** deshabilitar cierra el acceso al portal siempre y después deshabilita la cuenta de Keycloak y cierra sus sesiones; si Keycloak no responde, el usuario queda deshabilitado en el portal, se audita `IDP_SYNC_FAILED` y la página avisa que hay que deshabilitarlo también en la consola de Keycloak. Habilitar empieza por Keycloak: si no responde, nada cambia (503).
 
 - **Rol y proveedor:** un usuario `Proveedor` siempre está vinculado a un proveedor existente: sin él, el alta responde 400 "Seleccione el proveedor del usuario". Los `PMO` y `Administrador` no tienen proveedor (se ignora si se envía). La base de datos lo garantiza con `CHECK ck_users_provider_supplier`.
 - **Vía recomendada para proveedores:** registrar al proveedor en `/suppliers` y autorizarlo: el portal crea su usuario con el proveedor ya vinculado y le envía las credenciales.
@@ -449,34 +486,34 @@ Los tres modos (STARTTLS con usuario, TLS directo y certificado no confiable) se
 
 Un proveedor nace **"Registrado"** (carga masiva o formulario individual), sin usuario ni acceso al portal, y no puede facturar: SUP-001 exige el estatus operativo, que ahora se muestra como **"Autorizado"** (HU-02).
 
-- **Autorización masiva:** en **Proveedores**, el Administrador filtra por "Registrado", marca las casillas (o "seleccionar todos") y pulsa "Autorizar seleccionados". Un modal pide confirmación, porque se enviarán las credenciales. Se autorizan hasta 100 proveedores por operación, en una sola transacción con las filas bloqueadas:
+- **Autorización masiva:** en **Proveedores**, el Administrador filtra por "Registrado", marca las casillas (o "seleccionar todos") y pulsa "Autorizar seleccionados". Un modal pide confirmación, porque se enviarán las credenciales. Se autorizan hasta 100 proveedores por operación, en una transacción con las filas bloqueadas y un punto de guardado por proveedor:
   - los que no están "Registrado" se omiten;
   - si el correo de un proveedor lo usa otro usuario, ese proveedor no se autoriza;
-  - si ya tenía su propio usuario `Proveedor`, se autoriza sin credenciales nuevas.
-- **Credenciales (HU-03):** por cada proveedor autorizado sin usuario se crea un usuario `Proveedor` con su correo del catálogo y una contraseña temporal aleatoria de 20 caracteres. El portal guarda sólo su hash. Después de confirmar la autorización se envía el correo "Credenciales de acceso" con el usuario, la contraseña y la dirección `/login` del servidor.
-- **Resumen:** tras autorizar, el listado muestra a cada proveedor con "Credenciales enviadas", "Envío fallido" (con el error), "Ya tenía usuario", "Omitido" o "No autorizado". Los proveedores cuyo último envío falló llevan la marca "Credenciales no enviadas".
-- **Expediente:** la sección "Acceso al portal" muestra el usuario, el último acceso, si la contraseña sigue siendo la temporal y el último envío de credenciales. **"Reenviar credenciales"** genera una contraseña temporal nueva (la anterior deja de funcionar), sólo mientras el proveedor no la haya cambiado, aunque ya haya entrado con ella.
-- **Auditoría:** `SUPPLIER_STATUS_CHANGED`, `USER_CREATED` (origen `SUPPLIER_AUTHORIZATION`), `SUPPLIER_BULK_AUTHORIZED` y `SUPPLIER_CREDENTIALS_RESENT`, sin contraseñas. En el log técnico queda `supplier.bulk_authorize` sólo con contadores.
-- **Proveedor de identidad (RN-HU03-01):** las credenciales se gestionan en Keycloak, el proveedor de identidad (IdP) del portal. `app/services/secret_vault.py` es el punto de integración provisional: recibe la contraseña temporal antes de confirmar la transacción; si falla, la autorización se revierte. Hoy el adaptador activo (`NullSecretVault`) no hace nada; lo sustituye el aprovisionamiento en Keycloak (cambio `add-keycloak-authentication`).
+  - si ya tenía su propio usuario `Proveedor`, se autoriza sin credenciales nuevas;
+  - si Keycloak rechaza o no responde al crear la cuenta de un proveedor, sólo ese proveedor sigue "Registrado" (auditoría `SUPPLIER_PROVISIONING_FAILED`) y los demás se procesan.
+- **Credenciales (HU-03):** por cada proveedor autorizado sin usuario se crea un usuario `Proveedor` del portal, sin contraseña, y su cuenta en Keycloak (o se enlaza la existente con su correo, si no pertenece a otro usuario ni tiene otro rol del portal): rol `Proveedor`, contraseña temporal aleatoria de 20 caracteres y la acción requerida `UPDATE_PASSWORD`. La contraseña sólo existe en memoria, en Keycloak y en el correo "Credenciales de acceso", que se envía después de confirmar con el usuario, la contraseña y la dirección `/login` del servidor.
+- **Resumen:** tras autorizar, el listado muestra a cada proveedor con "Credenciales enviadas", "Envío fallido" (con el error), "Ya tenía usuario", "Omitido", "No autorizado" (correo en uso) o "No autorizado: el servicio de identidad no pudo crear su cuenta". Los proveedores cuyo último envío falló llevan la marca "Credenciales no enviadas".
+- **Expediente:** la sección "Acceso al portal" muestra el usuario, el último acceso, el estado de la contraseña leído de Keycloak ("Temporal, pendiente de cambio", "Cambiada por el proveedor" o "No disponible" si Keycloak no responde) y el último envío de credenciales. **"Reenviar credenciales"** fija en Keycloak una contraseña temporal nueva (la anterior deja de funcionar), sólo mientras la cuenta conserve `UPDATE_PASSWORD`, aunque ya haya entrado con la temporal.
+- **Auditoría:** `SUPPLIER_STATUS_CHANGED`, `USER_CREATED` (origen `SUPPLIER_AUTHORIZATION`, cuenta de Keycloak `created` o `linked`), `SUPPLIER_PROVISIONING_FAILED`, `SUPPLIER_BULK_AUTHORIZED` y `SUPPLIER_CREDENTIALS_RESENT`, sin contraseñas ni tokens. En el log técnico queda `supplier.bulk_authorize` sólo con contadores.
+- **Proveedor de identidad (RN-HU03-01):** las credenciales viven sólo en Keycloak; el portal no guarda contraseñas ni hashes.
 - **Primer acceso:** el proveedor debe cambiar la contraseña temporal antes de usar el portal; ver la sección siguiente.
 
 ## Primer acceso y cambio de contraseña
 
-Toda contraseña que asigna otra persona deja al usuario con la marca `must_change_password` (HU-10, RF-06): la del proveedor autorizado, la del reenvío de credenciales y la del alta en **Administración › Usuarios**. Los usuarios demo del seed no la tienen.
+Los aplica Keycloak (RF-06); el portal no muestra formularios de contraseña.
 
-- **Cambio obligatorio:** con la marca, el inicio de sesión lleva a **Cambiar contraseña** (`/account/password`) y cualquier otra página o acción redirige ahí sin ejecutarse. Sólo quedan disponibles esa página y "Cerrar sesión".
-- **Validación:** pide la contraseña actual (la temporal), la nueva y su confirmación. La nueva debe cumplir la política de contraseñas (8 a 128 caracteres, letra, número y carácter especial, fuera de la lista de comunes), coincidir con la confirmación y ser distinta de la actual. Una contraseña actual incorrecta cuenta como intento fallido del correo: comparte la limitación de intentos del login.
-- **Al guardar:** se apaga la marca, se revocan todas las sesiones del usuario (quien hubiera entrado con la temporal queda fuera), se abre una sesión nueva y se registra `PASSWORD_CHANGED` en la auditoría, sin contraseñas, con `forced` verdadero o falso.
-- **Cambio voluntario:** cualquier usuario puede cambiar su contraseña desde "Cambiar contraseña" en el menú lateral.
-- **Migración `0008_password_change_required`:** marca a los usuarios que se crearon desde la aplicación (autorización o alta en Usuarios); en su siguiente acceso deben cambiar la contraseña. La contraseña temporal no expira y no hay recuperación de contraseña (fuera del MVP).
+- **Primer acceso:** toda contraseña que asigna otra persona (autorización, reenvío, alta en **Administración › Usuarios** y migración de usuarios) se registra en Keycloak como temporal, con la acción requerida `UPDATE_PASSWORD`: Keycloak exige la nueva antes de volver al portal. Las cuentas demo de `development` no la tienen.
+- **Política del realm:** 8 a 128 caracteres, con letra, número y carácter especial; distinta del usuario, del correo y de la actual; fuera de la lista de contraseñas comunes (con sus variantes decoradas).
+- **Fuerza bruta:** Keycloak bloquea la cuenta tras 5 fallos consecutivos, con espera creciente hasta 60 minutos; el contador se reinicia a las 24 h. Los fallos y cambios quedan en los eventos del realm (30 días).
+- **Cambio voluntario:** "Cambiar contraseña" (menú lateral) lleva a Keycloak con `kc_action=UPDATE_PASSWORD`; al volver, el portal abre una sesión nueva, muestra "Contraseña actualizada" y audita `PASSWORD_CHANGED` (`forced: false`).
+- No hay recuperación de contraseña ni caducidad de la temporal (fuera del MVP). Las columnas `users.password_hash` y `users.must_change_password` quedan obsoletas y se eliminarán cuando todos los usuarios estén enlazados.
 
 ## Archivos y seguridad de PoC
 
-- **Contraseñas:** Argon2 mediante `pwdlib`. Política en el servidor (ERS RF-06): 8 a 128 caracteres, con letra, número y carácter especial, y sin contraseñas comunes.
-- **Login:** limitado por correo (bloqueo de `min(60, 2^(n-5))` minutos tras 5 fallos consecutivos) y por IP (20 fallos en 15 minutos). Responde 429 sin evaluar la contraseña.
-- **Sesiones:** revocables del lado del servidor (`user_sessions`). La cookie firmada sólo lleva un identificador opaco y el token CSRF. Expiran tras 60 minutos de inactividad u 8 horas de duración, y se revocan al cerrar sesión o al deshabilitar al usuario.
+- **Contraseñas e inicio de sesión:** en Keycloak (ver "Keycloak: inicio de sesión y cuentas"). El portal no recibe, guarda ni verifica contraseñas.
+- **Sesiones:** revocables del lado del servidor (`user_sessions`). La cookie firmada sólo lleva un identificador opaco y el token CSRF (y, durante el viaje a Keycloak, `state`, `nonce` y `code_verifier`). Expiran tras 60 minutos de inactividad u 8 horas de duración, y se revocan al cerrar sesión o al deshabilitar al usuario; ambas acciones cierran también la sesión de Keycloak.
 - **CSRF:** token de sesión en todas las operaciones mutables, que sólo aceptan POST.
-- **Cabeceras:** CSP `default-src 'self'`, `X-Frame-Options: DENY`, `nosniff` y `Referrer-Policy`, más HSTS sobre HTTPS. **No agregue scripts ni estilos en línea:** la CSP los bloquea; use archivos bajo `app/static/`.
+- **Cabeceras:** CSP `default-src 'self'` (con `form-action` que admite sólo el origen de Keycloak, destino del cierre de sesión), `X-Frame-Options: DENY`, `nosniff` y `Referrer-Policy`, más HSTS sobre HTTPS. **No agregue scripts ni estilos en línea:** la CSP los bloquea; use archivos bajo `app/static/`.
 - **Cargas:**
   - UUID interno como nombre de almacenamiento y SHA-256;
   - verificación del contenido contra la extensión (firmas PDF, PNG y JPEG; XML; texto UTF-8);
@@ -492,9 +529,9 @@ Toda contraseña que asigna otra persona deja al usuario con la marca `must_chan
 
 `SECRET_KEY` es obligatoria (mínimo 32 caracteres; se rechaza el valor de ejemplo `change-me...`). `scripts/create_env.py` la genera al crear `.env`. `DEBUG` sólo sube el nivel de log; nunca muestra trazas al usuario.
 
-Para producción use `APP_ENV=production`: la aplicación no arranca sin `SESSION_HTTPS_ONLY=true`, con cuentas demo activas, con `MAIL_BACKEND=file` ni con `SMTP_SECURITY=none`. Añada además políticas de retención, escaneo antimalware y gestión de secretos.
+Para producción use `APP_ENV=production`: la aplicación no arranca sin `SESSION_HTTPS_ONLY=true`, con cuentas demo activas, con `MAIL_BACKEND=file`, con `SMTP_SECURITY=none` ni con `KEYCLOAK_SERVER_URL` sin `https://`. Añada además políticas de retención, escaneo antimalware y gestión de secretos.
 
-**Detrás de un proxy inverso**, arranque uvicorn con `--proxy-headers --forwarded-allow-ips=<IP del proxy>`. Sin eso, todas las peticiones parecen venir del proxy: el límite de login por IP se vuelve global y HSTS no se emite.
+**Detrás de un proxy inverso**, arranque uvicorn con `--proxy-headers --forwarded-allow-ips=<IP del proxy>`. Sin eso, todas las peticiones parecen venir del proxy: la auditoría registra su IP, HSTS no se emite y la URI de retorno a `/auth/callback` se arma con el host interno, que Keycloak rechaza.
 
 **Cifrado en reposo (requisito de infraestructura).** El volumen de PostgreSQL (`pgdata`) y `storage/` guardan en claro RFC, razones sociales, montos, datos bancarios y documentos. Con datos reales, cifre el disco donde Docker guarda sus volúmenes (BitLocker o LUKS) o use un servicio gestionado con cifrado (Azure Database for PostgreSQL). Restrinja también el acceso a `backups/`.
 
@@ -522,6 +559,14 @@ Para producción use `APP_ENV=production`: la aplicación no arranca sin `SESSIO
 | `SMTP_SECURITY` | `starttls` | `starttls`, `ssl` o `none` (prohibido en `production`). |
 | `SMTP_USERNAME`, `SMTP_PASSWORD` | *(vacías)* | Si hay usuario, el transporte inicia sesión. La contraseña nunca se muestra ni se registra. |
 | `SMTP_TIMEOUT` | `10` | Segundos de espera del servidor SMTP (1 a 120). |
+| `KEYCLOAK_SERVER_URL` | *(obligatoria)* | URL base de Keycloak; `https://` obligatorio en `production`. `create_env.py` escribe la local (`http://127.0.0.1:58080`). |
+| `KEYCLOAK_REALM` | *(obligatoria)* | `ultrasist-portal`. |
+| `KEYCLOAK_CLIENT_ID`, `KEYCLOAK_CLIENT_SECRET` | `portal-facturas-web`, *(obligatoria)* | Cliente OIDC del portal. El secreto: mínimo 32 caracteres, sin valor de ejemplo; nunca se muestra ni se registra. |
+| `KEYCLOAK_ADMIN_CLIENT_ID`, `KEYCLOAK_ADMIN_CLIENT_SECRET` | `portal-facturas-admin`, *(obligatoria)* | Cuenta de servicio del alta de usuarios (sólo `manage-users`, `view-users` y `query-users`). |
+| `KEYCLOAK_TIMEOUT` | `10` | Segundos de espera de cada llamada a Keycloak (1 a 60). |
+| `KEYCLOAK_PORT` | `58080` | Puerto local del servicio `keycloak`, sólo en `127.0.0.1`. |
+| `KC_BOOTSTRAP_ADMIN_USERNAME`, `KC_BOOTSTRAP_ADMIN_PASSWORD` | `admin`, *(generada)* | Administrador inicial de la consola del Keycloak local. |
+| `DEMO_PASSWORD` | *(generada)* | Contraseña de las cuentas demo en `development`. |
 
 ## Empaquetado para distribución
 
@@ -564,16 +609,18 @@ Los XML bajo `data/demo_documents/` son estructuralmente útiles para el parser,
 
 - Sin validación SAT online, timbrado ni generación CFDI.
 - Sin integración con ClickBalance ni SAP Ariba: el flujo del portal termina en "Autorizada".
-- Sin pagos, banca, firma, SharePoint, Blob, Azure SQL, SSO, despliegue Azure, Kubernetes o colas.
+- Sin pagos, banca, firma, SharePoint, Blob, Azure SQL, SSO con proveedores externos, despliegue Azure, Kubernetes o colas.
 - Los adaptadores Azure son contratos preparados, no llamadas productivas.
 - Las Reglas de validación y los catálogos son editables, pero los pesos del score siguen en el código y no se pueden crear reglas nuevas desde la interfaz. Los catálogos se usan en la validación del CFDI; la moneda del contrato sigue siendo texto libre de tres letras.
 - Las reglas `INT` del Invoice internacional buscan texto literal y aún no se calibran con invoices reales; no hay extracción automática de datos del Invoice.
 - Los correos (credenciales, decisión del PMO, cancelación) se envían de forma síncrona, sin cola ni reintentos automáticos; un envío fallido se reenvía a mano. No hay recordatorio antes de que venza el plazo de 72 horas de una cancelación.
 - El monto acumulado del tablero suma los totales sin convertir moneda: con facturas en MXN y USD es sólo una referencia.
-- La contraseña temporal aún no se gestiona en Keycloak (el portal guarda su hash), no expira y no hay recuperación de contraseña.
+- La contraseña temporal no expira y no hay recuperación de contraseña.
+- Keycloak limita los intentos por cuenta, no por IP (el portal limitaba ambos): el límite por IP debe ponerlo el proxy inverso. La lista de comunes de Keycloak compara contraseñas completas; sus variantes decoradas aproximan, sin igualar, la regla anterior (palabra común con dígitos y símbolos).
+- El correo del proveedor en el catálogo no se sincroniza con su cuenta de Keycloak.
 - La verificación documental del Anexo A es presencia/vigencia referencial, no validación legal.
 - Bootstrap 5.3.3 y Bootstrap Icons están incluidos bajo `app/static/vendor/`; la interfaz tampoco requiere Internet.
 
 ## Próximos pasos para producción
 
-Contenerizar la aplicación (Dockerfile y servicio `app` en Compose), PostgreSQL gestionado en Azure, Azure Blob con malware scanning, secretos administrados, Entra ID/External ID, cifrado y retención documental, workers para OCR, agregación centralizada del log JSON, pruebas E2E, accesibilidad formal y un workflow de excepciones con doble aprobación.
+Contenerizar la aplicación (Dockerfile y servicio `app` en Compose), PostgreSQL gestionado en Azure, Azure Blob con malware scanning, secretos administrados, federación de Keycloak con Entra ID/External ID, cifrado y retención documental, workers para OCR, agregación centralizada del log JSON, pruebas E2E, accesibilidad formal y un workflow de excepciones con doble aprobación.

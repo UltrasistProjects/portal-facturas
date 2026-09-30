@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, File, Form, Query, Request, UploadFile
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import RedirectResponse, Response
 from pydantic import ValidationError
 from sqlalchemy import select
@@ -17,19 +18,21 @@ from app.core.constants import (
 )
 from app.core.database import get_db
 from app.core.errors import BusinessRuleError, InvalidInputError, NotFoundError
-from app.core.security import hash_password, require_roles, validate_csrf
+from app.core.security import require_roles, validate_csrf
 from app.models import AuditLog, EmailDelivery, Supplier, User
 from app.repositories.pagination import back_to, list_query, paginate, search
 from app.routers.common import templates
 from app.schemas import UserCreate, validation_message
 from app.services import catalog_service as catalogs
 from app.services import document_requirements_service as requirements
+from app.services import identity_service as identity
 from app.services import notification_service as notifications
 from app.services import notification_templates as templates_service
 from app.services import session_service
 from app.services import validation_settings_service as validation_settings
 from app.services.audit_service import audit
 from app.services.catalog_template import build_catalog_template, template_filename
+from app.services.keycloak_admin import IdentityAdmin, IdentityProviderError, get_identity_admin
 from app.services.supplier_import_service import ImportFileError
 from app.services.supplier_template import XLSX_MEDIA_TYPE
 
@@ -38,6 +41,13 @@ router = APIRouter(prefix="/admin")
 
 USERS_URL = "/admin/users"
 USER_NOTICES = {"created": "Usuario creado"}
+# Deshabilitar no depende de Keycloak (D10): si no responde, el usuario igual queda sin acceso al portal.
+USER_WARNINGS = {
+    "idp_sync_failed": (
+        "El usuario quedó deshabilitado en el portal, pero Keycloak no se actualizó: deshabilítelo también en la "
+        "consola de Keycloak."
+    )
+}
 # Un usuario Proveedor siempre esta vinculado a su proveedor (usuario-proveedor-vinculado; ck_users_provider_supplier).
 MSG_SUPPLIER_REQUIRED = "Seleccione el proveedor del usuario"
 MSG_SUPPLIER_NOT_FOUND = "Proveedor inexistente"
@@ -54,6 +64,8 @@ def _users_page(
     page: int = 1,
     notice: str | None = None,
     form: dict[str, str] | None = None,
+    warning: str | None = None,
+    credentials: dict[str, str] | None = None,
 ):
     # Busqueda y paginacion en SQL (listados-paginados); el proveedor de cada usuario, en una consulta.
     q = q.strip()
@@ -68,10 +80,16 @@ def _users_page(
         "notice": notice,
         "suppliers": list(db.scalars(select(Supplier).order_by(Supplier.business_name))),
         "error": error,
-        # Alta rechazada: lo capturado se conserva, salvo la contrasena.
+        "warning": warning,
+        # Alta rechazada: lo capturado se conserva.
         "form": form or {},
+        # Alta exitosa: la contrasena temporal se muestra solo en esta respuesta (D15, D1-A).
+        "credentials": credentials,
     }
-    return templates.TemplateResponse(request, "admin/users.html", context, status_code=status_code)
+    response = templates.TemplateResponse(request, "admin/users.html", context, status_code=status_code)
+    if credentials:
+        response.headers["Cache-Control"] = "no-store"
+    return response
 
 
 @router.get("/users")
@@ -83,7 +101,7 @@ def users(
     db: Session = Depends(get_db),
     user=Depends(require_roles(Role.ADMINISTRADOR)),
 ):
-    return _users_page(request, db, user, q=q, page=page, notice=USER_NOTICES.get(ok))
+    return _users_page(request, db, user, q=q, page=page, notice=USER_NOTICES.get(ok), warning=USER_WARNINGS.get(ok))
 
 
 @router.post("/users")
@@ -91,7 +109,6 @@ async def create_user(
     request: Request,
     name: str = Form(...),
     email: str = Form(...),
-    password: str = Form(...),
     role: Role = Form(...),
     supplier_id: int | None = Form(None),
     db: Session = Depends(get_db),
@@ -104,7 +121,7 @@ async def create_user(
         return _users_page(request, db, user, message, status_code, form=form)
 
     try:
-        data = UserCreate(name=name, email=email, password=password, role=role, supplier_id=supplier_id)
+        data = UserCreate(name=name, email=email, role=role, supplier_id=supplier_id)
     except ValidationError as exc:
         return rejected(validation_message(exc), 400)
     # El proveedor solo aplica al rol Proveedor, y ahi es obligatorio y debe existir.
@@ -115,20 +132,23 @@ async def create_user(
         return rejected(MSG_SUPPLIER_NOT_FOUND, 400)
     if db.scalar(select(User.id).where(User.email == data.email)):
         return rejected("Ya existe un usuario con ese correo.", 409)
-    created = User(
-        name=data.name,
-        email=data.email,
-        password_hash=hash_password(data.password),
-        role=data.role,
-        supplier_id=supplier_id,
-        must_change_password=True,  # la asigno el Administrador: se cambia en el primer acceso (HU-10)
-    )
+    created = User(name=data.name, email=data.email, role=data.role, supplier_id=supplier_id)
     db.add(created)
     db.flush()
-    audit(db, "USER_CREATED", "User", created.id, user.id)
+    # Cuenta en Keycloak dentro de la transaccion (D15): si Keycloak falla, no se crea nada.
+    try:
+        account = await run_in_threadpool(
+            identity.provision, db, get_identity_admin(), email=data.email, role=data.role
+        )
+    except (identity.AccountConflict, IdentityProviderError) as exc:
+        db.rollback()
+        return rejected(exc.message, exc.status_code)
+    created.keycloak_sub = account.sub
+    audit(db, "USER_CREATED", "User", created.id, user.id, new={"role": data.role.value, "idp_account": account.origin})
     db.commit()
-    # El alta regresa a la lista buscando al usuario creado: el orden por nombre podria dejarlo en otra pagina.
-    return RedirectResponse(f"{USERS_URL}?{list_query(q=created.email, ok='created')}", status_code=303)
+    # La respuesta muestra al usuario creado (busqueda por su correo) y su contrasena temporal, una sola vez.
+    credentials = {"email": created.email, "password": account.password}
+    return _users_page(request, db, user, q=created.email, notice=USER_NOTICES["created"], credentials=credentials)
 
 
 @router.post("/users/{user_id}/toggle")
@@ -136,11 +156,20 @@ async def toggle_user(
     user_id: int, request: Request, db: Session = Depends(get_db), user=Depends(require_roles(Role.ADMINISTRADOR))
 ):
     await validate_csrf(request)
+    form = await request.form()
     target = db.get(User, user_id)
+    warning = None
     if target and target.id != user.id:
         if not target.is_active and target.role == Role.PROVEEDOR and target.supplier_id is None:
             raise BusinessRuleError(MSG_ORPHAN_PROVIDER)
         old = target.is_active
+        idp = get_identity_admin()
+        if not old and target.keycloak_sub:
+            # Habilitar: primero Keycloak; si no responde, el usuario sigue deshabilitado (D10).
+            try:
+                await run_in_threadpool(idp.set_enabled, target.keycloak_sub, True)
+            except IdentityProviderError as exc:
+                return _users_page(request, db, user, exc.message, exc.status_code)
         target.is_active = not old
         if not target.is_active:
             session_service.revoke_all_for_user(db, target.id)
@@ -148,7 +177,31 @@ async def toggle_user(
             db, "USER_STATUS_CHANGED", "User", target.id, user.id, {"is_active": old}, {"is_active": target.is_active}
         )
         db.commit()
-    return RedirectResponse(back_to(USERS_URL, await request.form()), status_code=303)
+        if old and target.keycloak_sub:
+            # Deshabilitar: el portal ya le cerro el acceso; Keycloak se actualiza despues, sin revertir si falla.
+            try:
+                await run_in_threadpool(_disable_in_keycloak, idp, target.keycloak_sub)
+            except IdentityProviderError as exc:
+                audit(
+                    db,
+                    "IDP_SYNC_FAILED",
+                    "User",
+                    target.id,
+                    user.id,
+                    new={"operation": exc.operation, "error": exc.code},
+                )
+                db.commit()
+                warning = "idp_sync_failed"
+    url = back_to(USERS_URL, form)
+    if warning:
+        url += ("&" if "?" in url else "?") + list_query(ok=warning)
+    return RedirectResponse(url, status_code=303)
+
+
+def _disable_in_keycloak(idp: IdentityAdmin, sub: str) -> None:
+    """Deshabilita la cuenta y cierra sus sesiones de Keycloak: no puede volver a entrar por SSO."""
+    idp.set_enabled(sub, False)
+    idp.logout(sub)
 
 
 AUDIT_ENTRIES_PER_PAGE = 50

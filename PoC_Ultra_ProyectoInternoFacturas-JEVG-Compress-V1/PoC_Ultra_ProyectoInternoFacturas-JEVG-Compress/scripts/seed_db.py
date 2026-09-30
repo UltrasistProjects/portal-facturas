@@ -29,9 +29,10 @@ from app.core.constants import (
 from app.core.database import SessionLocal
 from app.core.demo import DEMO_ACCOUNTS
 from app.core.passwords import generate_password
-from app.core.security import hash_password
 from app.models import AuditLog, Contract, Document, Invoice, Review, Supplier, User
+from app.services import identity_service as identity
 from app.services.file_service import LocalFileStorage
+from app.services.keycloak_admin import IdentityAdmin, IdentityProviderError, get_identity_admin
 from app.services.pdf_service import analyze_pdf
 from app.services.validation_engine import run_validation
 
@@ -81,7 +82,26 @@ def create_cancellation_ack_pdf(path: Path) -> None:
     doc.close()
 
 
-def seed_international(db, workdir: Path, demo: Path, password: str, admin_id: int, folio: str) -> None:
+def demo_user(
+    db,
+    idp: IdentityAdmin,
+    *,
+    name: str,
+    email: str,
+    role: Role,
+    password: str,
+    temporary: bool,
+    supplier_id: int | None = None,
+) -> User:
+    """Usuario demo del portal enlazado a su cuenta de Keycloak, creada o reutilizada (add-keycloak-authentication).
+    Sin password_hash: la credencial vive solo en Keycloak (RN-HU03-01)."""
+    account = identity.provision(db, idp, email=email, role=role, password=password, temporary=temporary)
+    return User(name=name, email=email, role=role, supplier_id=supplier_id, keycloak_sub=account.sub)
+
+
+def seed_international(
+    db, workdir: Path, demo: Path, account: tuple[IdentityAdmin, str, bool], admin_id: int, folio: str
+) -> None:
     """Proveedor internacional autorizado con su usuario, un contrato en USD y la factura INV-2026-0042 en "Cargada":
     Invoice en PDF con los importes capturados, orden de compra y Vo.Bo. Su envio procede (HU-15/16)."""
     supplier = Supplier(
@@ -106,11 +126,15 @@ def seed_international(db, workdir: Path, demo: Path, password: str, admin_id: i
     )
     db.add(supplier)
     db.flush()
-    user = User(
+    idp, password, temporary = account
+    user = demo_user(
+        db,
+        idp,
         name="Proveedor Internacional Demo",
         email="proveedor3@poc.local",
-        password_hash=hash_password(password),
         role=Role.PROVEEDOR,
+        password=password,
+        temporary=temporary,
         supplier_id=supplier.id,
     )
     contract = Contract(
@@ -213,21 +237,39 @@ def add_document(
     return doc
 
 
-def seed_passwords(passwords: dict[str, str] | None = None) -> dict[str, str]:
-    """Contrasenas por correo: explicitas, las demo documentadas en development o aleatorias en otro entorno."""
+def seed_passwords(passwords: dict[str, str] | None = None) -> tuple[dict[str, str], bool]:
+    """Contrasenas por correo y si son temporales. Explicitas (pruebas) o DEMO_PASSWORD del .env en development, sin
+    accion requerida; en otro entorno, aleatorias temporales que se muestran una sola vez. Ninguna esta en el
+    repositorio."""
     if passwords is not None:
-        return {account.email: passwords[account.email] for account in DEMO_ACCOUNTS}
+        return {account.email: passwords[account.email] for account in DEMO_ACCOUNTS}, False
     if settings.app_env == "development":
-        return {account.email: account.password for account in DEMO_ACCOUNTS}
+        demo_password = settings.demo_password.get_secret_value()
+        if not demo_password:
+            raise SystemExit("DEMO_PASSWORD es obligatoria en development: ejecute python scripts/create_env.py.")
+        return {account.email: demo_password for account in DEMO_ACCOUNTS}, False
     generated = {account.email: generate_password() for account in DEMO_ACCOUNTS}
-    print("Contrasenas generadas para los usuarios sembrados (se muestran una sola vez):")
+    print("Contrasenas temporales de los usuarios sembrados (se muestran una sola vez; Keycloak pedira cambiarlas):")
     for email, password in generated.items():
         print(f"  {email}: {password}")
-    return generated
+    return generated, True
 
 
 def main(passwords: dict[str, str] | None = None) -> None:
-    """Siembra la demo. `passwords` (correo -> contrasena) fija las contrasenas de los usuarios sembrados."""
+    """Siembra la demo. `passwords` (correo -> contrasena) fija las contrasenas de los usuarios sembrados en Keycloak.
+    Keycloak debe estar disponible: las cuentas demo se crean o se enlazan alli."""
+    try:
+        _seed(passwords)
+    except IdentityProviderError as exc:
+        raise SystemExit(
+            f"Keycloak no respondio ({exc.operation}: {exc.code}). Levantelo con `docker compose up -d --wait keycloak`"
+            " y vuelva a ejecutar el seed; la base no se modifico."
+        ) from None
+    except identity.AccountConflict as exc:
+        raise SystemExit(f"{exc.message} Revise las cuentas @poc.local en Keycloak.") from None
+
+
+def _seed(passwords: dict[str, str] | None) -> None:
     demo = ROOT / "data" / "demo_documents"
     with tempfile.TemporaryDirectory(prefix="seed_") as tmp, SessionLocal() as db:
         workdir = Path(tmp)
@@ -238,7 +280,8 @@ def main(passwords: dict[str, str] | None = None) -> None:
         if db.scalar(select(User.id).limit(1)):
             print("La base ya contiene datos; use scripts/reset_demo.py para reconstruirla.")
             return
-        passwords = seed_passwords(passwords)
+        passwords, temporary = seed_passwords(passwords)
+        idp = get_identity_admin()
         moral = Supplier(
             business_name="Tecnologia Integral del Centro SA de CV",
             rfc="TIC210101ABC",
@@ -281,30 +324,42 @@ def main(passwords: dict[str, str] | None = None) -> None:
         db.add_all([moral, physical])
         db.flush()
         users = [
-            User(
+            demo_user(
+                db,
+                idp,
                 name="Administrador Demo",
                 email="admin@poc.local",
-                password_hash=hash_password(passwords["admin@poc.local"]),
                 role=Role.ADMINISTRADOR,
+                password=passwords["admin@poc.local"],
+                temporary=temporary,
             ),
-            User(
+            demo_user(
+                db,
+                idp,
                 name="PMO Demo",
                 email="pmo@poc.local",
-                password_hash=hash_password(passwords["pmo@poc.local"]),
                 role=Role.PMO,
+                password=passwords["pmo@poc.local"],
+                temporary=temporary,
             ),
-            User(
+            demo_user(
+                db,
+                idp,
                 name="Proveedor Moral Demo",
                 email="proveedor1@poc.local",
-                password_hash=hash_password(passwords["proveedor1@poc.local"]),
                 role=Role.PROVEEDOR,
+                password=passwords["proveedor1@poc.local"],
+                temporary=temporary,
                 supplier_id=moral.id,
             ),
-            User(
+            demo_user(
+                db,
+                idp,
                 name="Proveedor Fisico Demo",
                 email="proveedor2@poc.local",
-                password_hash=hash_password(passwords["proveedor2@poc.local"]),
                 role=Role.PROVEEDOR,
+                password=passwords["proveedor2@poc.local"],
+                temporary=temporary,
                 supplier_id=physical.id,
             ),
         ]
@@ -490,7 +545,12 @@ def main(passwords: dict[str, str] | None = None) -> None:
             )
             db.commit()
         seed_international(
-            db, workdir, demo, passwords["proveedor3@poc.local"], users[0].id, f"FAC-2026-{len(scenarios) + 1:05d}"
+            db,
+            workdir,
+            demo,
+            (idp, passwords["proveedor3@poc.local"], temporary),
+            users[0].id,
+            f"FAC-2026-{len(scenarios) + 1:05d}",
         )
         print("Seed completo: 5 usuarios, 3 proveedores, 3 contratos y 12 facturas demo.")
 

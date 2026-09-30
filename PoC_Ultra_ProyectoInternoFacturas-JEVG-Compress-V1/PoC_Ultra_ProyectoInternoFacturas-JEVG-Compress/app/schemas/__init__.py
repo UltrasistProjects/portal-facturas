@@ -23,7 +23,6 @@ from app.core.constants import (
     SupplierClassification,
     SupplierType,
 )
-from app.core.passwords import validate_password
 from app.core.timeutils import to_business
 
 MIN_INCORPORATION_DATE = date(1900, 1, 1)
@@ -100,10 +99,11 @@ def validation_messages(exc: ValidationError) -> list[str]:
 
 
 class UserCreate(BaseModel):
-    # Sin str_strip_whitespace a nivel de modelo: los espacios de la contrasena son significativos.
+    """Alta en /admin/users. Sin contrasena: el usuario se crea en Keycloak con una temporal
+    (add-keycloak-authentication, D15)."""
+
     name: str = Field(min_length=2, max_length=150)
     email: EmailStr
-    password: str
     role: Role
     supplier_id: int | None = None
 
@@ -116,11 +116,6 @@ class UserCreate(BaseModel):
     @classmethod
     def normalized_email(cls, value):
         return value.strip().lower() if isinstance(value, str) else value
-
-    @field_validator("password")
-    @classmethod
-    def password_policy(cls, value: str) -> str:
-        return validate_password(value)
 
 
 class SupplierProfile(BaseModel):

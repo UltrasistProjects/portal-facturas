@@ -1,6 +1,7 @@
 from datetime import date
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
 from pydantic import ValidationError
 from sqlalchemy import select
@@ -176,10 +177,11 @@ async def authorize_suppliers(
     db: Session = Depends(get_db),
     user=Depends(require_roles(Role.ADMINISTRADOR)),
 ):
-    """Autorizacion masiva (HU-02) y envio de credenciales (HU-03). La logica vive en supplier_access_service."""
+    """Autorizacion masiva (HU-02) y envio de credenciales (HU-03). La logica vive en supplier_access_service; corre en
+    el threadpool porque llama a Keycloak de forma sincrona."""
     await validate_csrf(request)
     try:
-        result = access.authorize(db, supplier_ids, user, portal_url(request))
+        result = await run_in_threadpool(access.authorize, db, supplier_ids, user, portal_url(request))
     except BusinessRuleError as exc:
         db.rollback()
         return _suppliers_page(request, db, user, exc.message, exc.status_code)
@@ -209,10 +211,13 @@ def _supplier_detail_page(
     }
     if user.role == Role.ADMINISTRADOR:
         portal_user = access.provider_user(db, supplier)
+        # Estado de la contrasena leido de Keycloak (D14): "No disponible" si no responde, sin que la pagina falle.
+        password = access.password_state(portal_user)
         context["access"] = {
             "user": portal_user,
+            "password": password,
             "delivery": access.credentials_status(db, supplier.id),
-            "can_resend": access.can_resend(supplier, portal_user),
+            "can_resend": access.can_resend(supplier, portal_user, password),
         }
         # Formulario de edicion: lo capturado se conserva cuando la edicion se rechaza.
         context["profile"] = profile_form if profile_form is not None else _profile_values(supplier)
@@ -248,13 +253,15 @@ async def resend_credentials(
 ):
     await validate_csrf(request)
     try:
-        delivery = access.resend_credentials(db, supplier_id, user, portal_url(request))
+        delivery = await run_in_threadpool(access.resend_credentials, db, supplier_id, user, portal_url(request))
     except NotFoundError:
         raise
     except BusinessRuleError as exc:
         db.rollback()
         supplier = db.get(Supplier, supplier_id)
-        return _supplier_detail_page(request, db, user, supplier, access_error=exc.message, status_code=exc.status_code)
+        return await run_in_threadpool(
+            _supplier_detail_page, request, db, user, supplier, access_error=exc.message, status_code=exc.status_code
+        )
     return RedirectResponse(f"/suppliers/{supplier_id}?credentials={delivery.id}", status_code=303)
 
 
@@ -271,13 +278,27 @@ async def update_supplier(
         data = SupplierUpdate(**submitted, supplier_type=supplier.supplier_type)
         supplier_service.update_supplier(db, supplier, data, user.id)
     except ValidationError as exc:
-        return _supplier_detail_page(
-            request, db, user, supplier, status_code=400, profile_error=validation_message(exc), profile_form=submitted
+        return await run_in_threadpool(
+            _supplier_detail_page,
+            request,
+            db,
+            user,
+            supplier,
+            status_code=400,
+            profile_error=validation_message(exc),
+            profile_form=submitted,
         )
     except BusinessRuleError as exc:
         db.rollback()
-        return _supplier_detail_page(
-            request, db, user, supplier, status_code=exc.status_code, profile_error=exc.message, profile_form=submitted
+        return await run_in_threadpool(
+            _supplier_detail_page,
+            request,
+            db,
+            user,
+            supplier,
+            status_code=exc.status_code,
+            profile_error=exc.message,
+            profile_form=submitted,
         )
     db.commit()
     return RedirectResponse(f"/suppliers/{supplier.id}", status_code=303)

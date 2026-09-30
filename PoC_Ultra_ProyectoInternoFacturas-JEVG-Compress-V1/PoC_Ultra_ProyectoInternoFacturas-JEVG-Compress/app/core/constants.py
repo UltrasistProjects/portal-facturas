@@ -179,12 +179,6 @@ class Severity(StrEnum):
     CRITICAL = "CRITICAL"
 
 
-class LoginResult(StrEnum):
-    SUCCESS = "SUCCESS"
-    FAILURE = "FAILURE"
-    THROTTLED = "THROTTLED"
-
-
 class ReviewDecision(StrEnum):
     ACCEPTED = "ACCEPTED"
     REJECTED = "REJECTED"

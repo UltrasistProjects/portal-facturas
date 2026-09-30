@@ -1,6 +1,9 @@
-"""Cuentas demo: unica fuente para el seed y el acceso rapido del login. Solo se exponen en development."""
+"""Cuentas demo: unica fuente para el seed. Sus contrasenas no estan en el repositorio: en development el seed usa
+DEMO_PASSWORD del .env y en otro entorno genera temporales que muestra una sola vez (add-keycloak-authentication)."""
 
 from dataclasses import dataclass
+
+from app.core.constants import Role
 
 DEMO_EMAIL_DOMAIN = "@poc.local"
 
@@ -9,19 +12,14 @@ DEMO_EMAIL_DOMAIN = "@poc.local"
 class DemoAccount:
     label: str
     email: str
-    password: str
-    quick_access: bool = True
+    role: Role
 
 
 DEMO_ACCOUNTS = (
-    DemoAccount("Administrador", "admin@poc.local", "Admin#Demo2026"),
-    DemoAccount("PMO", "pmo@poc.local", "Pmo#Demo2026"),
-    DemoAccount("Proveedor", "proveedor1@poc.local", "Proveedor#Demo2026"),
-    DemoAccount("Proveedor fisico", "proveedor2@poc.local", "Proveedor#Demo2026", quick_access=False),
+    DemoAccount("Administrador", "admin@poc.local", Role.ADMINISTRADOR),
+    DemoAccount("PMO", "pmo@poc.local", Role.PMO),
+    DemoAccount("Proveedor", "proveedor1@poc.local", Role.PROVEEDOR),
+    DemoAccount("Proveedor fisico", "proveedor2@poc.local", Role.PROVEEDOR),
     # Proveedor internacional (HU-15/16): factura con Invoice en PDF, sin CFDI.
-    DemoAccount("Proveedor internacional", "proveedor3@poc.local", "Proveedor#Demo2026", quick_access=False),
+    DemoAccount("Proveedor internacional", "proveedor3@poc.local", Role.PROVEEDOR),
 )
-
-
-def quick_access_accounts(app_env: str) -> list[DemoAccount]:
-    return [account for account in DEMO_ACCOUNTS if account.quick_access] if app_env == "development" else []

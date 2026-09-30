@@ -16,7 +16,6 @@ from app.core.middleware import (
     request_scope,
     security_headers,
 )
-from app.core.security import PASSWORD_CHANGE_URL, PasswordChangeRequired
 from app.core.startup import run_startup_checks
 from app.routers import admin, auth, contracts, dashboard, invoices, suppliers
 
@@ -71,11 +70,6 @@ async def http_exception_handler(request: Request, exc: HTTPException):
     if exc.status_code == 401 and request.url.path != "/login":
         return RedirectResponse("/login", status_code=303)
     return render_error(request, exc.status_code, exc.detail)
-
-
-@app.exception_handler(PasswordChangeRequired)
-async def password_change_required(request: Request, exc: PasswordChangeRequired):
-    return RedirectResponse(PASSWORD_CHANGE_URL, status_code=303)
 
 
 @app.exception_handler(BusinessRuleError)

@@ -28,7 +28,6 @@ from app.core.constants import (
     DeliveryStatus,
     DocumentRequirement,
     InvoiceStatus,
-    LoginResult,
     Mailbox,
     NotificationEvent,
     ProcessingStatus,
@@ -83,14 +82,18 @@ class User(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(150))
     email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
-    password_hash: Mapped[str] = mapped_column(String(512))
+    # Obsoleta (add-keycloak-authentication): las credenciales viven en Keycloak y el portal no guarda hashes
+    # (RN-HU03-01). Queda nula en todo usuario enlazado; se elimina en el cambio de limpieza.
+    password_hash: Mapped[str | None] = mapped_column(String(512))
+    # Identificador (sub) de la cuenta en Keycloak: el inicio de sesion enlaza al usuario solo por este valor (D7).
+    keycloak_sub: Mapped[str | None] = mapped_column(String(36), unique=True, index=True)
     role: Mapped[Role] = mapped_column(enum_column(Role), index=True)
     supplier_id: Mapped[int | None] = mapped_column(restrict("suppliers.id"), nullable=True, index=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=now_utc)
     last_login_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
-    # Contrasena asignada por otra persona (autorizacion, reenvio de credenciales o alta en /admin/users): el usuario
-    # debe cambiarla antes de usar el portal (HU-10). El seed crea sin marca.
+    # Obsoleta (add-keycloak-authentication): el cambio en el primer acceso lo exige Keycloak (UPDATE_PASSWORD).
+    # Nadie la lee ni la escribe; se elimina en el cambio de limpieza.
     must_change_password: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
     supplier: Mapped[Supplier | None] = relationship(back_populates="users")
 
@@ -367,21 +370,6 @@ class AuditLog(Base):
     user: Mapped[User | None] = relationship()
 
 
-class LoginAttempt(Base):
-    """Intento de inicio de sesion; base de la limitacion por correo y por IP (AUDITORIA SEC-04)."""
-
-    __tablename__ = "login_attempts"
-    __table_args__ = (
-        Index("ix_login_attempts_email_attempted_at", "email", "attempted_at"),
-        Index("ix_login_attempts_ip_attempted_at", "ip", "attempted_at"),
-    )
-    id: Mapped[int] = mapped_column(primary_key=True)
-    email: Mapped[str] = mapped_column(String(255))
-    ip: Mapped[str | None] = mapped_column(String(50))
-    result: Mapped[LoginResult] = mapped_column(SAEnum(LoginResult, native_enum=False, create_constraint=True))
-    attempted_at: Mapped[datetime] = mapped_column(UTCDateTime, default=now_utc)
-
-
 class UserSession(Base):
     """Sesion del lado del servidor: la cookie solo lleva un identificador opaco; aqui se guarda su SHA-256
     (AUDITORIA SEC-07)."""
@@ -393,6 +381,9 @@ class UserSession(Base):
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=now_utc)
     last_seen_at: Mapped[datetime] = mapped_column(UTCDateTime, default=now_utc)
     revoked_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
+    # ID token de Keycloak, solo del lado del servidor: es el id_token_hint del cierre de sesion (D9). Se borra al
+    # revocar la sesion; nunca viaja en la cookie.
+    id_token_hint: Mapped[str | None] = mapped_column(Text)
     ip: Mapped[str | None] = mapped_column(String(50))
     user_agent: Mapped[str | None] = mapped_column(String(255))
 
@@ -549,7 +540,6 @@ __all__ = [
     "InvoiceDocumentType",
     "ValidationResult",
     "AuditLog",
-    "LoginAttempt",
     "Review",
     "UserSession",
     "NotificationTemplate",

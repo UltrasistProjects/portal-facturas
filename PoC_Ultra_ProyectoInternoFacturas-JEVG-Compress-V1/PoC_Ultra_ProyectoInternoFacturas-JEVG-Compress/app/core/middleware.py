@@ -9,12 +9,20 @@ from contextvars import ContextVar
 from starlette.datastructures import Headers, MutableHeaders
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
-# Viable sin excepciones: todos los assets son locales y no hay scripts ni estilos en linea. Bootstrap usa
-# imagenes SVG en data: URIs, por eso img-src admite data:.
-CONTENT_SECURITY_POLICY = (
-    "default-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'self'; "
-    "form-action 'self'; frame-ancestors 'none'"
-)
+from app.core.config import settings
+
+
+def content_security_policy(keycloak_origin: str) -> str:
+    """Viable sin excepciones: todos los assets son locales y no hay scripts ni estilos en linea. Bootstrap usa
+    imagenes SVG en data: URIs, por eso img-src admite data:. form-action admite ademas el origen de Keycloak:
+    Chrome aplica form-action a la redireccion que sigue a POST /logout (end_session_endpoint)."""
+    return (
+        "default-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'self'; "
+        f"form-action 'self' {keycloak_origin}; frame-ancestors 'none'"
+    )
+
+
+CONTENT_SECURITY_POLICY = content_security_policy(settings.keycloak_origin)
 SECURITY_HEADERS = {
     "Content-Security-Policy": CONTENT_SECURITY_POLICY,
     "X-Frame-Options": "DENY",

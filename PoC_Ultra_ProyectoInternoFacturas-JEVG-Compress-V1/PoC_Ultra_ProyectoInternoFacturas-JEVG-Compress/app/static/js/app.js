@@ -1,8 +1,3 @@
-document.querySelectorAll('[data-demo]').forEach(button => button.addEventListener('click', () => {
-  const [email, password] = button.dataset.demo.split('|');
-  document.querySelector('[name=email]').value = email;
-  document.querySelector('[name=password]').value = password;
-}));
 document.querySelectorAll('input[type=file]').forEach(input => input.addEventListener('change', () => {
   const label = input.closest('label')?.querySelector('.file-name');
   if (label) label.textContent = input.files[0]?.name || 'Ningun archivo seleccionado';

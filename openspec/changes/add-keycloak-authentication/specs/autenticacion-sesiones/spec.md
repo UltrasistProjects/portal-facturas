@@ -120,7 +120,7 @@ El realm versionado SHALL declarar la política de contraseñas de RF-06:
 - al menos una letra, un dígito y un carácter especial;
 - distinta del usuario y del correo;
 - distinta de la contraseña actual;
-- fuera de la lista de contraseñas comunes del proyecto (`common_passwords.txt`).
+- fuera de la lista de contraseñas comunes del proyecto (`common_passwords.txt`), que incluye las palabras comunes seguidas de dígitos y símbolos frecuentes.
 
 Keycloak SHALL rechazar la contraseña nueva que no la cumpla. Las contraseñas temporales que genera el portal SHALL cumplirla.
 
@@ -131,6 +131,10 @@ Keycloak SHALL rechazar la contraseña nueva que no la cumpla. Las contraseñas 
 #### Scenario: Contraseña común
 - **WHEN** el usuario elige `Password1!`, que figura en la lista de contraseñas comunes
 - **THEN** Keycloak la rechaza
+
+#### Scenario: Palabra común decorada
+- **WHEN** en el primer acceso el proveedor elige `Portal2026!`
+- **THEN** Keycloak la rechaza por figurar en la lista de contraseñas comunes
 
 #### Scenario: Política declarada en el realm
 - **WHEN** se inspecciona `infra/keycloak/realm-ultrasist-portal.json`

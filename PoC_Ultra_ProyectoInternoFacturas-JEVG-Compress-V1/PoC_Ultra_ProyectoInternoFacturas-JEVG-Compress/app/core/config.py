@@ -1,9 +1,10 @@
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal
+from urllib.parse import quote, urlsplit
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from pydantic import Field, SecretStr, field_validator, model_validator
+from pydantic import Field, SecretStr, ValidationInfo, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Raiz del proyecto: todas las rutas relativas de la configuracion se resuelven contra ella, no contra el CWD.
@@ -13,6 +14,10 @@ MIN_SECRET_KEY_LENGTH = 32
 SECRET_KEY_HINT = 'Genere una con: python -c "import secrets; print(secrets.token_urlsafe(64))"'
 DATABASE_URL_PREFIX = "postgresql+psycopg://"
 DATABASE_URL_HINT = "Ejecute python scripts/create_env.py para completar el .env."
+# Keycloak, proveedor de identidad (add-keycloak-authentication, D20): los secretos de los clientes siguen la regla
+# de SECRET_KEY (obligatorios, sin valor por defecto y sin el prefijo de ejemplo).
+MIN_KEYCLOAK_SECRET_LENGTH = 32
+KEYCLOAK_HINT = DATABASE_URL_HINT
 # Remitente del transporte de archivo: nunca sale del equipo, no necesita un dominio real.
 DEFAULT_FILE_MAIL_FROM = "Portal de Proveedores ULTRASIST <no-reply@portal.local>"
 
@@ -51,8 +56,22 @@ class Settings(BaseSettings):
     smtp_username: str = ""
     smtp_password: SecretStr = SecretStr("")
     smtp_timeout: int = Field(default=10, ge=1, le=120)
+    # Keycloak (D20). Los secretos no tienen valor por defecto: sin ellos la aplicacion no arranca.
+    keycloak_server_url: str = Field(default="", validate_default=True)
+    keycloak_realm: str = Field(default="", validate_default=True)
+    keycloak_client_id: str = Field(default="portal-facturas-web", validate_default=True)
+    keycloak_client_secret: SecretStr = Field(default=SecretStr(""), validate_default=True)
+    keycloak_admin_client_id: str = Field(default="portal-facturas-admin", validate_default=True)
+    keycloak_admin_client_secret: SecretStr = Field(default=SecretStr(""), validate_default=True)
+    keycloak_timeout: int = Field(default=10, ge=1, le=60)
+    # Solo la usa el seed en development: contrasena de las cuentas demo en Keycloak.
+    demo_password: SecretStr = SecretStr("")
 
-    model_config = SettingsConfigDict(env_file=BASE_DIR / ".env", env_file_encoding="utf-8", extra="ignore")
+    # hide_input_in_errors: un error de validacion no repite el valor recibido (secretos de Keycloak, la contrasena
+    # dentro de DATABASE_URL); los mensajes propios ya nombran la variable y el motivo.
+    model_config = SettingsConfigDict(
+        env_file=BASE_DIR / ".env", env_file_encoding="utf-8", extra="ignore", hide_input_in_errors=True
+    )
 
     @field_validator("debug", "session_https_only", "ai_enabled", mode="before")
     @classmethod
@@ -125,8 +144,60 @@ class Settings(BaseSettings):
             raise ValueError(f"DATABASE_URL debe usar el esquema {DATABASE_URL_PREFIX}. {DATABASE_URL_HINT}")
         return value
 
+    @field_validator("keycloak_server_url")
+    @classmethod
+    def keycloak_url(cls, value: str) -> str:
+        value = value.strip().rstrip("/")
+        if not value:
+            raise ValueError(f"KEYCLOAK_SERVER_URL es obligatoria. {KEYCLOAK_HINT}")
+        if not value.startswith(("http://", "https://")):
+            raise ValueError("KEYCLOAK_SERVER_URL debe comenzar con http:// o https://.")
+        return value
+
+    @field_validator("keycloak_realm", "keycloak_client_id", "keycloak_admin_client_id")
+    @classmethod
+    def keycloak_name(cls, value: str, info: ValidationInfo) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError(f"{info.field_name.upper()} es obligatoria. {KEYCLOAK_HINT}")
+        return value
+
+    @field_validator("keycloak_client_secret", "keycloak_admin_client_secret")
+    @classmethod
+    def keycloak_secret(cls, value: SecretStr, info: ValidationInfo) -> SecretStr:
+        name = info.field_name.upper()
+        secret = value.get_secret_value().strip()
+        if not secret:
+            raise ValueError(f"{name} es obligatoria. {KEYCLOAK_HINT}")
+        if secret.lower().startswith("change-me"):
+            raise ValueError(f"{name} contiene el valor de ejemplo inseguro 'change-me...'. {KEYCLOAK_HINT}")
+        if len(secret) < MIN_KEYCLOAK_SECRET_LENGTH:
+            raise ValueError(f"{name} debe tener al menos {MIN_KEYCLOAK_SECRET_LENGTH} caracteres.")
+        return SecretStr(secret)
+
+    @property
+    def keycloak_issuer(self) -> str:
+        """Emisor de los tokens del realm; tambien es la base del discovery y del token endpoint."""
+        return f"{self.keycloak_server_url}/realms/{quote(self.keycloak_realm, safe='')}"
+
+    @property
+    def keycloak_metadata_url(self) -> str:
+        return f"{self.keycloak_issuer}/.well-known/openid-configuration"
+
+    @property
+    def keycloak_admin_url(self) -> str:
+        return f"{self.keycloak_server_url}/admin/realms/{quote(self.keycloak_realm, safe='')}"
+
+    @property
+    def keycloak_origin(self) -> str:
+        """Esquema, host y puerto de Keycloak: el destino que la CSP admite en form-action (logout)."""
+        parts = urlsplit(self.keycloak_server_url)
+        return f"{parts.scheme}://{parts.netloc}"
+
     @model_validator(mode="after")
     def derived_defaults(self):
+        if self.app_env == "production" and not self.keycloak_server_url.startswith("https://"):
+            raise ValueError("KEYCLOAK_SERVER_URL: en produccion Keycloak debe usarse por HTTPS (https://).")
         if self.session_https_only is None:
             self.session_https_only = self.app_env != "development"
         if self.mail_backend is None:

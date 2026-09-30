@@ -72,7 +72,9 @@ HU-03 pide literalmente enviar *usuario y contraseña temporal* por correo.
 ## Decisions
 
 ### D5. Cliente OIDC con Authlib
-Se usa la integración de Starlette de Authlib (versión estable al implementar; hoy 1.8.0), con `server_metadata_url` apuntando al *discovery* del realm y `code_challenge_method="S256"`.
+Se usa la integración de Starlette de Authlib, con `server_metadata_url` apuntando al *discovery* del realm y `code_challenge_method="S256"`.
+
+**Versión (ajuste de implementación):** se fija **1.7.2**. La 1.8.0 cambia su cliente HTTP a `httpx2` y deja `httpx` como respaldo obsoleto. Con la 1.7.2, un solo cliente HTTP (`httpx` 0.28.1) sirve a OIDC y a la API de administración. Trae `cryptography` y `joserfc`.
 
 Authlib guarda `state`, `nonce` y `code_verifier` en `request.session` sólo durante el viaje de ida y vuelta, y el callback los consume. Son valores efímeros de un único uso, no tokens.
 
@@ -86,6 +88,8 @@ Con `authorize_access_token` + `parse_id_token`:
 - `exp` vigente con una tolerancia de 60 s;
 - `nonce` igual al de la petición;
 - `state` igual al guardado (lo valida Authlib).
+
+**Ajuste de implementación:** Authlib 1.7.2 sólo valida `iss` si no recibe opciones, y **no valida `aud`**. El portal le pasa `claims_options` explícitas (`iss`, `aud` y `sub` esenciales) y `leeway=60`. La validación la hace el registro de claims de joserfc; `exp` siempre se comprueba.
 
 Cualquier fallo responde 400 con la página genérica, sin crear sesión, y audita `LOGIN_FAILED` con un motivo (`state`, `nonce`, `token`, `idp_error`), nunca con el token ni el código. El access token y el refresh token se descartan: el portal no llama APIs en nombre del usuario.
 
@@ -104,7 +108,7 @@ El callback:
 1. revoca el `sid` previo;
 2. `request.session.clear()` (rota el CSRF);
 3. crea una sesión nueva con `session_service.create`;
-4. guarda el ID token en `user_sessions.id_token_hint`, del lado del servidor, para usarlo como `id_token_hint` en el logout;
+4. guarda el ID token en `user_sessions.id_token_hint`, del lado del servidor, para usarlo como `id_token_hint` en el logout. Se borra al revocar la sesión (logout, cambio de contraseña o deshabilitación), no sólo al purgarla;
 5. actualiza `last_login_at` y audita `LOGIN_SUCCESS`.
 
 Los tiempos siguen igual (60 min / 8 h). Cada petición se valida contra la BD local, sin llamar a Keycloak.
@@ -131,17 +135,18 @@ Los tiempos siguen igual (60 min / 8 h). Cada petición se valida contra la BD l
 - **Token de la cuenta de servicio:** *client credentials* con `portal-facturas-admin`, en caché en memoria hasta 30 s antes de expirar.
 - **Timeout:** explícito (`KEYCLOAK_TIMEOUT`, 10 s por omisión) en todas las llamadas.
 - **Errores:** conexión, timeout, 5xx y 4xx inesperados se traducen a `IdentityProviderError` (hereda de `BusinessRuleError`, HTTP 503, "El servicio de identidad no está disponible. Intente más tarde."). Nunca provocan un traceback. Se registran sólo la operación, el código HTTP y la duración, nunca el cuerpo.
-- **Operaciones:**
+- **Falla rápida (ajuste de implementación):** tras un error de red, timeout o 5xx, las llamadas fallan de inmediato durante 30 s. Una autorización masiva con Keycloak caído no espera el timeout por cada proveedor. Las rutas asíncronas ejecutan las llamadas sincrónicas a Keycloak en el *threadpool*.
+- **Operaciones (ajustadas en la implementación):**
   - `find_by_email` (`exact=true`)
-  - `create_user`: `username` = `email` = correo en minúsculas, `enabled`, `emailVerified=true`, nombre; el `sub` se toma del `Location`
-  - `realm_roles_of` / `assign_realm_role`
-  - `set_temporary_password`: `reset-password` con `temporary=true`
-  - `require_update_password`
+  - `create_user`: `username` = `email` = correo en minúsculas, `enabled`, `emailVerified=true` y **sin nombre**: la razón social puede traer caracteres que Keycloak rechaza en nombres de persona (`&`, paréntesis). El perfil de usuario del realm no exige nombre ni apellido, así que "Verificar perfil" no se dispara. El `sub` se toma del `Location`.
+  - `realm_roles` (efectivos) / `assign_realm_role`: el rol se toma de `role-mappings/realm/available`, porque la cuenta de servicio no tiene `view-realm` para leer el catálogo de roles.
+  - `set_password(temporary=…)`: `reset-password` con `temporary=true` ya agrega `UPDATE_PASSWORD`; no hace falta una operación aparte.
   - `get_user`, para leer `requiredActions`
-  - `set_enabled`, `logout_user`
-- **Permisos de la cuenta de servicio:** sólo `realm-management`: `manage-users`, `view-users` y `query-users`.
+  - `set_enabled` (lee y devuelve la representación completa: una parcial podría vaciar atributos del perfil), `logout`
+- **Permisos de la cuenta de servicio:** sólo `realm-management`: `manage-users`, `view-users` y `query-users`. La verificación con Keycloak real confirmó que alcanzan.
+- **Reglas del portal:** las reglas de enlace (D13), la contraseña temporal y el estado de la contraseña (D14) viven en `app/services/identity_service.py`, que usan la autorización, el alta, el seed y el script de migración. `keycloak_admin` queda como cliente de la API.
 
-`secret_vault.py` se elimina: su papel (entregar la contraseña al IdP antes del commit) lo cumple `set_temporary_password`.
+`secret_vault.py` se elimina: su papel (entregar la contraseña al IdP antes del commit) lo cumple `set_password`.
 
 ### D12. Aprovisionamiento en la autorización masiva
 Cada proveedor "Registrado" se procesa dentro de un *savepoint* (`db.begin_nested()`):
@@ -182,7 +187,7 @@ Si Keycloak falla, 503 y no se crea nada.
 
 ### D16. Migración de datos y de usuarios existentes
 Revisión `0015_keycloak_identity` (después de `0014_business_role_names`), con operaciones explícitas de PostgreSQL:
-- `users.keycloak_sub VARCHAR(36)` nullable, con `UNIQUE` (`uq_users_keycloak_sub`);
+- `users.keycloak_sub VARCHAR(36)` nullable, con índice único `ix_users_keycloak_sub` (la convención del proyecto para columnas únicas, como `ix_users_email`);
 - `users.password_hash` pasa a nullable;
 - `user_sessions.id_token_hint TEXT` nullable;
 - `DROP TABLE login_attempts`: son datos efímeros, con 24 h de retención. El downgrade la recrea vacía, con sus índices.
@@ -203,8 +208,14 @@ length(8) and maxLength(128) and digits(1) and specialChars(1) and regexPattern(
 and notUsername and notEmail and passwordHistory(1) and passwordBlacklist(common_passwords.txt)
 ```
 - `passwordHistory(1)` sustituye a "distinta de la actual".
-- La lista de comunes es el mismo `app/core/common_passwords.txt`, montado en el contenedor en `/opt/keycloak/data/password-blacklists/`.
-- Keycloak compara la lista sin distinguir mayúsculas, pero sólo con la contraseña completa. Se pierde la detección de "palabra común decorada" (letras de `Summer2026!` en la lista). Se acepta: Keycloak aplica además `notUsername` y `notEmail`.
+- Keycloak compara la lista sin distinguir mayúsculas, pero sólo con la contraseña completa.
+- **Hallazgo de implementación:** con la política que exige dígito y carácter especial, ninguna de las 1 006 entradas de la lista anterior podría coincidir con una contraseña válida. Tal cual, la lista no bloquearía nada.
+- **Mitigación:**
+  - la lista base se mantiene a mano en `infra/keycloak/common_words.txt` (antes `app/core/common_passwords.txt`);
+  - `scripts/build_password_blacklist.py` genera `infra/keycloak/common_passwords.txt` con la base y cada palabra de 4 o más letras seguida de 26 sufijos frecuentes (`1!`, `123!`, `2026!`, `@123`…): 24 640 entradas;
+  - una prueba exige que el archivo esté al día;
+  - el archivo generado es el que se monta en el contenedor (`data/password-blacklists/`).
+- La verificación con Keycloak real rechazó `Password1!` y `Portal2026!`. Aun así es una aproximación de la regla anterior (letras de la contraseña en la lista), no una equivalencia: `Summer#77` pasaría.
 
 ### D18. Fuerza bruta (SEC-04)
 `bruteForceProtected: true`, `failureFactor: 5`, `bruteForceStrategy: MULTIPLE`, `waitIncrementSeconds: 60`, `maxFailureWaitSeconds: 3600`, `maxDeltaTimeSeconds: 86400`, `permanentLockout: false`. Equivale a lo local: 5 fallos, espera creciente, tope de 60 min y ventana de 24 h. El límite por IP no tiene equivalente en Keycloak (ver Riesgos).
@@ -232,18 +243,23 @@ Variables nuevas:
 
 `scripts/create_env.py` genera los dos secretos de cliente, la contraseña del administrador inicial de Keycloak y `DEMO_PASSWORD`, con la misma regla de hoy (añade sólo las claves ausentes). `SECRET_KEY` ya no tiene default (SEC-01 cerrado); no se toca.
 
+**Ajustes de implementación:**
+- `Settings` usa `hide_input_in_errors=True`. Pydantic repetía el valor recibido en el mensaje de error, así que un secreto débil o la contraseña dentro de `DATABASE_URL` aparecían en el error de arranque. Los mensajes propios ya nombran la variable y el motivo.
+- `scripts/check.py` completa con valores de relleno las variables de Keycloak que falten: `alembic check` importa la configuración, pero no llama a Keycloak.
+- El log limita `httpx` y `httpcore` a advertencias. Registraban cada URL solicitada: el código de autorización del callback y el correo en las búsquedas de la API de administración.
+
 ### D21. Entorno local
 - **Servicio `keycloak` en `compose.yaml`:**
   - imagen `quay.io/keycloak/keycloak:26.7.4` (estable vigente al 2026-09-30, versión fija; se actualiza por PR);
-  - comando `start-dev --import-realm`;
-  - volumen `keycloak-data` para `/opt/keycloak/data/h2`, de modo que los usuarios sobreviven a los reinicios;
+  - `start-dev --import-realm`;
+  - volumen `keycloak-data` para `/opt/keycloak/data` (**ajuste de implementación:** montado en `data/h2`, Docker creaba el directorio con dueño root y Keycloak, que corre como UID 1000, no podía abrir su base; `data/` existe en la imagen con el dueño correcto), de modo que los usuarios sobreviven a los reinicios;
   - puerto `127.0.0.1:${KEYCLOAK_PORT:-58080}:8080`;
-  - `KC_BOOTSTRAP_ADMIN_*` desde `.env`, con `:?` si faltan;
-  - healthcheck con `KC_HEALTH_ENABLED=true`.
+  - **sin `:?` en la interpolación (ajuste de implementación):** Compose interpola el archivo completo, y un `.env` sin las variables de Keycloak habría impedido incluso `docker compose exec db` (los respaldos). El *entrypoint* del contenedor verifica `KC_BOOTSTRAP_ADMIN_*` y los dos secretos, y termina con el mensaje de qué definir. `restart: "no"`, para que `up --wait` falle en lugar de reintentar sin fin;
+  - healthcheck con `KC_HEALTH_ENABLED=true` (bash contra el puerto de administración 9000: la imagen no trae curl).
 - **Realm versionado** en `infra/keycloak/realm-ultrasist-portal.json`:
-  - roles, clientes, *mapper*, política, fuerza bruta, eventos y tiempos de sesión;
+  - roles, clientes, *mapper*, política, fuerza bruta, eventos, tiempos de sesión y perfil de usuario (nombre y apellido opcionales; el correo sólo lo edita el administrador);
   - redirect URIs `http://127.0.0.1:8000/auth/callback` y `http://localhost:8000/auth/callback`, y los post-logout equivalentes;
-  - **sin secretos ni usuarios**: los secretos de cliente se escriben como `${KEYCLOAK_CLIENT_SECRET}` y `${KEYCLOAK_ADMIN_CLIENT_SECRET}`, marcadores que Keycloak sustituye con variables de entorno al importar.
+  - **sin secretos**: los secretos de cliente se escriben como `${KEYCLOAK_CLIENT_SECRET}` y `${KEYCLOAK_ADMIN_CLIENT_SECRET}`, marcadores que Keycloak sustituye con variables de entorno al importar. El único usuario es la cuenta de servicio `service-account-portal-facturas-admin`, sin credenciales: es la forma de asignarle los roles de `realm-management` en la importación.
 - `run_local.*` levanta `db` y `keycloak` con `--wait`.
 - El seed crea las cuentas demo en el realm con `DEMO_PASSWORD`. `app/core/demo.py` conserva los correos y etiquetas, sin contraseñas, y el README deja de publicarlas (SEC-03).
 
@@ -256,15 +272,30 @@ Variables nuevas:
 ### D23. Pruebas sin Keycloak
 - `tests/idp.py` genera un par de claves RSA por sesión, sirve un *discovery*, un JWKS y un token endpoint falsos mediante un transporte simulado del cliente HTTP (sin red), y firma ID tokens con los claims que pida cada prueba.
 - `login()` de `conftest.py` recorre el flujo real (`/login` → callback) contra ese IdP.
-- `FakeIdentityAdmin` reemplaza a `keycloak_admin` en memoria: registra las llamadas y permite simular fallos por correo.
+- El mismo simulador (`FakeKeycloak`) reemplaza a `keycloak_admin` en memoria (registra las llamadas y simula fallos) y sirve la API de administración por HTTP. Por `MockTransport` prueba el cliente HTTP real. Mediante un servidor local en `127.0.0.1` lo usan los scripts que corren en un subproceso (`init_db`, `reset_demo`).
 - Una prueba carga el realm JSON y verifica política, fuerza bruta, roles, PKCE y ausencia de secretos.
+
+**Verificación con Keycloak real (tarea 9.2, 2026-09-30).** Keycloak 26.7.4 levantado con este `compose.yaml` (proyecto aislado), el portal contra una base temporal y un cliente HTTP que llena los formularios reales de Keycloak. Los 28 escenarios pasaron:
+- el realm y la lista se importan;
+- el seed crea las cuentas con la cuenta de servicio mínima;
+- login con PKCE, con el rol en el ID token;
+- autorización de un proveedor con `&` y paréntesis en la razón social;
+- primer acceso con la política, que rechaza sin carácter especial, `Password1!`, `Portal2026!` y 7 caracteres;
+- logout sin confirmación que termina el SSO;
+- bloqueo tras 5 fallos;
+- cambio voluntario con `kc_action`;
+- deshabilitar y habilitar sincronizados;
+- alta de un PMO con temporal de un solo uso.
+
+Con la verificación se corrigió el volumen de D21. Después se eliminaron el entorno, la base temporal y los archivos.
 
 ## Risks / Trade-offs
 
 - **[Keycloak caído → nadie inicia sesión nueva]** → sesiones abiertas intactas (D22), 503 controlados y README con el diagnóstico. En producción, Keycloak necesita alta disponibilidad y monitoreo (D3).
 - **[Desfase de reloj en `exp`/`iat`]** → tolerancia de 60 s (D6); los servidores deben sincronizar con NTP.
 - **[Sin límite por IP]** → la limitación por correo pasa a Keycloak, pero no la de 20 fallos por IP en 15 min. Mitigación en despliegue: *rate limiting* en el proxy inverso frente a Keycloak. Queda como pendiente de D3.
-- **[Lista de comunes menos estricta]** → se pierde la detección de palabras decoradas (D17). Se acepta.
+- **[Lista de comunes menos estricta]** → las variantes decoradas generadas (D17) cubren los patrones frecuentes, pero no todos. Se acepta.
+- **[Portal en `http` en desarrollo]** → Keycloak marca sus cookies como `Secure`. Los navegadores las envían a `127.0.0.1`/`localhost` (contexto seguro), así que el desarrollo local funciona. Fuera de desarrollo todo va por HTTPS (D20).
 - **[Usuarios huérfanos en Keycloak]** si la transacción falla después de crearlos → D13 los enlaza en el siguiente intento.
 - **[Roles desincronizados]** → la coincidencia obligatoria (D8) niega el acceso en lugar de escalar privilegios. El Administrador ve `LOGIN_DENIED` en la auditoría.
 - **[Contraseña temporal por correo (D1 = A)]** → es temporal, con `UPDATE_PASSWORD` y la política; nunca se persiste ni se escribe en el log. D1 = B la elimina.

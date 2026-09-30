@@ -1,7 +1,7 @@
-# Solo la base de datos corre en un contenedor; la aplicacion sigue en el host.
+# PostgreSQL y Keycloak corren en contenedores; la aplicacion sigue en el host.
 # Compose lee las variables de .env (el mismo archivo que usa la aplicacion): python scripts/create_env.py lo genera.
-#   docker compose up -d --wait db    arranca PostgreSQL y espera a que este "healthy"
-#   docker compose down               lo detiene conservando los datos (con -v tambien borra el volumen)
+#   docker compose up -d --wait db keycloak    arranca PostgreSQL y Keycloak y espera a que esten "healthy"
+#   docker compose down                        los detiene conservando los datos (con -v tambien borra los volumenes)
 name: portal-facturas
 
 services:
@@ -24,5 +24,49 @@ services:
       retries: 10
     restart: unless-stopped
 
+  keycloak:
+    # Proveedor de identidad (IdP) del portal. Version exacta fija; se actualiza por PR.
+    image: quay.io/keycloak/keycloak:26.7.4
+    # El contenedor se niega a arrancar sin sus variables. La verificacion vive aqui y no en la interpolacion (:?) para
+    # que un .env sin ellas no impida usar el servicio db (respaldos con docker compose exec).
+    # start-dev: sin TLS ni cache distribuida, solo para desarrollo. Importa el realm versionado si aun no existe.
+    entrypoint:
+      - bash
+      - -c
+      - |
+        for name in KC_BOOTSTRAP_ADMIN_USERNAME KC_BOOTSTRAP_ADMIN_PASSWORD KEYCLOAK_CLIENT_SECRET KEYCLOAK_ADMIN_CLIENT_SECRET; do
+          if [ -z "$${!name}" ]; then echo "Defina $$name en .env (python scripts/create_env.py)" >&2; exit 1; fi
+        done
+        exec /opt/keycloak/bin/kc.sh start-dev --import-realm
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KC_BOOTSTRAP_ADMIN_USERNAME:-}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KC_BOOTSTRAP_ADMIN_PASSWORD:-}
+      # El realm los lee como ${KEYCLOAK_CLIENT_SECRET} y ${KEYCLOAK_ADMIN_CLIENT_SECRET} al importarse.
+      KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET:-}
+      KEYCLOAK_ADMIN_CLIENT_SECRET: ${KEYCLOAK_ADMIN_CLIENT_SECRET:-}
+      KC_HEALTH_ENABLED: "true"
+    # Solo en localhost, como PostgreSQL.
+    ports:
+      - "127.0.0.1:${KEYCLOAK_PORT:-58080}:8080"
+    volumes:
+      # Datos de Keycloak (base dev-file en data/h2): usuarios y sesiones sobreviven a los reinicios. Se monta data/
+      # completo porque existe en la imagen con el dueno keycloak; data/h2 no existe y Docker lo crearia de root.
+      - keycloak-data:/opt/keycloak/data
+      - ./infra/keycloak/realm-ultrasist-portal.json:/opt/keycloak/data/import/realm-ultrasist-portal.json:ro
+      - ./infra/keycloak/common_passwords.txt:/opt/keycloak/data/password-blacklists/common_passwords.txt:ro
+    # La imagen no trae curl: la sonda usa /dev/tcp de bash contra el puerto de administracion (9000).
+    healthcheck:
+      test:
+        - CMD
+        - bash
+        - -c
+        - "exec 3<>/dev/tcp/127.0.0.1/9000 && printf 'GET /health/ready HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3 && grep -q '200 OK' <&3"
+      interval: 10s
+      start_period: 30s
+      retries: 30
+    # Sin reinicio automatico: con una variable faltante, "up --wait" falla en lugar de reintentar sin fin.
+    restart: "no"
+
 volumes:
   pgdata:
+  keycloak-data:

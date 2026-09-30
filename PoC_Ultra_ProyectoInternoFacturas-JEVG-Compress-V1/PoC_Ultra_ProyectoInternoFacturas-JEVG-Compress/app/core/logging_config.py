@@ -41,3 +41,7 @@ def configure_logging(log_dir: Path, debug: bool = False) -> None:
     console_handler.setFormatter(formatter)
     level = logging.DEBUG if debug else logging.INFO
     logging.basicConfig(level=level, handlers=[console_handler, file_handler], force=True)
+    # httpx y httpcore registran cada URL solicitada (codigos de autorizacion, correos en las busquedas de Keycloak):
+    # solo sus advertencias. Las llamadas a Keycloak ya dejan su propio evento sin datos sensibles (keycloak.admin).
+    for noisy in ("httpx", "httpcore"):
+        logging.getLogger(noisy).setLevel(logging.WARNING)
