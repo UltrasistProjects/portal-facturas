@@ -54,7 +54,7 @@ Las reglas de flujo SHALL residir en `invoice_service`, en el servicio de envío
 - el resumen de validación, que SHALL reutilizar `calculate_score`.
 
 #### Scenario: Aceptación con bloqueo crítico
-- **WHEN** un usuario INTERNAL envía la decisión `ACCEPTED` sobre una factura en `UNDER_REVIEW` con un resultado `FAIL` de severidad `CRITICAL`
+- **WHEN** un usuario PMO envía la decisión `ACCEPTED` sobre una factura en `UNDER_REVIEW` con un resultado `FAIL` de severidad `CRITICAL`
 - **THEN** la respuesta es HTTP 409 "No se puede aceptar con bloqueos criticos", la factura sigue en `UNDER_REVIEW` y no se registra revisión
 
 #### Scenario: Carga en estado no editable
@@ -70,10 +70,10 @@ Las reglas de flujo SHALL residir en `invoice_service`, en el servicio de envío
 - **THEN** los contadores de aprobadas, advertencias, errores y bloqueos coinciden con los calculados por `calculate_score` para los mismos resultados
 
 ### Requirement: Listado de facturas filtrado y paginado en la base de datos
-El listado SHALL aplicar la búsqueda, el filtro por estado, el filtro por origen del proveedor (`NATIONAL` o `INTERNATIONAL`; un valor desconocido se ignora), el alcance por proveedor (rol PROVIDER), el orden y la paginación (25 por página) en la consulta SQL, cargando el proveedor asociado sin consultas adicionales por fila. El orden SHALL ser `created_at DESC`, salvo en la bandeja del PMO (spec `revision-pmo`), donde las facturas "Enviada" se ordenan por `submitted_at` ascendente. La búsqueda SHALL comparar, sin distinguir mayúsculas, contra folio interno, número de factura, proyecto y razón social del proveedor, y SHALL tratar `%` y `_` como caracteres literales.
+El listado SHALL aplicar la búsqueda, el filtro por estado, el filtro por origen del proveedor (`NATIONAL` o `INTERNATIONAL`; un valor desconocido se ignora), el alcance por proveedor (rol Proveedor), el orden y la paginación (25 por página) en la consulta SQL, cargando el proveedor asociado sin consultas adicionales por fila. El orden SHALL ser `created_at DESC`, salvo en la bandeja del PMO (spec `revision-pmo`), donde las facturas "Enviada" se ordenan por `submitted_at` ascendente. La búsqueda SHALL comparar, sin distinguir mayúsculas, contra folio interno, número de factura, proyecto y razón social del proveedor, y SHALL tratar `%` y `_` como caracteres literales.
 
 #### Scenario: Búsqueda por razón social
-- **WHEN** un usuario INTERNAL busca `tecnologia integral` con "Todos los estados"
+- **WHEN** un usuario PMO busca `tecnologia integral` con "Todos los estados"
 - **THEN** el listado muestra las facturas de "Tecnologia Integral del Centro SA de CV"
 
 #### Scenario: Comodines literales
@@ -89,11 +89,11 @@ El listado SHALL aplicar la búsqueda, el filtro por estado, el filtro por orige
 - **THEN** el número de consultas SQL emitidas es constante e independiente del número de facturas
 
 #### Scenario: Alcance del proveedor
-- **WHEN** un PROVIDER consulta el listado con cualquier filtro
+- **WHEN** un Proveedor consulta el listado con cualquier filtro
 - **THEN** sólo aparecen facturas de su proveedor
 
 #### Scenario: Filtro por origen
-- **WHEN** un usuario INTERNAL filtra por origen "Internacional" con "Todos los estados"
+- **WHEN** un usuario PMO filtra por origen "Internacional" con "Todos los estados"
 - **THEN** sólo aparecen facturas de proveedores internacionales
 
 ### Requirement: Indicadores del tablero agregados en la base de datos
@@ -102,7 +102,7 @@ El tablero SHALL calcular el conteo por estado con `COUNT ... GROUP BY status` y
 SHALL mostrar el total de facturas y un indicador por cada estatus de seguimiento: "Enviadas", "Observaciones", "Autorizadas", "Rechazadas" y "Canceladas" (EP-01 DT-01). Cada indicador SHALL enlazar al listado filtrado por su estatus (`/invoices?status=<clave>`) y el total, al listado con "Todos los estados" (`/invoices?status=`).
 
 #### Scenario: KPIs del proveedor
-- **WHEN** un PROVIDER abre el tablero
+- **WHEN** un Proveedor abre el tablero
 - **THEN** los conteos y el monto total corresponden sólo a sus facturas y el monto es exacto al centavo
 
 #### Scenario: Indicador enlazado
@@ -120,7 +120,7 @@ Los servicios (`run_validation`, `transition_invoice`, `audit` y los demás) MUS
 La vista `/admin/audit` SHALL paginar las entradas (50 por página, más recientes primero) y SHALL permitir llegar a cualquier entrada histórica.
 
 #### Scenario: Entradas antiguas accesibles
-- **WHEN** existen 600 entradas de auditoría y un ADMIN navega a la última página
+- **WHEN** existen 600 entradas de auditoría y un Administrador navega a la última página
 - **THEN** ve las entradas más antiguas
 
 ### Requirement: Modelo de estatus de la factura
@@ -151,7 +151,7 @@ Cualquier otra transición SHALL rechazarse con HTTP 409 sin cambios. Cada trans
 - **THEN** el filtro de estatus ofrece "Borrador", "Cargada", "Enviada", "Autorizada", "Rechazada", "Observaciones" y "Cancelada", y ninguna otra opción
 
 #### Scenario: El PMO pide correcciones
-- **WHEN** un usuario INTERNAL envía la decisión `REQUIRES_CORRECTION` sobre una factura "Enviada"
+- **WHEN** un usuario PMO envía la decisión `REQUIRES_CORRECTION` sobre una factura "Enviada"
 - **THEN** la factura queda en "Observaciones"
 
 #### Scenario: Una validación fallida no asigna Observaciones
@@ -234,18 +234,18 @@ Un resultado `WARNING` SHALL NOT impedir el envío. La factura SHALL leerse con 
 - **THEN** la respuesta es HTTP 409 y sus resultados no cambian
 
 ### Requirement: Acciones exclusivas del proveedor
-El alta (`GET` y `POST /invoices/new`), la carga documental (`GET` y `POST /invoices/{id}/documents`), "Verificar" y el envío SHALL estar disponibles sólo para el rol PROVIDER, sobre facturas de su proveedor. Los roles INTERNAL y ADMIN SHALL recibir HTTP 403 y SHALL conservar el listado, el detalle y la descarga de documentos. La interfaz SHALL mostrar "Nueva factura", "Gestionar documentos", "Verificar" y "Enviar a validación" sólo al proveedor.
+El alta (`GET` y `POST /invoices/new`), la carga documental (`GET` y `POST /invoices/{id}/documents`), "Verificar" y el envío SHALL estar disponibles sólo para el rol Proveedor, sobre facturas de su proveedor. Los roles PMO y Administrador SHALL recibir HTTP 403 y SHALL conservar el listado, el detalle y la descarga de documentos. La interfaz SHALL mostrar "Nueva factura", "Gestionar documentos", "Verificar" y "Enviar a validación" sólo al proveedor.
 
-#### Scenario: Alta por un usuario interno
-- **WHEN** un usuario INTERNAL envía `POST /invoices/new`
+#### Scenario: Alta por un usuario PMO
+- **WHEN** un usuario PMO envía `POST /invoices/new`
 - **THEN** la respuesta es HTTP 403 y no se crea la factura
 
 #### Scenario: Envío por el Administrador
-- **WHEN** un ADMIN envía `POST /invoices/{id}/submit` sobre una factura "Cargada"
+- **WHEN** un Administrador envía `POST /invoices/{id}/submit` sobre una factura "Cargada"
 - **THEN** la respuesta es HTTP 403 y la factura sigue "Cargada"
 
 #### Scenario: Consulta del PMO
-- **WHEN** un usuario INTERNAL abre el detalle de una factura "Cargada"
+- **WHEN** un usuario PMO abre el detalle de una factura "Cargada"
 - **THEN** la página responde HTTP 200 sin los botones "Verificar", "Gestionar documentos" ni "Enviar a validación"
 
 #### Scenario: Factura de otro proveedor

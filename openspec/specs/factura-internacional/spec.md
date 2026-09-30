@@ -34,7 +34,7 @@ Los importes SHALL tener a lo sumo dos decimales y caber en `NUMERIC(16, 2)`; el
 - **THEN** el formulario no muestra los campos del Invoice, y si la petición los incluye, la factura se crea con importes en cero hasta que el XML los aporte
 
 ### Requirement: Edición de los datos del Invoice
-El proveedor SHALL poder editar los datos del Invoice de una factura internacional mientras esté en un estatus editable (Borrador, Cargada u Observaciones), desde la carga documental, con `POST /invoices/{invoice_id}/amounts`. La ruta SHALL ser exclusiva del rol `PROVIDER`, exigir CSRF, bloquear la fila de la factura y aplicar las mismas validaciones del registro. SHALL responder:
+El proveedor SHALL poder editar los datos del Invoice de una factura internacional mientras esté en un estatus editable (Borrador, Cargada u Observaciones), desde la carga documental, con `POST /invoices/{invoice_id}/amounts`. La ruta SHALL ser exclusiva del rol `Proveedor`, exigir CSRF, bloquear la fila de la factura y aplicar las mismas validaciones del registro. SHALL responder:
 - HTTP 409 si la factura no está en un estatus editable;
 - HTTP 400 si la factura es de un proveedor nacional.
 
@@ -49,7 +49,7 @@ Un guardado con cambios SHALL auditar `INVOICE_AMOUNTS_UPDATED` con los valores 
 - **THEN** la respuesta es HTTP 409 y los importes no cambian
 
 #### Scenario: Otro rol
-- **WHEN** un usuario `INTERNAL` envía la edición de los datos de una factura internacional
+- **WHEN** un usuario `PMO` envía la edición de los datos de una factura internacional
 - **THEN** la respuesta es HTTP 403 y los importes no cambian
 
 ### Requirement: Invoice duplicado por nombre de archivo

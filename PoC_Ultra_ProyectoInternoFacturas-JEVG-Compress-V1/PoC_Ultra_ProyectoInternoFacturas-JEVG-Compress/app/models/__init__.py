@@ -52,8 +52,16 @@ def now_utc() -> datetime:
 
 def enum_column(enum: type[StrEnum], name: str | None = None) -> SAEnum:
     """Enumeracion como VARCHAR con CHECK: la BD rechaza valores fuera del catalogo (AUDITORIA BD-05). El CHECK
-    se llama como la enumeracion; `name` lo cambia cuando dos columnas de una tabla usan la misma."""
-    return SAEnum(enum, name=name, native_enum=False, create_constraint=True, validate_strings=True)
+    se llama como la enumeracion; `name` lo cambia cuando dos columnas de una tabla usan la misma. Se guarda el valor,
+    no el nombre del miembro: en Role difieren (ADMINISTRADOR -> "Administrador")."""
+    return SAEnum(
+        enum,
+        name=name,
+        native_enum=False,
+        create_constraint=True,
+        validate_strings=True,
+        values_callable=lambda members: [member.value for member in members],
+    )
 
 
 def restrict(target: str) -> ForeignKey:
@@ -61,10 +69,11 @@ def restrict(target: str) -> ForeignKey:
     return ForeignKey(target, ondelete="RESTRICT")
 
 
-# Un usuario Proveedor activo tiene proveedor; un Interno o Administrador, ninguno. Un Proveedor deshabilitado sin
+# Un usuario Proveedor activo tiene proveedor; un PMO o Administrador, ninguno. Un Proveedor deshabilitado sin
 # proveedor se admite: asi quedan los registros previos (0013_provider_user_supplier).
 USER_PROVIDER_SUPPLIER_CHECK = (
-    "(role = 'PROVIDER' AND (supplier_id IS NOT NULL OR NOT is_active)) OR (role <> 'PROVIDER' AND supplier_id IS NULL)"
+    "(role = 'Proveedor' AND (supplier_id IS NOT NULL OR NOT is_active))"
+    " OR (role <> 'Proveedor' AND supplier_id IS NULL)"
 )
 
 

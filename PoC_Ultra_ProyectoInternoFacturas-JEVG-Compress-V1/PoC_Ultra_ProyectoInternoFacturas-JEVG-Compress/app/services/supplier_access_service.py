@@ -1,7 +1,7 @@
 """Autorizacion de proveedores y credenciales de acceso al portal (HU-02 y HU-03).
 
 - `authorize()`: pasa proveedores Registrados a Autorizado en una sola transaccion con sus filas bloqueadas, crea el
-  usuario PROVIDER de cada uno con una contrasena temporal y, despues del commit, envia el correo de credenciales (D3).
+  usuario Proveedor de cada uno con una contrasena temporal y, despues del commit, envia el correo de credenciales (D3).
 - `resend_credentials()`: contrasena nueva mientras el proveedor no haya iniciado sesion (D9).
 
 La contrasena temporal solo existe en claro en memoria, en el gestor de secretos (secret_vault) y en el correo: nunca
@@ -52,9 +52,9 @@ def _email(supplier: Supplier) -> str:
 
 
 def provider_user(db: Session, supplier: Supplier, *, lock: bool = False) -> User | None:
-    """Usuario PROVIDER propio del proveedor: ligado a el y con su correo del catalogo."""
+    """Usuario Proveedor propio del proveedor: ligado a el y con su correo del catalogo."""
     stmt = select(User).where(
-        User.supplier_id == supplier.id, User.role == Role.PROVIDER, func.lower(User.email) == _email(supplier)
+        User.supplier_id == supplier.id, User.role == Role.PROVEEDOR, func.lower(User.email) == _email(supplier)
     )
     if lock:
         stmt = stmt.with_for_update()
@@ -119,7 +119,7 @@ def _create_user(db: Session, supplier: Supplier, admin: User, vault: secret_vau
         name=supplier.business_name[:USER_NAME_MAX_LENGTH],
         email=_email(supplier),
         password_hash=hash_password(password),
-        role=Role.PROVIDER,
+        role=Role.PROVEEDOR,
         supplier_id=supplier.id,
         is_active=True,
         must_change_password=True,  # contrasena temporal: se cambia en el primer acceso (HU-10)
@@ -138,7 +138,7 @@ def _create_user(db: Session, supplier: Supplier, admin: User, vault: secret_vau
         "User",
         user.id,
         admin.id,
-        new={"role": Role.PROVIDER.value, "supplier_id": supplier.id, "origin": USER_ORIGIN},
+        new={"role": Role.PROVEEDOR.value, "supplier_id": supplier.id, "origin": USER_ORIGIN},
     )
     vault.store_temporary_password(supplier_id=supplier.id, username=user.email, password=password)
     return Credential(supplier, user.email, password)
@@ -162,7 +162,7 @@ def authorize(db: Session, raw_ids: Iterable[str | int], admin: User, portal_url
             outcome["skipped"].append(supplier.id)
             continue
         existing = users.get(_email(supplier))
-        if existing is not None and not (existing.role == Role.PROVIDER and existing.supplier_id == supplier.id):
+        if existing is not None and not (existing.role == Role.PROVEEDOR and existing.supplier_id == supplier.id):
             outcome["conflicts"].append(supplier.id)
             continue
         supplier.status = SupplierStatus.ACTIVE

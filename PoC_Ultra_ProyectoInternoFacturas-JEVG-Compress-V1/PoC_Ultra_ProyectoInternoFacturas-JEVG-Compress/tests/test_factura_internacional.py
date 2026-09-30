@@ -161,7 +161,7 @@ def other_international():
                     name="Otro internacional",
                     email=email,
                     password_hash=hash_password("Test#Internacional2026"),
-                    role=Role.PROVIDER,
+                    role=Role.PROVEEDOR,
                     supplier_id=supplier.id,
                 )
             )

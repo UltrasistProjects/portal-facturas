@@ -53,7 +53,7 @@ El sistema SHALL registrar cada intento de login con correo normalizado, IP, res
 Toda contraseña asignada por el sistema (alta de usuario y seed) y toda contraseña nueva elegida por el usuario en "Cambiar contraseña" SHALL validarse en el servidor conforme a la ERS RF-06. Debe tener entre 8 y 128 caracteres, al menos una letra, al menos un dígito y al menos un carácter especial (no alfanumérico), y no puede figurar en la lista de contraseñas comunes incluida en el proyecto. Una contraseña inválida MUST impedir el alta o el cambio y mostrar el motivo.
 
 #### Scenario: Contraseña demasiado corta
-- **WHEN** un ADMIN da de alta un usuario con contraseña `Ab1!` mediante una petición directa sin pasar por el formulario
+- **WHEN** un Administrador da de alta un usuario con contraseña `Ab1!` mediante una petición directa sin pasar por el formulario
 - **THEN** la respuesta es HTTP 400 con el motivo y no se crea el usuario
 
 #### Scenario: Falta carácter especial
@@ -80,11 +80,11 @@ Toda contraseña asignada por el sistema (alta de usuario y seed) y toda contras
 Las altas de usuario y de proveedor SHALL validar en el servidor que el correo tenga formato válido (`EmailStr`) antes de persistir.
 
 #### Scenario: Correo inválido en alta de usuario
-- **WHEN** un ADMIN da de alta un usuario con correo `no-es-correo`
+- **WHEN** un Administrador da de alta un usuario con correo `no-es-correo`
 - **THEN** la respuesta es HTTP 400 con el motivo y no se crea el usuario
 
 #### Scenario: Correo inválido en alta de proveedor
-- **WHEN** un ADMIN da de alta un proveedor con correo `proveedor@`
+- **WHEN** un Administrador da de alta un proveedor con correo `proveedor@`
 - **THEN** la respuesta es HTTP 400 y no se crea el proveedor
 
 ### Requirement: Sesiones revocables del lado del servidor
@@ -103,7 +103,7 @@ Cada inicio de sesión SHALL crear un registro de sesión en el servidor identif
 - **THEN** la siguiente petición redirige a `/login`
 
 #### Scenario: Desactivación de usuario
-- **WHEN** un ADMIN deshabilita a un usuario con sesiones abiertas
+- **WHEN** un Administrador deshabilita a un usuario con sesiones abiertas
 - **THEN** todas las sesiones de ese usuario quedan revocadas
 
 #### Scenario: Fijación de sesión
@@ -112,7 +112,7 @@ Cada inicio de sesión SHALL crear un registro de sesión en el servidor identif
 
 ### Requirement: Cambio obligatorio de la contraseña asignada
 Cada usuario SHALL tener una marca de contraseña asignada (`must_change_password`). El sistema SHALL activarla cuando la contraseña la fija otra persona:
-- al crear el usuario `PROVIDER` en la autorización de proveedores;
+- al crear el usuario `Proveedor` en la autorización de proveedores;
 - al reenviar las credenciales de un proveedor;
 - al dar de alta un usuario en `/admin/users`.
 

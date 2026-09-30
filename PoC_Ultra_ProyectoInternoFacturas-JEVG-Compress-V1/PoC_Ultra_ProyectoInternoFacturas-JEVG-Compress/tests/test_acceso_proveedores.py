@@ -221,7 +221,7 @@ def test_proveedor_ya_autorizado_se_omite(client, registered_suppliers):
 def test_correo_usado_por_otro_usuario(client, registered_suppliers):
     [registered] = registered_suppliers()
     with SessionLocal() as db:
-        db.add(User(name="Interno", email=registered.email, password_hash="x", role=Role.INTERNAL, is_active=True))
+        db.add(User(name="Interno", email=registered.email, password_hash="x", role=Role.PMO, is_active=True))
         db.commit()
     try:
         login(client)
@@ -283,7 +283,7 @@ def test_usuario_creado_al_autorizar(client, registered_suppliers):
     login(client)
     authorize(client, [registered.id])
     user = portal_user(registered.id)
-    assert (user.email, user.role, user.is_active) == ("contacto.mixto@acceso-proveedor.mx", Role.PROVIDER, True)
+    assert (user.email, user.role, user.is_active) == ("contacto.mixto@acceso-proveedor.mx", Role.PROVEEDOR, True)
     assert user.name == registered.business_name and user.last_login_at is None
     assert user.must_change_password  # HU-10: la temporal se cambia en el primer acceso
     password = password_for(user.email)
@@ -334,7 +334,7 @@ def test_proveedor_con_usuario_propio(client, registered_suppliers):
                 name="Usuario previo",
                 email=registered.email,
                 password_hash=original,
-                role=Role.PROVIDER,
+                role=Role.PROVEEDOR,
                 supplier_id=registered.id,
                 is_active=True,
             )
@@ -592,7 +592,7 @@ def test_auditoria_de_la_autorizacion(client, registered_suppliers):
     status = entries["SUPPLIER_STATUS_CHANGED"]
     assert (status.old_value, status.new_value) == ({"status": "REGISTERED"}, {"status": "ACTIVE"})
     created = entries["USER_CREATED"]
-    assert created.new_value == {"role": "PROVIDER", "supplier_id": registered.id, "origin": "SUPPLIER_AUTHORIZATION"}
+    assert created.new_value == {"role": "Proveedor", "supplier_id": registered.id, "origin": "SUPPLIER_AUTHORIZATION"}
     bulk = entries["SUPPLIER_BULK_AUTHORIZED"]
     assert bulk.new_value == {
         "authorized": [registered.id],

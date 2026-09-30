@@ -69,10 +69,12 @@ def list_suppliers(
     page: int = 1,
     authorization: int | None = None,
     db: Session = Depends(get_db),
-    user=Depends(require_roles(Role.INTERNAL, Role.ADMIN)),
+    user=Depends(require_roles(Role.PMO, Role.ADMINISTRADOR)),
 ):
     # El resumen se reconstruye de la auditoria: el parametro nunca se refleja tal cual (D5).
-    summary = access.authorization_summary(db, authorization) if authorization and user.role == Role.ADMIN else None
+    summary = (
+        access.authorization_summary(db, authorization) if authorization and user.role == Role.ADMINISTRADOR else None
+    )
     return _suppliers_page(request, db, user, status_filter=status, summary=summary, q=q, page=page)
 
 
@@ -97,7 +99,7 @@ def _suppliers_page(
     q = q.strip()
     stmt = search(stmt, q, Supplier.business_name, Supplier.rfc, Supplier.foreign_tax_id, Supplier.email)
     result = paginate(db, stmt, page)
-    is_admin = user.role == Role.ADMIN
+    is_admin = user.role == Role.ADMINISTRADOR
     context = {
         "user": user,
         "suppliers": result.items,
@@ -120,7 +122,9 @@ def _suppliers_page(
 
 
 @router.post("")
-async def create_supplier(request: Request, db: Session = Depends(get_db), user=Depends(require_roles(Role.ADMIN))):
+async def create_supplier(
+    request: Request, db: Session = Depends(get_db), user=Depends(require_roles(Role.ADMINISTRADOR))
+):
     await validate_csrf(request)
     submitted = await _submitted(request, CREATE_FIELDS)
     try:
@@ -136,13 +140,13 @@ async def create_supplier(request: Request, db: Session = Depends(get_db), user=
 
 # Las rutas /import se declaran antes de /{supplier_id}: de lo contrario "import" se tomaria como un id (422).
 @router.get("/import")
-def import_page(request: Request, user=Depends(require_roles(Role.ADMIN))):
+def import_page(request: Request, user=Depends(require_roles(Role.ADMINISTRADOR))):
     context = {"user": user, "max_rows": MAX_ROWS, "max_file_mb": MAX_FILE_MB}
     return templates.TemplateResponse(request, "suppliers/import.html", context)
 
 
 @router.get("/import/template")
-def import_template(user=Depends(require_roles(Role.ADMIN))):
+def import_template(user=Depends(require_roles(Role.ADMINISTRADOR))):
     headers = {"Content-Disposition": f'attachment; filename="{TEMPLATE_FILENAME}"'}
     return Response(build_template(), media_type=XLSX_MEDIA_TYPE, headers=headers)
 
@@ -154,7 +158,7 @@ async def import_suppliers(
     mode: str = Form(supplier_import_service.STRICT),
     expected_sha256: str | None = Form(None),
     db: Session = Depends(get_db),
-    user=Depends(require_roles(Role.ADMIN)),
+    user=Depends(require_roles(Role.ADMINISTRADOR)),
 ):
     """Siempre responde JSON (contrato D12); la pagina de carga lo consume con fetch."""
     await validate_csrf(request)
@@ -170,7 +174,7 @@ async def authorize_suppliers(
     request: Request,
     supplier_ids: list[str] = Form([]),
     db: Session = Depends(get_db),
-    user=Depends(require_roles(Role.ADMIN)),
+    user=Depends(require_roles(Role.ADMINISTRADOR)),
 ):
     """Autorizacion masiva (HU-02) y envio de credenciales (HU-03). La logica vive en supplier_access_service."""
     await validate_csrf(request)
@@ -203,7 +207,7 @@ def _supplier_detail_page(
         "credentials_result": credentials_result,
         "format_datetime": format_datetime,
     }
-    if user.role == Role.ADMIN:
+    if user.role == Role.ADMINISTRADOR:
         portal_user = access.provider_user(db, supplier)
         context["access"] = {
             "user": portal_user,
@@ -226,13 +230,13 @@ def supplier_detail(
     db: Session = Depends(get_db),
     user=Depends(get_current_user),
 ):
-    if user.role == Role.PROVIDER and user.supplier_id != supplier_id:
+    if user.role == Role.PROVEEDOR and user.supplier_id != supplier_id:
         raise HTTPException(403, "Acceso denegado")
     supplier = db.get(Supplier, supplier_id)
     if not supplier:
         raise HTTPException(404, "Proveedor no encontrado")
     # El resultado del reenvio se lee de la bitacora y solo si es un envio de credenciales de este proveedor.
-    result = db.get(EmailDelivery, credentials) if credentials and user.role == Role.ADMIN else None
+    result = db.get(EmailDelivery, credentials) if credentials and user.role == Role.ADMINISTRADOR else None
     if result is not None and (result.event != access.CREDENTIALS or result.entity_id != str(supplier.id)):
         result = None
     return _supplier_detail_page(request, db, user, supplier, credentials_result=result)
@@ -240,7 +244,7 @@ def supplier_detail(
 
 @router.post("/{supplier_id}/credentials")
 async def resend_credentials(
-    supplier_id: int, request: Request, db: Session = Depends(get_db), user=Depends(require_roles(Role.ADMIN))
+    supplier_id: int, request: Request, db: Session = Depends(get_db), user=Depends(require_roles(Role.ADMINISTRADOR))
 ):
     await validate_csrf(request)
     try:
@@ -256,7 +260,7 @@ async def resend_credentials(
 
 @router.post("/{supplier_id}/profile")
 async def update_supplier(
-    supplier_id: int, request: Request, db: Session = Depends(get_db), user=Depends(require_roles(Role.ADMIN))
+    supplier_id: int, request: Request, db: Session = Depends(get_db), user=Depends(require_roles(Role.ADMINISTRADOR))
 ):
     await validate_csrf(request)
     supplier = db.get(Supplier, supplier_id)
@@ -290,7 +294,7 @@ async def upload_supplier_document(
     user=Depends(get_current_user),
 ):
     await validate_csrf(request)
-    if user.role == Role.INTERNAL or (user.role == Role.PROVIDER and user.supplier_id != supplier_id):
+    if user.role == Role.PMO or (user.role == Role.PROVEEDOR and user.supplier_id != supplier_id):
         raise HTTPException(403, "No puede modificar este expediente")
     supplier = db.get(Supplier, supplier_id)
     if not supplier:
@@ -347,7 +351,7 @@ def download_supplier_document(
     supplier_id: int, document_id: int, db: Session = Depends(get_db), user=Depends(get_current_user)
 ):
     # Mismo acceso que el expediente: el proveedor solo el suyo; PMO y Administrador, cualquiera.
-    if user.role == Role.PROVIDER and user.supplier_id != supplier_id:
+    if user.role == Role.PROVEEDOR and user.supplier_id != supplier_id:
         raise HTTPException(403, "Acceso denegado")
     doc = db.get(Document, document_id)
     if not doc or doc.supplier_id != supplier_id or doc.invoice_id is not None:

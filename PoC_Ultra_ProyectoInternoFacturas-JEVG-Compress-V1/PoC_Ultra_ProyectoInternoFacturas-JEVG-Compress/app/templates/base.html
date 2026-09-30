@@ -16,11 +16,11 @@
     <nav>
       <a href="/" class="nav-item"><i class="bi bi-grid"></i> Dashboard</a>
       <a href="/invoices" class="nav-item"><i class="bi bi-receipt"></i> Facturas</a>
-      {% if user.role.value in ['INTERNAL','ADMIN'] %}
+      {% if user.role.value in ['PMO','Administrador'] %}
       <a href="/suppliers" class="nav-item"><i class="bi bi-buildings"></i> Proveedores</a>
       <a href="/contracts" class="nav-item"><i class="bi bi-file-earmark-text"></i> Contratos</a>
       {% endif %}
-      {% if user.role.value == 'ADMIN' %}
+      {% if user.role.value == 'Administrador' %}
       <div class="nav-label">Administracion</div>
       <a href="/admin/users" class="nav-item"><i class="bi bi-people"></i> Usuarios</a>
       <a href="/admin/rules" class="nav-item"><i class="bi bi-sliders"></i> Reglas de validación</a>

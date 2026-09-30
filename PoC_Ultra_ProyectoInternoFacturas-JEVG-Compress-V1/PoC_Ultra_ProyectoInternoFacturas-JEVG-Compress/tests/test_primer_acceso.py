@@ -22,7 +22,7 @@ PASSWORD_URL = "/account/password"
 
 @pytest.fixture()
 def make_user():
-    """Fabrica de usuarios PROVIDER del proveedor demo 1, con o sin la marca de contrasena asignada. Al terminar
+    """Fabrica de usuarios Proveedor del proveedor demo 1, con o sin la marca de contrasena asignada. Al terminar
     borra sus sesiones, intentos, auditoria y a ellos mismos: la base de la sesion es compartida."""
     emails: list[str] = []
 
@@ -35,7 +35,7 @@ def make_user():
                     name="Usuario Primer Acceso",
                     email=email,
                     password_hash=hash_password(password),
-                    role=Role.PROVIDER,
+                    role=Role.PROVEEDOR,
                     supplier_id=supplier_id,
                     must_change_password=must_change,
                 )
@@ -123,9 +123,9 @@ def test_cierre_de_sesion_disponible(client, make_user):
 
 def test_usuario_creado_por_el_administrador(client, make_user):
     login(client)
-    email = f"interno-{secrets.token_hex(4)}@ultrasist.com.mx"
+    email = f"pmo-{secrets.token_hex(4)}@ultrasist.com.mx"
     make_user.track(email)
-    data = {"name": "Interno Nuevo", "email": email, "password": TEMPORARY, "role": "INTERNAL"}
+    data = {"name": "PMO Nuevo", "email": email, "password": TEMPORARY, "role": "PMO"}
     response = client.post(
         "/admin/users", data={**data, "csrf_token": csrf(client, "/admin/users")}, follow_redirects=False
     )

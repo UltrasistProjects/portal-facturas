@@ -28,7 +28,7 @@ def list_contracts(
     page: int = 1,
     ok: str = "",
     db: Session = Depends(get_db),
-    user=Depends(require_roles(Role.INTERNAL, Role.ADMIN)),
+    user=Depends(require_roles(Role.PMO, Role.ADMINISTRADOR)),
 ):
     return _contracts_page(request, db, user, q=q, page=page, notice=CONTRACT_NOTICES.get(ok))
 
@@ -81,7 +81,7 @@ async def create_contract(
     start_date: str = Form(...),
     end_date: str = Form(...),
     db: Session = Depends(get_db),
-    user=Depends(require_roles(Role.ADMIN)),
+    user=Depends(require_roles(Role.ADMINISTRADOR)),
 ):
     await validate_csrf(request)
     try:
@@ -115,7 +115,7 @@ async def amend_contract(
     new_amount: str = Form(...),
     reason: str = Form(""),
     db: Session = Depends(get_db),
-    user=Depends(require_roles(Role.ADMIN)),
+    user=Depends(require_roles(Role.ADMINISTRADOR)),
 ):
     await validate_csrf(request)
     contract = db.get(Contract, contract_id)

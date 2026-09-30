@@ -143,7 +143,7 @@ def set_level(code: str, origin: SupplierOrigin, level: str) -> None:
 
 @pytest.fixture(scope="module")
 def international():
-    """Proveedor internacional activo, con contrato y usuario PROVIDER (la interfaz aun no permite autorizarlo)."""
+    """Proveedor internacional activo, con contrato y usuario Proveedor (la interfaz aun no permite autorizarlo)."""
     with SessionLocal() as db:
         user = db.scalar(select(User).where(User.email == INTERNATIONAL_EMAIL))
         if user is None:
@@ -175,7 +175,7 @@ def international():
                 name="Proveedor internacional",
                 email=INTERNATIONAL_EMAIL,
                 password_hash=hash_password(INTERNATIONAL_PASSWORD),
-                role=Role.PROVIDER,
+                role=Role.PROVEEDOR,
                 supplier_id=supplier.id,
             )
             db.add(user)

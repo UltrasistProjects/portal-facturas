@@ -102,7 +102,7 @@ def test_bandeja_inicial(client, queue):
 
 
 def test_segunda_pagina_conserva_el_orden(queue):
-    pmo = SimpleNamespace(role=Role.INTERNAL, supplier_id=None)
+    pmo = SimpleNamespace(role=Role.PMO, supplier_id=None)
     with SessionLocal() as db:
         pages = [search_invoices(db, pmo, status="UNDER_REVIEW", page=n, per_page=2).items for n in (1, 2)]
     sent = [invoice.submitted_at for invoice in pages[0] + pages[1]]

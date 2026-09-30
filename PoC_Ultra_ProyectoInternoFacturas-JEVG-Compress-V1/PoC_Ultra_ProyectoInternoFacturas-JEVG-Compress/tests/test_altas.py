@@ -11,7 +11,7 @@ from tests.conftest import SUPPLIER_PROFILE_FORM, csrf, login, supplier_by_email
 
 
 def create_user(client, email="nuevo@ultrasist.com.mx", password="Portal#2026x", **extra):
-    data = {"name": "Usuario Nuevo", "email": email, "password": password, "role": "INTERNAL", **extra}
+    data = {"name": "Usuario Nuevo", "email": email, "password": password, "role": "PMO", **extra}
     return client.post("/admin/users", data={**data, "csrf_token": csrf(client, "/admin/users")})
 
 

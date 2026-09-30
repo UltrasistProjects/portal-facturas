@@ -789,3 +789,36 @@ def test_downgrade_del_usuario_proveedor(empty_db):
     command.upgrade(config, "head")
     assert query(empty_db, "SELECT is_active FROM users") == [(False,)]
     command.check(config)
+
+
+BUSINESS_ROLE_NAMES = "0014_business_role_names"
+
+
+def test_roles_con_los_nombres_del_negocio(empty_db):
+    config = alembic_config(empty_db)
+    command.upgrade(config, PROVIDER_USER_SUPPLIER)
+    insert_supplier(empty_db, NATIONAL_COLUMNS, NATIONAL_VALUES)
+    for email, role, supplier in (
+        ("proveedor@proveedor.mx", "PROVIDER", "(SELECT id FROM suppliers)"),
+        ("pmo@ultrasist.mx", "INTERNAL", "NULL"),
+        ("admin@ultrasist.mx", "ADMIN", "NULL"),
+    ):
+        execute(
+            empty_db,
+            "INSERT INTO users (name, email, password_hash, role, supplier_id, is_active, created_at)"
+            f" VALUES ('Usuario previo', '{email}', 'hash', '{role}', {supplier}, true, now())",
+        )
+    command.upgrade(config, BUSINESS_ROLE_NAMES)
+    assert dict(query(empty_db, "SELECT email, role FROM users")) == {
+        "proveedor@proveedor.mx": "Proveedor",
+        "pmo@ultrasist.mx": "PMO",
+        "admin@ultrasist.mx": "Administrador",
+    }
+    with pytest.raises(IntegrityError, match="role"):
+        execute(empty_db, "UPDATE users SET role = 'ADMIN' WHERE email = 'admin@ultrasist.mx'")
+    with pytest.raises(IntegrityError, match="ck_users_provider_supplier"):
+        execute(empty_db, "UPDATE users SET supplier_id = NULL WHERE email = 'proveedor@proveedor.mx'")
+    command.downgrade(config, PROVIDER_USER_SUPPLIER)
+    assert sorted(role for (role,) in query(empty_db, "SELECT role FROM users")) == ["ADMIN", "INTERNAL", "PROVIDER"]
+    command.upgrade(config, "head")
+    command.check(config)

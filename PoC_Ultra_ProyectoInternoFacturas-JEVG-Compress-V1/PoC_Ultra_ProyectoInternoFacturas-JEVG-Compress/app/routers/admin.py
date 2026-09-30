@@ -81,7 +81,7 @@ def users(
     page: int = 1,
     ok: str = "",
     db: Session = Depends(get_db),
-    user=Depends(require_roles(Role.ADMIN)),
+    user=Depends(require_roles(Role.ADMINISTRADOR)),
 ):
     return _users_page(request, db, user, q=q, page=page, notice=USER_NOTICES.get(ok))
 
@@ -95,7 +95,7 @@ async def create_user(
     role: Role = Form(...),
     supplier_id: int | None = Form(None),
     db: Session = Depends(get_db),
-    user=Depends(require_roles(Role.ADMIN)),
+    user=Depends(require_roles(Role.ADMINISTRADOR)),
 ):
     await validate_csrf(request)
     form = {"name": name, "email": email, "role": role.value, "supplier_id": str(supplier_id or "")}
@@ -108,8 +108,8 @@ async def create_user(
     except ValidationError as exc:
         return rejected(validation_message(exc), 400)
     # El proveedor solo aplica al rol Proveedor, y ahi es obligatorio y debe existir.
-    supplier_id = data.supplier_id if data.role == Role.PROVIDER else None
-    if data.role == Role.PROVIDER and supplier_id is None:
+    supplier_id = data.supplier_id if data.role == Role.PROVEEDOR else None
+    if data.role == Role.PROVEEDOR and supplier_id is None:
         return rejected(MSG_SUPPLIER_REQUIRED, 400)
     if supplier_id is not None and db.get(Supplier, supplier_id) is None:
         return rejected(MSG_SUPPLIER_NOT_FOUND, 400)
@@ -133,12 +133,12 @@ async def create_user(
 
 @router.post("/users/{user_id}/toggle")
 async def toggle_user(
-    user_id: int, request: Request, db: Session = Depends(get_db), user=Depends(require_roles(Role.ADMIN))
+    user_id: int, request: Request, db: Session = Depends(get_db), user=Depends(require_roles(Role.ADMINISTRADOR))
 ):
     await validate_csrf(request)
     target = db.get(User, user_id)
     if target and target.id != user.id:
-        if not target.is_active and target.role == Role.PROVIDER and target.supplier_id is None:
+        if not target.is_active and target.role == Role.PROVEEDOR and target.supplier_id is None:
             raise BusinessRuleError(MSG_ORPHAN_PROVIDER)
         old = target.is_active
         target.is_active = not old
@@ -155,7 +155,9 @@ AUDIT_ENTRIES_PER_PAGE = 50
 
 
 @router.get("/audit")
-def audit_log(request: Request, page: int = 1, db: Session = Depends(get_db), user=Depends(require_roles(Role.ADMIN))):
+def audit_log(
+    request: Request, page: int = 1, db: Session = Depends(get_db), user=Depends(require_roles(Role.ADMINISTRADOR))
+):
     stmt = select(AuditLog).options(joinedload(AuditLog.user)).order_by(AuditLog.timestamp.desc(), AuditLog.id.desc())
     result = paginate(db, stmt, page, AUDIT_ENTRIES_PER_PAGE)
     context = {"user": user, "entries": result.items, "page": result, "base_query": ""}
@@ -203,12 +205,14 @@ def _rules_page(
 
 
 @router.get("/rules")
-def rules(request: Request, ok: str = "", db: Session = Depends(get_db), user=Depends(require_roles(Role.ADMIN))):
+def rules(
+    request: Request, ok: str = "", db: Session = Depends(get_db), user=Depends(require_roles(Role.ADMINISTRADOR))
+):
     return _rules_page(request, db, user, notice=RULES_NOTICES.get(ok))
 
 
 @router.post("/rules")
-async def save_rules(request: Request, db: Session = Depends(get_db), user=Depends(require_roles(Role.ADMIN))):
+async def save_rules(request: Request, db: Session = Depends(get_db), user=Depends(require_roles(Role.ADMINISTRADOR))):
     await validate_csrf(request)
     raw = await request.form()
     form = {key: value for key, value in raw.items() if isinstance(value, str)}
@@ -277,14 +281,14 @@ def _required_documents_done(result: str):
 
 @router.get("/required-documents")
 def required_documents(
-    request: Request, ok: str = "", db: Session = Depends(get_db), user=Depends(require_roles(Role.ADMIN))
+    request: Request, ok: str = "", db: Session = Depends(get_db), user=Depends(require_roles(Role.ADMINISTRADOR))
 ):
     return _required_documents_page(request, db, user, notice=REQUIRED_DOCUMENTS_NOTICES.get(ok))
 
 
 @router.post("/required-documents")
 async def save_required_documents(
-    request: Request, db: Session = Depends(get_db), user=Depends(require_roles(Role.ADMIN))
+    request: Request, db: Session = Depends(get_db), user=Depends(require_roles(Role.ADMINISTRADOR))
 ):
     await validate_csrf(request)
     form = {key: value for key, value in (await request.form()).items() if isinstance(value, str)}
@@ -305,7 +309,7 @@ async def create_document_type(
     national_requirement: str = Form("NOT_APPLICABLE"),
     international_requirement: str = Form("NOT_APPLICABLE"),
     db: Session = Depends(get_db),
-    user=Depends(require_roles(Role.ADMIN)),
+    user=Depends(require_roles(Role.ADMINISTRADOR)),
 ):
     await validate_csrf(request)
     try:
@@ -326,7 +330,7 @@ async def update_document_type(
     description: str = Form(""),
     formats: list[str] = Form([]),
     db: Session = Depends(get_db),
-    user=Depends(require_roles(Role.ADMIN)),
+    user=Depends(require_roles(Role.ADMINISTRADOR)),
 ):
     await validate_csrf(request)
     try:
@@ -343,7 +347,7 @@ async def set_document_type_status(
     request: Request,
     active: str = Form(""),
     db: Session = Depends(get_db),
-    user=Depends(require_roles(Role.ADMIN)),
+    user=Depends(require_roles(Role.ADMINISTRADOR)),
 ):
     await validate_csrf(request)
     try:
@@ -396,7 +400,7 @@ def notification_templates(
     request: Request,
     updated: str | None = None,
     db: Session = Depends(get_db),
-    user=Depends(require_roles(Role.ADMIN)),
+    user=Depends(require_roles(Role.ADMINISTRADOR)),
 ):
     # El aviso solo se muestra para un codigo del catalogo: el parametro nunca se refleja tal cual.
     spec = templates_service.EVENTS.get(updated)
@@ -414,7 +418,7 @@ def edit_notification_template(
     request: Request,
     load_default: bool = Query(False, alias="default"),
     db: Session = Depends(get_db),
-    user=Depends(require_roles(Role.ADMIN)),
+    user=Depends(require_roles(Role.ADMINISTRADOR)),
 ):
     spec = templates_service.spec_for_code(code)
     current = templates_service.get_template(db, spec)
@@ -432,7 +436,7 @@ async def preview_notification_template(
     subject: str = Form(""),
     body: str = Form(""),
     version: int = Form(0),
-    user=Depends(require_roles(Role.ADMIN)),
+    user=Depends(require_roles(Role.ADMINISTRADOR)),
 ):
     await validate_csrf(request)
     spec = templates_service.spec_for_code(code)
@@ -453,7 +457,7 @@ async def save_notification_template(
     body: str = Form(""),
     version: int = Form(0),
     db: Session = Depends(get_db),
-    user=Depends(require_roles(Role.ADMIN)),
+    user=Depends(require_roles(Role.ADMINISTRADOR)),
 ):
     await validate_csrf(request)
     spec = templates_service.spec_for_code(code)
@@ -523,7 +527,7 @@ def notification_settings(
     test: int | None = None,
     page: int = 1,
     db: Session = Depends(get_db),
-    user=Depends(require_roles(Role.ADMIN)),
+    user=Depends(require_roles(Role.ADMINISTRADOR)),
 ):
     # El resultado de la prueba se lee de la bitacora: el parametro nunca se refleja tal cual.
     delivery = db.get(EmailDelivery, test) if test else None
@@ -536,7 +540,7 @@ def notification_settings(
 
 @router.post("/notifications")
 async def save_notification_settings(
-    request: Request, db: Session = Depends(get_db), user=Depends(require_roles(Role.ADMIN))
+    request: Request, db: Session = Depends(get_db), user=Depends(require_roles(Role.ADMINISTRADOR))
 ):
     await validate_csrf(request)
     form = {key: value for key, value in (await request.form()).items() if isinstance(value, str)}
@@ -556,7 +560,7 @@ async def send_test_notification(
     request: Request,
     address: str = Form(""),
     db: Session = Depends(get_db),
-    user=Depends(require_roles(Role.ADMIN)),
+    user=Depends(require_roles(Role.ADMINISTRADOR)),
 ):
     await validate_csrf(request)
     try:
@@ -580,7 +584,7 @@ CATALOG_NOTICES = {
 
 
 @router.get("/catalogs")
-def catalog_list(request: Request, db: Session = Depends(get_db), user=Depends(require_roles(Role.ADMIN))):
+def catalog_list(request: Request, db: Session = Depends(get_db), user=Depends(require_roles(Role.ADMINISTRADOR))):
     context = {"user": user, "catalogs": catalogs.summaries(db)}
     return templates.TemplateResponse(request, "admin/catalogs.html", context)
 
@@ -636,14 +640,14 @@ def catalog_detail(
     q: str = "",
     page: int = 1,
     db: Session = Depends(get_db),
-    user=Depends(require_roles(Role.ADMIN)),
+    user=Depends(require_roles(Role.ADMINISTRADOR)),
 ):
     catalog = catalogs.catalog_for_code(code)
     return _catalog_page(request, db, user, catalog, notice=CATALOG_NOTICES.get(ok), q=q, page=page)
 
 
 @router.get("/catalogs/{code}/template")
-def catalog_template(code: str, db: Session = Depends(get_db), user=Depends(require_roles(Role.ADMIN))):
+def catalog_template(code: str, db: Session = Depends(get_db), user=Depends(require_roles(Role.ADMINISTRADOR))):
     catalog = catalogs.catalog_for_code(code)
     content = build_catalog_template(catalog, catalogs.entries(db, catalog))
     headers = {"Content-Disposition": f'attachment; filename="{template_filename(catalog)}"'}
@@ -656,7 +660,7 @@ async def import_catalog(
     request: Request,
     upload: UploadFile | None = File(None),
     db: Session = Depends(get_db),
-    user=Depends(require_roles(Role.ADMIN)),
+    user=Depends(require_roles(Role.ADMINISTRADOR)),
 ):
     await validate_csrf(request)
     catalog = catalogs.catalog_for_code(code)
@@ -675,7 +679,7 @@ async def create_catalog_entry(
     entry_code: str = Form(""),
     name: str = Form(""),
     db: Session = Depends(get_db),
-    user=Depends(require_roles(Role.ADMIN)),
+    user=Depends(require_roles(Role.ADMINISTRADOR)),
 ):
     await validate_csrf(request)
     catalog = catalogs.catalog_for_code(code)
@@ -697,7 +701,7 @@ async def update_catalog_entry(
     request: Request,
     name: str = Form(""),
     db: Session = Depends(get_db),
-    user=Depends(require_roles(Role.ADMIN)),
+    user=Depends(require_roles(Role.ADMINISTRADOR)),
 ):
     await validate_csrf(request)
     catalog = catalogs.catalog_for_code(code)
@@ -719,7 +723,7 @@ async def set_catalog_entry_status(
     request: Request,
     active: str = Form(""),
     db: Session = Depends(get_db),
-    user=Depends(require_roles(Role.ADMIN)),
+    user=Depends(require_roles(Role.ADMINISTRADOR)),
 ):
     await validate_csrf(request)
     catalog = catalogs.catalog_for_code(code)

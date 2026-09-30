@@ -58,7 +58,7 @@ router = APIRouter(prefix="/invoices")
 logger = logging.getLogger(__name__)
 # Registro, carga documental, verificacion y envio: solo el proveedor (EP-01 DT-04). El PMO y el Administrador
 # conservan el listado, el detalle y las descargas.
-provider_only = require_roles(Role.PROVIDER)
+provider_only = require_roles(Role.PROVEEDOR)
 MSG_SUPPLIER_NOT_ACTIVE = "Su proveedor no está autorizado para registrar facturas"
 MSG_USER_WITHOUT_SUPPLIER = "Su usuario no está vinculado a un proveedor. Contacte al Administrador"
 # Avisos que llegan por ?notice= tras una redireccion; otro valor se ignora (como en el tablero).
@@ -87,7 +87,7 @@ def invoice_list(
     # Sin `status`, el PMO y el Administrador abren la bandeja de "Enviadas" (HU-18); los enlaces lo llevan explicito.
     effective = inbox_status(user, status)
     result = search_invoices(db, user, q, effective, page, origin=origin)
-    reviewer = user.role != Role.PROVIDER
+    reviewer = user.role != Role.PROVEEDOR
     context = {
         "user": user,
         "invoices": result.items,
@@ -277,7 +277,7 @@ def _detail_page(
     editable = is_editable(invoice)
     international = foreign.is_international(invoice)
     invoice_doc = foreign.current_invoice_document(invoice) if international else None
-    reviewer = user.role != Role.PROVIDER
+    reviewer = user.role != Role.PROVEEDOR
     cancelled = invoice.status == InvoiceStatus.CANCELLED
     can_cancel = not reviewer and not cancelled
     ack_type = cancellation.acknowledgment_type(db) if can_cancel else None
@@ -294,7 +294,7 @@ def _detail_page(
             "summary": summary,
             # Nombre del catalogo de cada documento, tambien de tipos inactivos o que ya no aplican (RD-10).
             "type_names": requirements.type_names(db),
-            "is_provider": user.role == Role.PROVIDER,
+            "is_provider": user.role == Role.PROVEEDOR,
             "editable": editable,
             "can_submit": invoice.status in SUBMITTABLE_STATUSES,
             # Mientras la factura es editable, lo que impediria su envio (HU-13).
@@ -630,7 +630,7 @@ async def submit(invoice_id: int, request: Request, db: Session = Depends(get_db
     return _detail_page(request, db, invoice, user, submit_blocked=True, status_code=409)
 
 
-reviewers_only = require_roles(Role.INTERNAL, Role.ADMIN)
+reviewers_only = require_roles(Role.PMO, Role.ADMINISTRADOR)
 
 
 @router.get("/{invoice_id}/review")

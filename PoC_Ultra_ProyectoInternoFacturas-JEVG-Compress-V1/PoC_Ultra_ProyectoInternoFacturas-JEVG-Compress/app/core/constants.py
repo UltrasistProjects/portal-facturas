@@ -3,9 +3,10 @@ from enum import StrEnum
 
 
 class Role(StrEnum):
-    PROVIDER = "PROVIDER"
-    INTERNAL = "INTERNAL"
-    ADMIN = "ADMIN"
+    # Nombres del negocio (ERS): el valor es el que se guarda en users.role y el que se muestra.
+    ADMINISTRADOR = "Administrador"
+    PROVEEDOR = "Proveedor"
+    PMO = "PMO"
 
 
 class SupplierType(StrEnum):

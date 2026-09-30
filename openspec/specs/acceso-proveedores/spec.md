@@ -22,14 +22,14 @@ El estatus operativo `ACTIVE` de un proveedor SHALL mostrarse como "Autorizado" 
 - **THEN** la respuesta es HTTP 409 con el mensaje del correo en uso y no se crea el proveedor
 
 ### Requirement: Autorización masiva exclusiva del Administrador
-`POST /suppliers/authorize` y `POST /suppliers/{supplier_id}/credentials` SHALL estar disponibles únicamente para el rol `ADMIN` y MUST exigir un token CSRF válido. Las casillas de selección, el botón "Autorizar seleccionados" y la sección de acceso al portal del expediente SHALL mostrarse sólo al rol `ADMIN`.
+`POST /suppliers/authorize` y `POST /suppliers/{supplier_id}/credentials` SHALL estar disponibles únicamente para el rol `Administrador` y MUST exigir un token CSRF válido. Las casillas de selección, el botón "Autorizar seleccionados" y la sección de acceso al portal del expediente SHALL mostrarse sólo al rol `Administrador`.
 
 #### Scenario: PMO sin acceso
-- **WHEN** un usuario `INTERNAL` envía `POST /suppliers/authorize` o `POST /suppliers/{id}/credentials`
+- **WHEN** un usuario `PMO` envía `POST /suppliers/authorize` o `POST /suppliers/{id}/credentials`
 - **THEN** la respuesta es HTTP 403, ningún proveedor cambia de estatus, no se crea ningún usuario y no se envía ningún correo
 
 #### Scenario: Proveedor sin acceso
-- **WHEN** un usuario `PROVIDER` envía `POST /suppliers/authorize`
+- **WHEN** un usuario `Proveedor` envía `POST /suppliers/authorize`
 - **THEN** la respuesta es HTTP 403 y nada cambia
 
 #### Scenario: Autorización sin token CSRF
@@ -52,7 +52,7 @@ El estatus operativo `ACTIVE` de un proveedor SHALL mostrarse como "Autorizado" 
 
 Con una selección válida, el sistema SHALL procesar todos los proveedores seleccionados en una sola transacción y con sus filas bloqueadas:
 - un proveedor que no está "Registrado" SHALL omitirse sin cambios;
-- un proveedor cuyo correo usa un usuario distinto de su propio usuario `PROVIDER` MUST NOT autorizarse;
+- un proveedor cuyo correo usa un usuario distinto de su propio usuario `Proveedor` MUST NOT autorizarse;
 - los demás SHALL pasar a "Autorizado".
 
 Si la transacción no puede completarse, ningún proveedor SHALL cambiar.
@@ -66,7 +66,7 @@ Si la transacción no puede completarse, ningún proveedor SHALL cambiar.
 - **THEN** el registrado queda "Autorizado", el otro se omite sin cambios y no recibe credenciales
 
 #### Scenario: Correo usado por otro usuario
-- **WHEN** existe un usuario `INTERNAL` con el correo de un proveedor "Registrado" seleccionado
+- **WHEN** existe un usuario `PMO` con el correo de un proveedor "Registrado" seleccionado
 - **THEN** ese proveedor sigue "Registrado", no se crea usuario ni se envía correo, y el resumen lo muestra como no autorizado por correo en uso
 
 #### Scenario: Selección vacía
@@ -78,8 +78,8 @@ Si la transacción no puede completarse, ningún proveedor SHALL cambiar.
 - **THEN** la respuesta es HTTP 400 con "Autorice hasta 100 proveedores por operación." y ningún proveedor cambia
 
 ### Requirement: Usuario y contraseña temporal al autorizar
-Por cada proveedor que pasa a "Autorizado" y no tiene un usuario `PROVIDER` propio con su correo, el sistema SHALL crear, en la misma transacción, un usuario activo con:
-- rol `PROVIDER` y el `supplier_id` del proveedor;
+Por cada proveedor que pasa a "Autorizado" y no tiene un usuario `Proveedor` propio con su correo, el sistema SHALL crear, en la misma transacción, un usuario activo con:
+- rol `Proveedor` y el `supplier_id` del proveedor;
 - el correo del proveedor en minúsculas como usuario;
 - la razón social como nombre, recortada a 150 caracteres;
 - una contraseña temporal aleatoria de 20 caracteres que cumple la política de contraseñas;
@@ -87,11 +87,11 @@ Por cada proveedor que pasa a "Autorizado" y no tiene un usuario `PROVIDER` prop
 
 El sistema SHALL guardar sólo el hash de la contraseña. SHALL entregar la contraseña en claro únicamente al punto de integración del gestor de secretos, antes de confirmar la transacción, y al correo de credenciales. La contraseña MUST NOT escribirse en la base de datos en claro, en la auditoría, en el log ni en la bitácora de envíos.
 
-Un proveedor que ya tiene su propio usuario `PROVIDER` con su correo SHALL autorizarse sin crear otro usuario ni generar credenciales.
+Un proveedor que ya tiene su propio usuario `Proveedor` con su correo SHALL autorizarse sin crear otro usuario ni generar credenciales.
 
 #### Scenario: Usuario creado al autorizar
 - **WHEN** el Administrador autoriza un proveedor "Registrado" con el correo "Contacto@Proveedor.mx"
-- **THEN** existe un usuario `PROVIDER` activo con el correo "contacto@proveedor.mx", el `supplier_id` del proveedor y la marca de contraseña asignada activa, cuyo hash verifica la contraseña del correo de credenciales
+- **THEN** existe un usuario `Proveedor` activo con el correo "contacto@proveedor.mx", el `supplier_id` del proveedor y la marca de contraseña asignada activa, cuyo hash verifica la contraseña del correo de credenciales
 
 #### Scenario: Inicio de sesión con la contraseña temporal
 - **WHEN** el proveedor inicia sesión con el usuario y la contraseña del correo de credenciales
@@ -102,7 +102,7 @@ Un proveedor que ya tiene su propio usuario `PROVIDER` con su correo SHALL autor
 - **THEN** no aparece en ninguno
 
 #### Scenario: Proveedor con usuario propio
-- **WHEN** se autoriza un proveedor "Registrado" que ya tiene un usuario `PROVIDER` con su correo
+- **WHEN** se autoriza un proveedor "Registrado" que ya tiene un usuario `Proveedor` con su correo
 - **THEN** el proveedor queda "Autorizado", no se crea otro usuario, su contraseña y su marca no cambian y no se envía correo de credenciales
 
 #### Scenario: Resguardo en el gestor de secretos
@@ -158,7 +158,7 @@ El listado SHALL marcar con "Credenciales no enviadas" a los proveedores autoriz
 ### Requirement: Reenvío de credenciales
 El Administrador SHALL poder reenviar las credenciales con `POST /suppliers/{supplier_id}/credentials` cuando se cumplan todas estas condiciones:
 - el proveedor está "Autorizado";
-- tiene su usuario `PROVIDER` con su correo;
+- tiene su usuario `Proveedor` con su correo;
 - el usuario está activo;
 - el usuario conserva la contraseña temporal, es decir, su marca de contraseña asignada está activa.
 

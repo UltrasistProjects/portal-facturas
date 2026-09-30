@@ -2,7 +2,6 @@
 
 ## Purpose
 Carga masiva del catálogo de proveedores Nacional e Internacional desde una plantilla de Excel predefinida (HU-01, RN-HU01-01): plantilla, acceso, validación del archivo y de las filas, mapeo, duplicados, confirmación del registro parcial, registro atómico, estatus inicial, resumen y auditoría.
-
 ## Requirements
 ### Requirement: Plantilla de Excel predefinida
 El sistema SHALL generar y ofrecer al Administrador la plantilla vigente de carga masiva de proveedores en formato `.xlsx`. La plantilla SHALL contener:
@@ -20,14 +19,14 @@ El sistema SHALL generar y ofrecer al Administrador la plantilla vigente de carg
 - **THEN** la carga se rechaza con HTTP 400 y el mensaje "El archivo no contiene proveedores", y no se registra ningún proveedor
 
 ### Requirement: Carga masiva exclusiva del Administrador
-La página de carga (`GET /suppliers/import`), la descarga de la plantilla (`GET /suppliers/import/template`) y el procesamiento del archivo (`POST /suppliers/import`) SHALL estar disponibles únicamente para el rol `ADMIN`. El procesamiento MUST exigir un token CSRF válido.
+La página de carga (`GET /suppliers/import`), la descarga de la plantilla (`GET /suppliers/import/template`) y el procesamiento del archivo (`POST /suppliers/import`) SHALL estar disponibles únicamente para el rol `Administrador`. El procesamiento MUST exigir un token CSRF válido.
 
 #### Scenario: PMO sin acceso
-- **WHEN** un usuario con rol `INTERNAL` solicita la página de carga, la plantilla o envía un archivo
+- **WHEN** un usuario con rol `PMO` solicita la página de carga, la plantilla o envía un archivo
 - **THEN** la respuesta es HTTP 403 y no se registra ningún proveedor
 
 #### Scenario: Proveedor sin acceso
-- **WHEN** un usuario con rol `PROVIDER` solicita la página de carga, la plantilla o envía un archivo
+- **WHEN** un usuario con rol `Proveedor` solicita la página de carga, la plantilla o envía un archivo
 - **THEN** la respuesta es HTTP 403 y no se registra ningún proveedor
 
 #### Scenario: Envío sin token CSRF

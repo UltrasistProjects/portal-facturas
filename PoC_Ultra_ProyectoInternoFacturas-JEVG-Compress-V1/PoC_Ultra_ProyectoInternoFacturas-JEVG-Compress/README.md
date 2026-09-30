@@ -11,7 +11,7 @@ La solución separa cuatro responsabilidades:
 1. **Reglas Python:** XML, RFC, documentos, fechas, montos, duplicados, contrato y transiciones.
 2. **Extracción documental:** parser CFDI con `lxml` y PDF con PyMuPDF.
 3. **AI semántica:** interfaz `DocumentAnalyzer`; por defecto usa un mock local reproducible.
-4. **Human in the loop:** sólo un usuario `INTERNAL` o `ADMIN` puede registrar la decisión final.
+4. **Human in the loop:** sólo un usuario `PMO` o `Administrador` puede registrar la decisión final.
 
 La AI recomienda o aporta evidencia; el Rule Engine determina la prevalidación técnica y el usuario administrativo toma la decisión final. Un LLM nunca cambia una factura a `ACCEPTED`.
 
@@ -61,8 +61,8 @@ Sólo aplican con `APP_ENV=development`:
 
 | Rol | Usuario | Contraseña |
 |---|---|---|
-| ADMIN | `admin@poc.local` | `Admin#Demo2026` |
-| INTERNAL / PMO | `pmo@poc.local` | `Pmo#Demo2026` |
+| Administrador | `admin@poc.local` | `Admin#Demo2026` |
+| PMO | `pmo@poc.local` | `Pmo#Demo2026` |
 | Proveedor moral | `proveedor1@poc.local` | `Proveedor#Demo2026` |
 | Proveedor físico | `proveedor2@poc.local` | `Proveedor#Demo2026` |
 | Proveedor internacional | `proveedor3@poc.local` | `Proveedor#Demo2026` |
@@ -181,7 +181,7 @@ tests/           pruebas críticas automatizadas
 
 Login → alta de factura → carga/reemplazo documental → "Verificar" (opcional) → "Enviar a validación" (parser XML/PDF, reglas, score y evidencia) → decisión del PMO: autorizar, rechazar u observaciones, con su correo (Recepción de Facturas o el proveedor). En cualquier momento, el proveedor puede cancelar la factura con su acuse; Recepción de Facturas recibe el aviso.
 
-El proveedor registra, carga, verifica y envía sus facturas, y sólo ve las suyas. `INTERNAL` (PMO) revisa y decide. `ADMIN` añade administración de usuarios, proveedores, contratos, reglas visibles y Audit Log. `INTERNAL` y `ADMIN` consultan las facturas y descargan sus documentos, pero no las registran, cargan, verifican ni envían (403).
+El proveedor registra, carga, verifica y envía sus facturas, y sólo ve las suyas. `PMO` revisa y decide. `Administrador` añade administración de usuarios, proveedores, contratos, reglas visibles y Audit Log. `PMO` y `Administrador` consultan las facturas y descargan sus documentos, pero no las registran, cargan, verifican ni envían (403).
 
 ### Estatus de la factura
 
@@ -327,7 +327,7 @@ El proveedor extranjero (`suppliers.origin = INTERNATIONAL`) no emite CFDI: fact
 
 ## Bandeja y revisión del PMO
 
-El PMO (rol `INTERNAL`) y el Administrador revisan las facturas enviadas (HU-18, HU-19):
+El PMO (rol `PMO`) y el Administrador (rol `Administrador`) revisan las facturas enviadas (HU-18, HU-19):
 
 - **Bandeja:** **Facturas** abre en "Enviada", con las que más han esperado primero (orden por fecha de envío, también en las páginas siguientes). "Todos los estados" u otro estatus vuelven al orden por fecha de creación. El filtro de origen separa facturas nacionales e internacionales. Cada fila muestra proveedor, folio y número, origen, proyecto, fecha de envío, monto, score con el número de advertencias y estatus. El proveedor conserva su listado de siempre.
 - **Ver documentos:** el ícono del ojo abre el documento en una pestaña del portal. Las páginas de un PDF se muestran como imágenes renderizadas en el servidor (hasta 20 páginas); las imágenes se muestran tal cual y el XML o el texto, escapados (hasta 200,000 caracteres). El navegador nunca abre el PDF ni el XML como documento, así que no depende de su visor ni se relaja la CSP. La autorización es la de la descarga, que sigue siendo un adjunto.
@@ -440,9 +440,10 @@ Los tres modos (STARTTLS con usuario, TLS directo y certificado no confiable) se
 
 **Administración › Usuarios** (`/admin/users`) da de alta usuarios con una contraseña inicial que deben cambiar en su primer acceso (HU-10).
 
-- **Rol y proveedor:** un usuario `PROVIDER` siempre está vinculado a un proveedor existente: sin él, el alta responde 400 "Seleccione el proveedor del usuario". Los `INTERNAL` y `ADMIN` no tienen proveedor (se ignora si se envía). La base de datos lo garantiza con `CHECK ck_users_provider_supplier`.
+- **Rol y proveedor:** un usuario `Proveedor` siempre está vinculado a un proveedor existente: sin él, el alta responde 400 "Seleccione el proveedor del usuario". Los `PMO` y `Administrador` no tienen proveedor (se ignora si se envía). La base de datos lo garantiza con `CHECK ck_users_provider_supplier`.
 - **Vía recomendada para proveedores:** registrar al proveedor en `/suppliers` y autorizarlo: el portal crea su usuario con el proveedor ya vinculado y le envía las credenciales.
-- **Usuarios previos sin proveedor:** la migración `0013_provider_user_supplier` deshabilita a los `PROVIDER` que se crearon sin proveedor (auditoría `USER_DEACTIVATED_WITHOUT_SUPPLIER`, sesiones revocadas) y no pueden volver a habilitarse (409): se da de alta uno nuevo con su proveedor. Si el correo ya está ocupado por el usuario deshabilitado, use otro correo.
+- **Usuarios previos sin proveedor:** la migración `0013_provider_user_supplier` deshabilita a los usuarios Proveedor que se crearon sin proveedor (auditoría `USER_DEACTIVATED_WITHOUT_SUPPLIER`, sesiones revocadas) y no pueden volver a habilitarse (409): se da de alta uno nuevo con su proveedor. Si el correo ya está ocupado por el usuario deshabilitado, use otro correo.
+- **Nombres de los roles:** los roles son `Administrador`, `Proveedor` y `PMO`, y así se guardan en `users.role`. La migración `0014_business_role_names` renombró los valores previos (`ADMIN`, `PROVIDER`, `INTERNAL`); los registros de auditoría anteriores conservan el nombre que tenía el rol al registrarse.
 
 ## Autorización y acceso de proveedores
 
@@ -451,8 +452,8 @@ Un proveedor nace **"Registrado"** (carga masiva o formulario individual), sin u
 - **Autorización masiva:** en **Proveedores**, el Administrador filtra por "Registrado", marca las casillas (o "seleccionar todos") y pulsa "Autorizar seleccionados". Un modal pide confirmación, porque se enviarán las credenciales. Se autorizan hasta 100 proveedores por operación, en una sola transacción con las filas bloqueadas:
   - los que no están "Registrado" se omiten;
   - si el correo de un proveedor lo usa otro usuario, ese proveedor no se autoriza;
-  - si ya tenía su propio usuario `PROVIDER`, se autoriza sin credenciales nuevas.
-- **Credenciales (HU-03):** por cada proveedor autorizado sin usuario se crea un usuario `PROVIDER` con su correo del catálogo y una contraseña temporal aleatoria de 20 caracteres. El portal guarda sólo su hash. Después de confirmar la autorización se envía el correo "Credenciales de acceso" con el usuario, la contraseña y la dirección `/login` del servidor.
+  - si ya tenía su propio usuario `Proveedor`, se autoriza sin credenciales nuevas.
+- **Credenciales (HU-03):** por cada proveedor autorizado sin usuario se crea un usuario `Proveedor` con su correo del catálogo y una contraseña temporal aleatoria de 20 caracteres. El portal guarda sólo su hash. Después de confirmar la autorización se envía el correo "Credenciales de acceso" con el usuario, la contraseña y la dirección `/login` del servidor.
 - **Resumen:** tras autorizar, el listado muestra a cada proveedor con "Credenciales enviadas", "Envío fallido" (con el error), "Ya tenía usuario", "Omitido" o "No autorizado". Los proveedores cuyo último envío falló llevan la marca "Credenciales no enviadas".
 - **Expediente:** la sección "Acceso al portal" muestra el usuario, el último acceso, si la contraseña sigue siendo la temporal y el último envío de credenciales. **"Reenviar credenciales"** genera una contraseña temporal nueva (la anterior deja de funcionar), sólo mientras el proveedor no la haya cambiado, aunque ya haya entrado con ella.
 - **Auditoría:** `SUPPLIER_STATUS_CHANGED`, `USER_CREATED` (origen `SUPPLIER_AUTHORIZATION`), `SUPPLIER_BULK_AUTHORIZED` y `SUPPLIER_CREDENTIALS_RESENT`, sin contraseñas. En el log técnico queda `supplier.bulk_authorize` sólo con contadores.

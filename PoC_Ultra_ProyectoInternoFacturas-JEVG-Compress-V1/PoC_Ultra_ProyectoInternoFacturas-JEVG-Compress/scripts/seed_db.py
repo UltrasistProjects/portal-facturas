@@ -110,7 +110,7 @@ def seed_international(db, workdir: Path, demo: Path, password: str, admin_id: i
         name="Proveedor Internacional Demo",
         email="proveedor3@poc.local",
         password_hash=hash_password(password),
-        role=Role.PROVIDER,
+        role=Role.PROVEEDOR,
         supplier_id=supplier.id,
     )
     contract = Contract(
@@ -285,26 +285,26 @@ def main(passwords: dict[str, str] | None = None) -> None:
                 name="Administrador Demo",
                 email="admin@poc.local",
                 password_hash=hash_password(passwords["admin@poc.local"]),
-                role=Role.ADMIN,
+                role=Role.ADMINISTRADOR,
             ),
             User(
                 name="PMO Demo",
                 email="pmo@poc.local",
                 password_hash=hash_password(passwords["pmo@poc.local"]),
-                role=Role.INTERNAL,
+                role=Role.PMO,
             ),
             User(
                 name="Proveedor Moral Demo",
                 email="proveedor1@poc.local",
                 password_hash=hash_password(passwords["proveedor1@poc.local"]),
-                role=Role.PROVIDER,
+                role=Role.PROVEEDOR,
                 supplier_id=moral.id,
             ),
             User(
                 name="Proveedor Fisico Demo",
                 email="proveedor2@poc.local",
                 password_hash=hash_password(passwords["proveedor2@poc.local"]),
-                role=Role.PROVIDER,
+                role=Role.PROVEEDOR,
                 supplier_id=physical.id,
             ),
         ]

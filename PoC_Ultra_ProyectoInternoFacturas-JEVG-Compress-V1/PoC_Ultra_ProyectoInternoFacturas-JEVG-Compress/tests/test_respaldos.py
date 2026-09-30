@@ -228,7 +228,7 @@ def workspace(tmp_path):
         execute(
             database,
             "INSERT INTO users (name, email, password_hash, role, is_active, created_at) "
-            "VALUES ('Ana', 'ana@ultrasist.com.mx', 'x', 'INTERNAL', true, now())",
+            "VALUES ('Ana', 'ana@ultrasist.com.mx', 'x', 'PMO', true, now())",
         )
         yield ws, env, tmp_path / "backups", database
 

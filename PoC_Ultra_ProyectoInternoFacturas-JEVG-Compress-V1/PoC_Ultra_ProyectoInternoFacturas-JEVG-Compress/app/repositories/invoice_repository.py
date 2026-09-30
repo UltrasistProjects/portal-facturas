@@ -13,7 +13,7 @@ INVOICES_PER_PAGE = PER_PAGE
 
 
 def _scoped(stmt: Select, user) -> Select:
-    if user.role == Role.PROVIDER:
+    if user.role == Role.PROVEEDOR:
         return stmt.where(Invoice.supplier_id == user.supplier_id)
     return stmt
 
@@ -22,7 +22,7 @@ def inbox_status(user, status: str | None) -> str:
     """Estatus efectivo del listado: sin `status`, el PMO y el Administrador abren su bandeja de "Enviadas" (HU-18);
     el proveedor ve todo. Un `status` vacio siempre significa "Todos los estados"."""
     if status is None:
-        return "" if user.role == Role.PROVIDER else InvoiceStatus.UNDER_REVIEW.value
+        return "" if user.role == Role.PROVEEDOR else InvoiceStatus.UNDER_REVIEW.value
     return status
 
 
@@ -44,7 +44,7 @@ def search_invoices(
         stmt = stmt.where(Invoice.status == status) if valid else stmt.where(false())
     if origin in {value.value for value in SupplierOrigin}:
         stmt = stmt.where(Supplier.origin == origin)
-    if user.role != Role.PROVIDER and status == InvoiceStatus.UNDER_REVIEW:
+    if user.role != Role.PROVEEDOR and status == InvoiceStatus.UNDER_REVIEW:
         # Bandeja del PMO: lo que mas ha esperado primero, tambien en las paginas siguientes (HU-18, D1).
         stmt = stmt.order_by(Invoice.submitted_at.asc(), Invoice.id.asc())
     else:
@@ -76,6 +76,6 @@ def total_amount(db: Session, user) -> Decimal:
 
 def get_visible_invoice(db: Session, invoice_id: int, user) -> Invoice | None:
     invoice = db.get(Invoice, invoice_id)
-    if invoice and user.role == Role.PROVIDER and invoice.supplier_id != user.supplier_id:
+    if invoice and user.role == Role.PROVEEDOR and invoice.supplier_id != user.supplier_id:
         return None
     return invoice

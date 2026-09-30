@@ -46,32 +46,32 @@ def stored(email: str) -> User | None:
 
 def test_proveedor_sin_proveedor_rechazado(client, email):
     login(client)
-    response = create(client, email, "PROVIDER")
+    response = create(client, email, "Proveedor")
     assert response.status_code == 400 and "Seleccione el proveedor del usuario" in response.text
     assert stored(email) is None
     # El formulario vuelve abierto con lo capturado, sin la contrasena.
     page = response.text
     assert '<details class="panel admin-create" open>' in page
     assert f'value="{email}"' in page and 'value="Joshua Bolaños Hernández"' in page
-    assert "<option selected>PROVIDER</option>" in page and PASSWORD not in page
+    assert "<option selected>Proveedor</option>" in page and PASSWORD not in page
 
 
 def test_proveedor_inexistente(client, email):
     login(client)
-    response = create(client, email, "PROVIDER", 999999)
+    response = create(client, email, "Proveedor", 999999)
     assert response.status_code == 400 and "Proveedor inexistente" in response.text and stored(email) is None
 
 
 def test_proveedor_con_su_proveedor(client, email):
     supplier = supplier_by_email("proveedor1@poc.local")
     login(client)
-    assert create(client, email, "PROVIDER", supplier.id).status_code == 303
+    assert create(client, email, "Proveedor", supplier.id).status_code == 303
     created = stored(email)
-    assert (created.role, created.supplier_id, created.is_active) == (Role.PROVIDER, supplier.id, True)
+    assert (created.role, created.supplier_id, created.is_active) == (Role.PROVEEDOR, supplier.id, True)
 
 
-@pytest.mark.parametrize("role", ["INTERNAL", "ADMIN"])
-def test_interno_o_administrador_sin_proveedor(client, email, role):
+@pytest.mark.parametrize("role", ["PMO", "Administrador"])
+def test_pmo_o_administrador_sin_proveedor(client, email, role):
     supplier = supplier_by_email("proveedor1@poc.local")
     login(client)
     assert create(client, email, role, supplier.id).status_code == 303
@@ -93,7 +93,7 @@ def orphan():
             name="Usuario huerfano",
             email=address,
             password_hash=hash_password(PASSWORD),
-            role=Role.PROVIDER,
+            role=Role.PROVEEDOR,
             supplier_id=None,
             is_active=False,
         )

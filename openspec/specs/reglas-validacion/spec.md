@@ -4,14 +4,14 @@
 Reglas de Validación (HU-06, RF-11): acceso exclusivo del Administrador, datos de ULTRASIST (RFC, Razón Social, Dirección y Código Postal) y parámetros del CFDI, comparaciones activables, validación, guardado con control de edición concurrente y auditoría.
 ## Requirements
 ### Requirement: Configuración exclusiva del Administrador
-`GET /admin/rules` y `POST /admin/rules` SHALL estar disponibles únicamente para el rol `ADMIN`; el `POST` MUST exigir un token CSRF válido. El menú Administración SHALL mostrar la opción "Reglas de validación" sólo al rol `ADMIN`. La página MUST NOT usar scripts ni estilos en línea.
+`GET /admin/rules` y `POST /admin/rules` SHALL estar disponibles únicamente para el rol `Administrador`; el `POST` MUST exigir un token CSRF válido. El menú Administración SHALL mostrar la opción "Reglas de validación" sólo al rol `Administrador`. La página MUST NOT usar scripts ni estilos en línea.
 
 #### Scenario: PMO sin acceso
-- **WHEN** un usuario `INTERNAL` solicita `/admin/rules` o envía un guardado
+- **WHEN** un usuario `PMO` solicita `/admin/rules` o envía un guardado
 - **THEN** la respuesta es HTTP 403 y la configuración no cambia
 
 #### Scenario: Proveedor sin acceso
-- **WHEN** un usuario `PROVIDER` solicita `/admin/rules` o envía un guardado
+- **WHEN** un usuario `Proveedor` solicita `/admin/rules` o envía un guardado
 - **THEN** la respuesta es HTTP 403 y la configuración no cambia
 
 #### Scenario: Guardado sin token CSRF

@@ -43,7 +43,7 @@ Las violaciones de reglas de negocio (transición de estado no permitida, restri
 - **THEN** la respuesta es HTTP 409 con el mensaje de transición no permitida y la factura sigue en `DRAFT`
 
 #### Scenario: Decisión sobre una factura ya revisada
-- **WHEN** un usuario INTERNAL envía una decisión sobre una factura "Autorizada"
+- **WHEN** un usuario PMO envía una decisión sobre una factura "Autorizada"
 - **THEN** la respuesta es HTTP 409 con "La factura ya fue revisada" y el estado no cambia
 
 #### Scenario: Petición JSON

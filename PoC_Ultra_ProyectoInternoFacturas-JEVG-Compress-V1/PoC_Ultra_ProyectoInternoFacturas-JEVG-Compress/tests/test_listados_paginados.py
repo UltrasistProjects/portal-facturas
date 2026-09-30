@@ -49,7 +49,7 @@ def many_users():
                 name=f"{tag} Usuario {index:02d}",
                 email=f"{tag.lower()}.{index:02d}@lista.example",
                 password_hash=hash_password("Lista#Prueba2026"),
-                role=Role.INTERNAL,
+                role=Role.PMO,
             )
             for index in range(TOTAL)
         )
@@ -228,7 +228,7 @@ def test_alta_de_usuario_visible(client, many_users):
         "name": "Joshua Bolaños Hernández",
         "email": email,
         "password": "Temporal#2026",
-        "role": "INTERNAL",
+        "role": "PMO",
         "supplier_id": "",
         "csrf_token": csrf(client, "/admin/users"),
     }

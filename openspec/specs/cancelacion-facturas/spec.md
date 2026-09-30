@@ -4,7 +4,7 @@
 Cancelación de la factura por el proveedor (HU-14, RF-09): acuse de cancelación obligatorio, estatus final "Cancelada" con la fecha límite de 72 horas para que Recepción de Facturas acepte la cancelación ante el SAT, correo a ese buzón con su reenvío y la visualización de la factura cancelada en el detalle.
 ## Requirements
 ### Requirement: Cancelación exclusiva del proveedor
-El detalle de una factura que no está "Cancelada" SHALL ofrecer al rol `PROVIDER` la sección "Cancelar factura" con el campo del "Acuse de cancelación" (PDF o XML) y la confirmación "Confirmo que la factura se canceló y adjunto su acuse". `POST /invoices/{invoice_id}/cancel` SHALL exigir CSRF y el rol `PROVIDER` (HTTP 403 para `INTERNAL` y `ADMIN`); una factura de otro proveedor SHALL responder HTTP 404. Los demás roles MUST NOT ver la sección.
+El detalle de una factura que no está "Cancelada" SHALL ofrecer al rol `Proveedor` la sección "Cancelar factura" con el campo del "Acuse de cancelación" (PDF o XML) y la confirmación "Confirmo que la factura se canceló y adjunto su acuse". `POST /invoices/{invoice_id}/cancel` SHALL exigir CSRF y el rol `Proveedor` (HTTP 403 para `PMO` y `Administrador`); una factura de otro proveedor SHALL responder HTTP 404. Los demás roles MUST NOT ver la sección.
 
 #### Scenario: Sección para el proveedor
 - **WHEN** el proveedor abre el detalle de su factura "Enviada"
