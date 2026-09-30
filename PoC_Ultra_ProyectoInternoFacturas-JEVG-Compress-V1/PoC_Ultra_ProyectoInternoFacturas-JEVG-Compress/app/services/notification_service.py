@@ -25,6 +25,7 @@ from app.core.config import settings
 from app.core.constants import MAILBOX_LABELS, DeliveryStatus, Mailbox, NotificationEvent
 from app.core.errors import BusinessRuleError, InvalidInputError
 from app.models import EmailDelivery, NotificationCopy, NotificationMailbox, User, now_utc
+from app.repositories.pagination import Page, paginate
 from app.services import mail_transport
 from app.services import notification_templates as nt
 from app.services.audit_service import audit
@@ -36,7 +37,6 @@ CONFIG_LOCK_KEY = 8_0800_0001
 MAX_ADDRESSES = 10
 MAX_ADDRESS_LENGTH = 254
 ERROR_MAX_LENGTH = 300
-RECENT_DELIVERIES = 20
 # Separadores de una lista capturada en un textarea: saltos de linea, comas y punto y coma.
 SEPARATORS = re.compile(r"[\r\n,;]+")
 EMAIL = TypeAdapter(EmailStr)
@@ -289,9 +289,10 @@ def send_test(db: Session, raw_address: str, user: User) -> EmailDelivery:
 # --- Consulta -----------------------------------------------------------------------------------------------------
 
 
-def recent_deliveries(db: Session, limit: int = RECENT_DELIVERIES) -> list[EmailDelivery]:
-    stmt = select(EmailDelivery).order_by(EmailDelivery.created_at.desc(), EmailDelivery.id.desc()).limit(limit)
-    return list(db.scalars(stmt))
+def deliveries_page(db: Session, page: int = 1) -> Page[EmailDelivery]:
+    """Bitacora de envios completa, del mas reciente al mas antiguo, paginada en SQL (listados-paginados)."""
+    stmt = select(EmailDelivery).order_by(EmailDelivery.created_at.desc(), EmailDelivery.id.desc())
+    return paginate(db, stmt, page)
 
 
 def delivery_label(delivery: EmailDelivery) -> str:

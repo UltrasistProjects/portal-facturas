@@ -143,14 +143,14 @@ def test_paginacion(client, provider2_invoices):
     login(client, "proveedor2@poc.local")
     first = client.get("/invoices").text
     second = client.get("/invoices", params={"page": 2}).text
-    assert "Pagina 2 de 2" in second and "30 registros" in second
+    assert "Página 2 de 2" in second and "30 registros" in second
     oldest = provider2_invoices[:5]
     for number in oldest:
         assert f"<small>{number}</small>" in second
         assert f"<small>{number}</small>" not in first
     assert second.count('class="icon-action"') == 5
     assert first.count('class="icon-action"') == 25
-    assert "Pagina 2 de 2" in client.get("/invoices", params={"page": 99}).text
+    assert "Página 2 de 2" in client.get("/invoices", params={"page": 99}).text
 
 
 def test_sin_n_mas_uno(client, provider2_invoices):
@@ -221,5 +221,5 @@ def test_registro_de_auditoria_paginado(client):
     login(client)
     first = client.get("/admin/audit").text
     last = client.get("/admin/audit", params={"page": last_page}).text
-    assert f"Pagina 1 de {last_page}" in first
+    assert f"Página 1 de {last_page}" in first
     assert "#P0000" in last and "#P0000" not in first

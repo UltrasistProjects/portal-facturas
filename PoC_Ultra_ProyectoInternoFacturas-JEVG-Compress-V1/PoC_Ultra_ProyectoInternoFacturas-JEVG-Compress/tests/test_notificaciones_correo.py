@@ -431,10 +431,11 @@ def test_envio_registrado_sin_contenido():
         assert all(text not in value for value in columns), text
 
 
-def test_ultimos_envios_en_la_pantalla(client):
+def test_envios_en_la_pantalla(client):
+    # Bitacora completa y paginada de 25 en 25, del mas reciente al mas antiguo (listados-paginados).
     start = datetime(2026, 9, 1, tzinfo=timezone.utc)
     with SessionLocal() as db:
-        for number in range(25):
+        for number in range(30):
             db.add(
                 EmailDelivery(
                     event=AUTHORIZED,
@@ -449,7 +450,9 @@ def test_ultimos_envios_en_la_pantalla(client):
         db.commit()
     login(client)
     shown = re.findall(r"envio(\d\d)@ultrasist\.com\.mx", client.get(URL).text)
-    assert shown == [f"{number:02d}" for number in range(24, 4, -1)]
+    assert shown == [f"{number:02d}" for number in range(29, 4, -1)]
+    older = re.findall(r"envio(\d\d)@ultrasist\.com\.mx", client.get(URL, params={"page": 2}).text)
+    assert older == ["04", "03", "02", "01", "00"]
 
 
 # --- Correo de prueba ---------------------------------------------------------------------------------------------

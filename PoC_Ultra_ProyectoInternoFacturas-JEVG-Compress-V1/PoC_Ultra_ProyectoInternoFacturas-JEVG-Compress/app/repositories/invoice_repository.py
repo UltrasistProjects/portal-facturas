@@ -2,25 +2,20 @@
 
 from decimal import Decimal
 
-from sqlalchemy import Select, false, func, or_, select
+from sqlalchemy import Select, false, func, select
 from sqlalchemy.orm import Session, contains_eager
 
 from app.core.constants import InvoiceStatus, Role, RuleStatus, SupplierOrigin
 from app.models import Invoice, Supplier, ValidationResult
-from app.repositories.pagination import Page, paginate
+from app.repositories.pagination import PER_PAGE, Page, paginate, search
 
-INVOICES_PER_PAGE = 25
+INVOICES_PER_PAGE = PER_PAGE
 
 
 def _scoped(stmt: Select, user) -> Select:
     if user.role == Role.PROVIDER:
         return stmt.where(Invoice.supplier_id == user.supplier_id)
     return stmt
-
-
-def escape_like(value: str) -> str:
-    """% y _ se buscan como caracteres literales."""
-    return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
 
 def inbox_status(user, status: str | None) -> str:
@@ -43,21 +38,7 @@ def search_invoices(
     # contains_eager: el proveedor llega en la misma consulta (sin N+1) y el JOIN permite buscar por razon social.
     stmt = select(Invoice).join(Invoice.supplier).options(contains_eager(Invoice.supplier))
     stmt = _scoped(stmt, user)
-    if q.strip():
-        pattern = f"%{escape_like(q.strip())}%"
-        stmt = stmt.where(
-            or_(
-                *(
-                    column.ilike(pattern, escape="\\")
-                    for column in (
-                        Invoice.internal_folio,
-                        Invoice.invoice_number,
-                        Invoice.project_name,
-                        Supplier.business_name,
-                    )
-                )
-            )
-        )
+    stmt = search(stmt, q, Invoice.internal_folio, Invoice.invoice_number, Invoice.project_name, Supplier.business_name)
     if status:
         valid = status in {state.value for state in InvoiceStatus}
         stmt = stmt.where(Invoice.status == status) if valid else stmt.where(false())

@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, File, Form, Query, Request, UploadFile
 from fastapi.responses import RedirectResponse, Response
 from pydantic import ValidationError
 from sqlalchemy import select
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session, joinedload, selectinload
 
 from app.core.constants import (
     BUSINESS_RULES,
@@ -19,7 +19,7 @@ from app.core.database import get_db
 from app.core.errors import BusinessRuleError, InvalidInputError, NotFoundError
 from app.core.security import hash_password, require_roles, validate_csrf
 from app.models import AuditLog, EmailDelivery, Supplier, User
-from app.repositories.pagination import paginate
+from app.repositories.pagination import back_to, list_query, paginate, search
 from app.routers.common import templates
 from app.schemas import UserCreate, validation_message
 from app.services import catalog_service as catalogs
@@ -36,19 +36,47 @@ from app.services.supplier_template import XLSX_MEDIA_TYPE
 router = APIRouter(prefix="/admin")
 
 
-def _users_page(request: Request, db: Session, user, error: str | None = None, status_code: int = 200):
+USERS_URL = "/admin/users"
+USER_NOTICES = {"created": "Usuario creado"}
+
+
+def _users_page(
+    request: Request,
+    db: Session,
+    user,
+    error: str | None = None,
+    status_code: int = 200,
+    q: str = "",
+    page: int = 1,
+    notice: str | None = None,
+):
+    # Busqueda y paginacion en SQL (listados-paginados); el proveedor de cada usuario, en una consulta.
+    q = q.strip()
+    stmt = select(User).options(selectinload(User.supplier)).order_by(User.name, User.id)
+    result = paginate(db, search(stmt, q, User.name, User.email), page)
     context = {
         "user": user,
-        "users": list(db.scalars(select(User).order_by(User.name))),
-        "suppliers": list(db.scalars(select(Supplier))),
+        "users": result.items,
+        "page": result,
+        "q": q,
+        "base_query": list_query(q=q),
+        "notice": notice,
+        "suppliers": list(db.scalars(select(Supplier).order_by(Supplier.business_name))),
         "error": error,
     }
     return templates.TemplateResponse(request, "admin/users.html", context, status_code=status_code)
 
 
 @router.get("/users")
-def users(request: Request, db: Session = Depends(get_db), user=Depends(require_roles(Role.ADMIN))):
-    return _users_page(request, db, user)
+def users(
+    request: Request,
+    q: str = "",
+    page: int = 1,
+    ok: str = "",
+    db: Session = Depends(get_db),
+    user=Depends(require_roles(Role.ADMIN)),
+):
+    return _users_page(request, db, user, q=q, page=page, notice=USER_NOTICES.get(ok))
 
 
 @router.post("/users")
@@ -81,7 +109,8 @@ async def create_user(
     db.flush()
     audit(db, "USER_CREATED", "User", created.id, user.id)
     db.commit()
-    return RedirectResponse("/admin/users", status_code=303)
+    # El alta regresa a la lista buscando al usuario creado: el orden por nombre podria dejarlo en otra pagina.
+    return RedirectResponse(f"{USERS_URL}?{list_query(q=created.email, ok='created')}", status_code=303)
 
 
 @router.post("/users/{user_id}/toggle")
@@ -99,7 +128,7 @@ async def toggle_user(
             db, "USER_STATUS_CHANGED", "User", target.id, user.id, {"is_active": old}, {"is_active": target.is_active}
         )
         db.commit()
-    return RedirectResponse("/admin/users", status_code=303)
+    return RedirectResponse(back_to(USERS_URL, await request.form()), status_code=303)
 
 
 AUDIT_ENTRIES_PER_PAGE = 50
@@ -440,9 +469,11 @@ def _notifications_page(
     test_address: str = "",
     test_errors: list[str] | None = None,
     status_code: int = 200,
+    page: int = 1,
 ):
     config = notifications.load(db)
     lists = notifications.recipient_lists(config)
+    deliveries = notifications.deliveries_page(db, page)
     context = {
         "user": user,
         "mailbox": lists[0],
@@ -456,7 +487,9 @@ def _notifications_page(
         "test_address": test_address,
         "test_errors": test_errors or [],
         "transport": notifications.transport_summary(),
-        "deliveries": notifications.recent_deliveries(db),
+        "deliveries": deliveries.items,
+        "page": deliveries,
+        "base_query": "",
         "delivery_label": notifications.delivery_label,
         "format_datetime": templates_service.format_datetime,
     }
@@ -468,6 +501,7 @@ def notification_settings(
     request: Request,
     ok: str = "",
     test: int | None = None,
+    page: int = 1,
     db: Session = Depends(get_db),
     user=Depends(require_roles(Role.ADMIN)),
 ):
@@ -475,7 +509,9 @@ def notification_settings(
     delivery = db.get(EmailDelivery, test) if test else None
     if delivery is not None and delivery.event is not None:
         delivery = None
-    return _notifications_page(request, db, user, notice=NOTIFICATIONS_NOTICES.get(ok), test_delivery=delivery)
+    return _notifications_page(
+        request, db, user, notice=NOTIFICATIONS_NOTICES.get(ok), test_delivery=delivery, page=page
+    )
 
 
 @router.post("/notifications")
@@ -540,12 +576,20 @@ def _catalog_page(
     result: catalogs.ImportResult | None = None,
     import_error: str | None = None,
     status_code: int = 200,
+    q: str = "",
+    page: int = 1,
 ):
+    q = q.strip()
+    result_page = catalogs.page_entries(db, catalog, q, page)
     context = {
         "user": user,
         "catalog": catalog,
         "label": CATALOG_LABELS[catalog],
-        "entries": catalogs.entries(db, catalog),
+        "entries": result_page.items,
+        "page": result_page,
+        "q": q,
+        "base_query": list_query(q=q),
+        "counts": catalogs.counts(db, catalog),
         "in_use": catalogs.in_use(db)[catalog],
         "code_format": CATALOG_CODE_FORMATS[catalog][1],
         "max_rows": catalogs.MAX_ROWS,
@@ -557,16 +601,25 @@ def _catalog_page(
     return templates.TemplateResponse(request, "admin/catalog.html", context, status_code=status_code)
 
 
-def _catalog_done(catalog: CatalogType, result: str):
-    return RedirectResponse(f"{CATALOGS_URL}/{catalog.value}?ok={result}", status_code=303)
+def _catalog_done(catalog: CatalogType, result: str, form=None, q: str = ""):
+    """Al catalogo con el aviso: tras una accion en una fila, en la misma busqueda y pagina; tras un alta, buscando la
+    clave creada (listados-paginados)."""
+    url = back_to(f"{CATALOGS_URL}/{catalog.value}", form or {"q": q})
+    return RedirectResponse(f"{url}{'&' if '?' in url else '?'}ok={result}", status_code=303)
 
 
 @router.get("/catalogs/{code}")
 def catalog_detail(
-    code: str, request: Request, ok: str = "", db: Session = Depends(get_db), user=Depends(require_roles(Role.ADMIN))
+    code: str,
+    request: Request,
+    ok: str = "",
+    q: str = "",
+    page: int = 1,
+    db: Session = Depends(get_db),
+    user=Depends(require_roles(Role.ADMIN)),
 ):
     catalog = catalogs.catalog_for_code(code)
-    return _catalog_page(request, db, user, catalog, notice=CATALOG_NOTICES.get(ok))
+    return _catalog_page(request, db, user, catalog, notice=CATALOG_NOTICES.get(ok), q=q, page=page)
 
 
 @router.get("/catalogs/{code}/template")
@@ -607,14 +660,14 @@ async def create_catalog_entry(
     await validate_csrf(request)
     catalog = catalogs.catalog_for_code(code)
     try:
-        catalogs.create_entry(db, catalog, entry_code, name, user.id)
+        created = catalogs.create_entry(db, catalog, entry_code, name, user.id)
     except NotFoundError:
         raise
     except BusinessRuleError as exc:
         db.rollback()
         return _catalog_page(request, db, user, catalog, error=exc.message, status_code=exc.status_code)
     db.commit()
-    return _catalog_done(catalog, "created")
+    return _catalog_done(catalog, "created", q=created.code)
 
 
 @router.post("/catalogs/{code}/{entry_id}")
@@ -636,7 +689,7 @@ async def update_catalog_entry(
         db.rollback()
         return _catalog_page(request, db, user, catalog, error=exc.message, status_code=exc.status_code)
     db.commit()
-    return _catalog_done(catalog, "updated" if changed else "unchanged")
+    return _catalog_done(catalog, "updated" if changed else "unchanged", await request.form())
 
 
 @router.post("/catalogs/{code}/{entry_id}/status")
@@ -660,4 +713,4 @@ async def set_catalog_entry_status(
         db.rollback()
         return _catalog_page(request, db, user, catalog, error=exc.message, status_code=exc.status_code)
     db.commit()
-    return _catalog_done(catalog, "status" if changed else "unchanged")
+    return _catalog_done(catalog, "status" if changed else "unchanged", await request.form())

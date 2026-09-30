@@ -224,6 +224,26 @@ El proveedor da seguimiento a sus facturas (HU-17, RF-16):
 - **Causa de la decisión:** en "Rechazada" el detalle destaca "Motivo del rechazo" y en "Observaciones", "Observaciones del PMO", con el texto de la última decisión: el mismo del correo. En "Observaciones" añade "Corrija lo indicado y vuelva a enviar la factura" con el enlace a la carga documental. En los demás estatus no hay aviso de observaciones: las de rondas anteriores quedan en el seguimiento.
 - **Seguimiento:** sus envíos, las decisiones del PMO (atribuidas a "PMO", sin el nombre del revisor ni los comentarios internos) y la cancelación con su fecha límite, en orden cronológico.
 
+## Listados
+
+Todos los listados de registros se paginan en la base de datos (`LIMIT/OFFSET`) y muestran "Página N de M · T registros":
+
+| Listado | Por página | Orden | Búsqueda |
+| --- | --- | --- | --- |
+| Facturas (`/invoices`) | 25 | más recientes (bandeja del PMO: la que más ha esperado) | folio, número, proyecto, proveedor |
+| Proveedores (`/suppliers`) | 25 | razón social | razón social, RFC, ID fiscal, correo (con el filtro de estatus) |
+| Usuarios (`/admin/users`) | 25 | nombre | nombre, correo |
+| Contratos (`/contracts`) | 25 | más recientes | proyecto, proveedor |
+| Claves de catálogo (`/admin/catalogs/…`) | 25 | clave | clave, descripción |
+| Bitácora de envíos (`/admin/notifications`) | 25 | más recientes | — |
+| Audit Log (`/admin/audit`) | 50 | más recientes | — |
+
+- La búsqueda no distingue mayúsculas y trata `%` y `_` como caracteres literales.
+- **Altas:** crear un usuario, un contrato o una clave regresa al listado buscando el registro creado, con el aviso "Usuario creado", "Contrato creado" o "Clave agregada". El alta de un proveedor lleva a su expediente.
+- **Acciones:** habilitar un usuario, registrar una enmienda o editar una clave regresa a la misma búsqueda y página.
+- **Transacciones:** cada alta o acción se confirma en una sola transacción de PostgreSQL con su auditoría: o queda todo o no queda nada. Los correos salen después de confirmar y un envío fallido se reenvía desde la pantalla.
+- No se paginan los formularios de configuración (archivos mínimos, reglas, plantillas, índice de catálogos) ni los resultados de un archivo (vista previa de la carga masiva).
+
 ## Reglas implementadas
 
 - `DOC-001..009`: archivos mínimos según el origen del proveedor (XML y PDF del CFDI, orden de compra, Vo.Bo., Invoice y otros tipos obligatorios; ver [Archivos mínimos por tipo de proveedor](#archivos-mínimos-por-tipo-de-proveedor)), contrato/anexo disponible, complemento y procesabilidad.
@@ -364,7 +384,7 @@ El Administrador define en **Administración › Notificaciones** (`/admin/notif
 - **Buzón "Recepción de Facturas":** de 1 a 10 correos. La migración `0005_notification_recipients` lo siembra con `recepcionfacturas@ultrasist.com.mx`. Recibe los avisos de facturas Autorizadas y Canceladas.
 - **Copias por evento:** de 0 a 10 correos en `Cc` para Autorizada, Rechazada, Observaciones y Cancelada. Se omiten las que ya están en "Para".
 - **Correo de prueba** a una dirección que indique el Administrador, con un texto fijo.
-- **Transporte** vigente en solo lectura, sin usuario ni contraseña, y los **últimos 20 envíos** con su resultado.
+- **Transporte** vigente en solo lectura, sin usuario ni contraseña, y la **bitácora de envíos** completa, paginada de 25 en 25, con su resultado.
 
 Las listas se capturan una dirección por línea (también se aceptan comas o punto y coma). Al guardar se pasan a minúsculas y se quitan las repetidas; todos los errores se muestran juntos con HTTP 400. El formulario lleva una huella de la configuración: si otro Administrador guardó antes, responde 409 sin cambios. Cada cambio queda en el Audit Log (`NOTIFICATION_RECIPIENTS_UPDATED`, sólo las listas que cambiaron) y en el log técnico (`notification_recipients.updated`, sin direcciones).
 
@@ -399,7 +419,7 @@ El `.env` trae un bloque comentado para el servidor de ULTRASIST. Para conectarl
 1. Pida a TI el servidor, el puerto y el tipo de conexión, la cuenta que envía (o si el servidor acepta relay por IP sin usuario) y la dirección de remitente autorizada.
 2. En `.env`, descomente y complete `MAIL_BACKEND=smtp`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURITY`, `SMTP_USERNAME`, `SMTP_PASSWORD` y `MAIL_FROM`. La contraseña sólo vive en `.env`: nunca se muestra en la pantalla ni se escribe en el log.
 3. Reinicie uvicorn: la configuración se lee al arrancar y `--reload` no vigila `.env`. Si falta `SMTP_HOST` o `MAIL_FROM`, la aplicación no arranca y lo indica.
-4. En **Administración › Notificaciones**, confirme en "Transporte" el servidor y el cifrado, y envíe un correo de prueba a su buzón. El resultado y, si falla, el error técnico aparecen en la pantalla y en "Últimos envíos".
+4. En **Administración › Notificaciones**, confirme en "Transporte" el servidor y el cifrado, y envíe un correo de prueba a su buzón. El resultado y, si falla, el error técnico aparecen en la pantalla y en la "Bitácora de envíos".
 
 | Caso | Configuración |
 | --- | --- |

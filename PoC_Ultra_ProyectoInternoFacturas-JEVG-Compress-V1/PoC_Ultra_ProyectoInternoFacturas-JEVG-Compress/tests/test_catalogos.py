@@ -150,7 +150,8 @@ def test_alta_de_una_moneda(client):
     login(client)
     assert not currency_accepted("CAD")
     response = create(client, "CURRENCY", " cad ", "Dólar canadiense")
-    assert response.status_code == 303 and response.headers["location"] == f"{URL}/CURRENCY?ok=created"
+    # El alta regresa buscando la clave creada (listados-paginados).
+    assert response.status_code == 303 and response.headers["location"] == f"{URL}/CURRENCY?q=CAD&ok=created"
     created = entry("CURRENCY", "CAD")
     assert (created.name, created.is_active) == ("Dólar canadiense", True)
     assert currency_accepted("CAD")

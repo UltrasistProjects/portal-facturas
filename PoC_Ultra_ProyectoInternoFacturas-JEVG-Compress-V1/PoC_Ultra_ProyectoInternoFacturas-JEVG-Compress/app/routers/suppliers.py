@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, Uplo
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
 from pydantic import ValidationError
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.core.constants import (
     SUPPLIER_CLASSIFICATION_LABELS,
@@ -19,6 +19,7 @@ from app.core.database import get_db
 from app.core.errors import BusinessRuleError, NotFoundError
 from app.core.security import get_current_user, require_roles, validate_csrf
 from app.models import Document, EmailDelivery, Supplier
+from app.repositories.pagination import list_query, paginate, search
 from app.routers.common import templates
 from app.schemas import SupplierCreate, SupplierUpdate, validation_message
 from app.services import supplier_access_service as access
@@ -64,13 +65,15 @@ def _form_value(value) -> str:
 def list_suppliers(
     request: Request,
     status: str = "",
+    q: str = "",
+    page: int = 1,
     authorization: int | None = None,
     db: Session = Depends(get_db),
     user=Depends(require_roles(Role.INTERNAL, Role.ADMIN)),
 ):
     # El resumen se reconstruye de la auditoria: el parametro nunca se refleja tal cual (D5).
     summary = access.authorization_summary(db, authorization) if authorization and user.role == Role.ADMIN else None
-    return _suppliers_page(request, db, user, status_filter=status, summary=summary)
+    return _suppliers_page(request, db, user, status_filter=status, summary=summary, q=q, page=page)
 
 
 def _suppliers_page(
@@ -82,16 +85,25 @@ def _suppliers_page(
     status_filter: str = "",
     summary: access.AuthorizationSummary | None = None,
     form: dict[str, str] | None = None,
+    q: str = "",
+    page: int = 1,
 ):
-    stmt = select(Supplier).order_by(Supplier.business_name)
+    # Busqueda, filtro y paginacion en SQL (listados-paginados); los contratos de la pagina, en una consulta.
+    stmt = select(Supplier).options(selectinload(Supplier.contracts)).order_by(Supplier.business_name, Supplier.id)
     if status_filter in SupplierStatus.__members__:
         stmt = stmt.where(Supplier.status == SupplierStatus(status_filter))
     else:
         status_filter = ""
+    q = q.strip()
+    stmt = search(stmt, q, Supplier.business_name, Supplier.rfc, Supplier.foreign_tax_id, Supplier.email)
+    result = paginate(db, stmt, page)
     is_admin = user.role == Role.ADMIN
     context = {
         "user": user,
-        "suppliers": list(db.scalars(stmt)),
+        "suppliers": result.items,
+        "page": result,
+        "q": q,
+        "base_query": list_query(q=q, status=status_filter),
         "error": error,
         "status_filter": status_filter,
         "status_options": [(status.value, label) for status, label in SUPPLIER_STATUS_LABELS.items()],

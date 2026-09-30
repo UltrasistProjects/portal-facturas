@@ -132,15 +132,15 @@ Cada intento de envío SHALL quedar registrado con:
 - la entidad relacionada y su identificador, si los hay;
 - el usuario que lo originó y la fecha.
 
-La bitácora MUST NOT guardar el asunto ni el cuerpo del correo. `/admin/notifications` SHALL mostrar los últimos 20 envíos, del más reciente al más antiguo, con fecha, evento ("Prueba" para el correo de prueba), destinatarios, resultado y error.
+La bitácora MUST NOT guardar el asunto ni el cuerpo del correo. `/admin/notifications` SHALL mostrar todos los envíos, paginados de 25 en 25 (spec `listados-paginados`), del más reciente al más antiguo, con fecha, evento ("Prueba" para el correo de prueba), destinatarios, resultado y error.
 
 #### Scenario: Envío registrado sin contenido
 - **WHEN** se envía el correo de Rechazada de una factura
 - **THEN** existe un registro en la bitácora con el evento `INVOICE_REJECTED`, la entidad "Invoice" y su id, y ninguna columna contiene el asunto ni el cuerpo
 
-#### Scenario: Últimos envíos en la pantalla
-- **WHEN** hay 25 envíos registrados y el Administrador abre `/admin/notifications`
-- **THEN** la sección de últimos envíos muestra los 20 más recientes, empezando por el último
+#### Scenario: Envíos en la pantalla
+- **WHEN** hay 30 envíos registrados y el Administrador abre `/admin/notifications`
+- **THEN** la bitácora muestra los 25 más recientes, empezando por el último, y en la página 2 los 5 restantes
 
 ### Requirement: Correo de prueba
 El Administrador SHALL poder enviar un correo de prueba a una dirección que indica, desde `POST /admin/notifications/test`. La dirección SHALL validarse como las de las listas. El correo SHALL tener el asunto "Correo de prueba del Portal de Proveedores ULTRASIST" y un cuerpo fijo con el nombre del Administrador y la fecha y hora en la zona de negocio. El envío SHALL registrarse en la bitácora sin evento. La pantalla SHALL indicar si el correo se envió o si falló.
