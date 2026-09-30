@@ -372,7 +372,8 @@ def test_historial_vacio(client):
     assert "Sin envíos ni revisiones" in page
 
 
-def test_proveedor_sin_historial_ni_bloque(client):
+def test_proveedor_con_seguimiento_sin_bloque_proveedor(client):
+    # HU-17: el proveedor ve el historial como "Seguimiento"; el bloque "Proveedor" sigue siendo del PMO.
     login(client, "proveedor1@poc.local")
     page = client.get(f"/invoices/{invoice_by_number('A-CORRECTA').id}").text
-    assert 'id="history"' not in page and 'id="supplier"' not in page
+    assert "<h2>Seguimiento</h2>" in page and "<h2>Historial</h2>" not in page and 'id="supplier"' not in page

@@ -37,7 +37,7 @@ from app.services import document_view_service as document_view
 from app.services import foreign_invoice_service as foreign
 from app.services.audit_service import audit
 from app.services.file_service import LocalFileStorage, log_upload, safe_download_name
-from app.services.invoice_history_service import history
+from app.services.invoice_history_service import decision_cause, history
 from app.services.invoice_service import (
     ensure_editable,
     internal_folio,
@@ -301,9 +301,11 @@ def _detail_page(
             # Datos del Invoice (HU-15/16): la legibilidad del texto se tomo al cargarlo; no se relee el PDF aqui.
             "international": international,
             "has_invoice_doc": invoice_doc is not None,
-            # Proveedor e historial de revision para el PMO y el Administrador (HU-19).
+            # Proveedor e historial para el PMO y el Administrador (HU-19); "Seguimiento" del proveedor, con la
+            # decision atribuida a "PMO", y la causa vigente de un rechazo u observaciones (HU-17).
             "reviewer": reviewer,
-            "history": history(db, invoice) if reviewer else [],
+            "history": history(db, invoice, for_provider=not reviewer),
+            "decision_cause": decision_cause(db, invoice),
             # Decision del PMO (HU-20): panel, resultado del correo de la URL y reenvio si el ultimo envio fallo.
             "can_decide": reviewer and invoice.status == InvoiceStatus.UNDER_REVIEW,
             "can_resend": reviewer and review_service.can_resend(db, invoice),

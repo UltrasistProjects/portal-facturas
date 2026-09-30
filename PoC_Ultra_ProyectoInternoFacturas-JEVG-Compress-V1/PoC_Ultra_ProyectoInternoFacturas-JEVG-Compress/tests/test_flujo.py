@@ -169,8 +169,7 @@ def test_alcance_del_proveedor(client, provider2_invoices):
 def test_kpis_del_proveedor(client, provider2_invoices):
     login(client, "proveedor2@poc.local")
     page = client.get("/").text
-    assert "<strong>30</strong><small>Expedientes visibles</small>" in page.replace("\n", "")
-    assert "$3.00 acumulado" in page  # 30 x 0.10 exacto
+    assert "<span>Total facturas</span><strong>30</strong><small>$3.00 acumulado</small>" in page  # 30 x 0.10 exacto
 
 
 # --- Transacciones y auditoria ---------------------------------------------------------------------------

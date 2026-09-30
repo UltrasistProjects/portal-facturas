@@ -15,6 +15,7 @@ from app.core.errors import BusinessRuleError, InvalidInputError
 from app.models import EmailDelivery, Invoice, Review
 from app.services import notification_service
 from app.services.audit_service import audit
+from app.services.invoice_history_service import last_decision
 from app.services.invoice_service import ensure_can_accept, lock_invoice, transition_invoice
 
 logger = logging.getLogger(__name__)
@@ -161,11 +162,6 @@ def prepare_resend(db: Session, invoice: Invoice, user_id: int) -> str | None:
     lock_invoice(db, invoice)
     if not can_resend(db, invoice):
         raise BusinessRuleError(MSG_NOTHING_TO_RESEND)
-    review = db.scalar(
-        select(Review)
-        .where(Review.invoice_id == invoice.id, Review.decision != ReviewDecision.COMMENT)
-        .order_by(Review.created_at.desc(), Review.id.desc())
-        .limit(1)
-    )
+    review = last_decision(db, invoice)
     audit(db, "INVOICE_NOTIFICATION_RESENT", ENTITY, invoice.id, user_id, new={"event": EVENTS[invoice.status].value})
     return review.comments if review else invoice.comments

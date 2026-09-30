@@ -41,19 +41,28 @@ El detalle de la factura SHALL mostrar a `INTERNAL` y `ADMIN` un bloque "Proveed
 - **THEN** el bloque "Proveedor" muestra "Global Data Services Inc. (DEMO)", "Internacional", "US 98-7654321", "proveedor3@poc.local" y "Autorizado"
 
 ### Requirement: Historial de revisión en el detalle
-El detalle de la factura SHALL mostrar a `INTERNAL` y `ADMIN` la sección "Historial", en orden cronológico, con:
+El detalle de la factura SHALL mostrar el historial en orden cronológico: a `INTERNAL` y `ADMIN` en la sección "Historial" y al `PROVIDER` en la sección "Seguimiento" (HU-17), con:
 - cada envío a validación del proveedor (auditoría `INVOICE_SUBMITTED`): fecha y usuario;
-- cada revisión del PMO (tabla `reviews`): fecha, decisión con la etiqueta de su estatus ("Autorizada", "Rechazada", "Observaciones" o "Comentario"), observaciones y revisor.
+- cada revisión del PMO (tabla `reviews`): fecha, decisión con la etiqueta de su estatus ("Autorizada", "Rechazada", "Observaciones" o "Comentario") y observaciones;
+- la cancelación (auditoría `INVOICE_CANCELLED`): fecha, "Cancelada", usuario y "Fecha límite de aceptación: <fecha límite>" en la zona de negocio.
 
-Sin eventos, SHALL mostrar "Sin envíos ni revisiones". El rol `PROVIDER` MUST NOT ver esta sección en esta versión (HU-17 define su seguimiento).
+A `INTERNAL` y `ADMIN` SHALL mostrar el nombre del revisor. Al `PROVIDER` SHALL mostrar "PMO" en lugar del nombre del revisor (EP-02 DT-07) y MUST NOT mostrar las revisiones `COMMENT` (comentarios internos del PoC). Sin eventos, SHALL mostrar "Sin envíos ni revisiones".
 
 #### Scenario: Factura devuelta y reenviada
 - **WHEN** una factura se envió, el PMO la marcó con observaciones "Falta el Vo.Bo." y el proveedor la reenvió
 - **THEN** el historial muestra, en ese orden, el primer envío, la revisión "Observaciones" con "Falta el Vo.Bo." y el nombre del revisor, y el segundo envío
 
-#### Scenario: Proveedor
-- **WHEN** el proveedor abre el detalle de su factura
-- **THEN** no ve la sección "Historial"
+#### Scenario: Seguimiento del proveedor
+- **WHEN** el proveedor abre el detalle de esa misma factura
+- **THEN** ve la sección "Seguimiento" con los mismos tres eventos, la revisión atribuida a "PMO" y sin el nombre del revisor
+
+#### Scenario: Comentario interno
+- **WHEN** la factura tiene una revisión `COMMENT` del PoC
+- **THEN** el PMO la ve como "Comentario" y el proveedor no la ve
+
+#### Scenario: Cancelación en el historial
+- **WHEN** el proveedor canceló la factura el 25/09/2026 a las 10:30 (hora de negocio)
+- **THEN** el historial termina con "Cancelada", el usuario del proveedor y "Fecha límite de aceptación: 28/09/2026 10:30"
 
 ### Requirement: Decisión del PMO con tres botones
 Para los roles `INTERNAL` y `ADMIN`, el detalle de una factura "Enviada" (`UNDER_REVIEW`) SHALL mostrar el panel "Decisión" con el campo "Observaciones" y tres botones: "Autorizar" (`ACCEPTED`), "Observaciones" (`REQUIRES_CORRECTION`) y "Rechazar" (`REJECTED`). En otro estatus, o para el rol `PROVIDER`, el panel MUST NOT mostrarse. `GET /invoices/{invoice_id}/review` SHALL redirigir (303) a `/invoices/{invoice_id}#decision`.

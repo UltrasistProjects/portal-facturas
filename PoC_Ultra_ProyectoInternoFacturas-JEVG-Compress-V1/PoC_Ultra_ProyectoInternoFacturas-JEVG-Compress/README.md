@@ -215,6 +215,15 @@ El proveedor cancela su factura desde cualquier estatus excepto "Cancelada" (HU-
 - **Fuera de alcance:** registrar en el portal la aceptación de la cancelación (ocurre ante el SAT), el motivo SAT, la consulta del estatus del CFDI y revertir una cancelación.
 - **Migración `0012_invoice_cancellation`:** agrega las columnas con el `CHECK ck_invoices_cancellation`, el estatus `CANCELLED` y el tipo del sistema "Acuse de cancelación". Se detiene si un tipo soporte ya usa ese nombre; el downgrade se niega si hay facturas canceladas.
 
+### Seguimiento del proveedor
+
+El proveedor da seguimiento a sus facturas (HU-17, RF-16):
+
+- **Tablero:** total de facturas con su monto acumulado e indicadores Enviadas, Observaciones, Autorizadas, Rechazadas y Canceladas. Cada indicador abre el listado filtrado por su estatus. El PMO y el Administrador ven los mismos indicadores sobre todas las facturas.
+- **Listado:** sólo sus facturas, con búsqueda, filtro por los siete estatus y 25 por página. Una factura de otro proveedor responde 404.
+- **Causa de la decisión:** en "Rechazada" el detalle destaca "Motivo del rechazo" y en "Observaciones", "Observaciones del PMO", con el texto de la última decisión: el mismo del correo. En "Observaciones" añade "Corrija lo indicado y vuelva a enviar la factura" con el enlace a la carga documental. En los demás estatus no hay aviso de observaciones: las de rondas anteriores quedan en el seguimiento.
+- **Seguimiento:** sus envíos, las decisiones del PMO (atribuidas a "PMO", sin el nombre del revisor ni los comentarios internos) y la cancelación con su fecha límite, en orden cronológico.
+
 ## Reglas implementadas
 
 - `DOC-001..009`: archivos mínimos según el origen del proveedor (XML y PDF del CFDI, orden de compra, Vo.Bo., Invoice y otros tipos obligatorios; ver [Archivos mínimos por tipo de proveedor](#archivos-mínimos-por-tipo-de-proveedor)), contrato/anexo disponible, complemento y procesabilidad.
@@ -302,7 +311,7 @@ El PMO (rol `INTERNAL`) y el Administrador revisan las facturas enviadas (HU-18,
 
 - **Bandeja:** **Facturas** abre en "Enviada", con las que más han esperado primero (orden por fecha de envío, también en las páginas siguientes). "Todos los estados" u otro estatus vuelven al orden por fecha de creación. El filtro de origen separa facturas nacionales e internacionales. Cada fila muestra proveedor, folio y número, origen, proyecto, fecha de envío, monto, score con el número de advertencias y estatus. El proveedor conserva su listado de siempre.
 - **Ver documentos:** el ícono del ojo abre el documento en una pestaña del portal. Las páginas de un PDF se muestran como imágenes renderizadas en el servidor (hasta 20 páginas); las imágenes se muestran tal cual y el XML o el texto, escapados (hasta 200,000 caracteres). El navegador nunca abre el PDF ni el XML como documento, así que no depende de su visor ni se relaja la CSP. La autorización es la de la descarga, que sigue siendo un adjunto.
-- **Detalle:** para el PMO y el Administrador, un bloque "Proveedor" (origen, identificador fiscal, correo y estatus) y el "Historial" con los envíos del proveedor y las revisiones (decisión, observaciones y revisor) en orden cronológico.
+- **Detalle:** para el PMO y el Administrador, un bloque "Proveedor" (origen, identificador fiscal, correo y estatus) y el "Historial" con los envíos del proveedor, las revisiones (decisión, observaciones y revisor) y la cancelación, en orden cronológico. El proveedor ve el mismo historial como "Seguimiento" (ver [Seguimiento del proveedor](#seguimiento-del-proveedor)).
 - **Decisión (HU-20):** en el panel "Decisión" del detalle de una factura "Enviada" (el botón "Decidir" del encabezado lleva ahí), con tres botones:
   - **Autorizar** pide confirmación y envía a Recepción de Facturas el correo "Autorizada" (RN-HU20-02: número, proveedor y monto total con moneda);
   - **Observaciones** y **Rechazar** exigen las observaciones (hasta 2,000 caracteres; RN-HU20-01) y envían al correo del proveedor el correo respectivo con la causa (RN-HU20-03). Con Observaciones el proveedor corrige y reenvía; Rechazada y Autorizada no admiten otra decisión (sólo la cancelación del proveedor).
@@ -531,6 +540,7 @@ Los XML bajo `data/demo_documents/` son estructuralmente útiles para el parser,
 - Las Reglas de validación y los catálogos son editables, pero los pesos del score siguen en el código y no se pueden crear reglas nuevas desde la interfaz. Los catálogos se usan en la validación del CFDI; la moneda del contrato sigue siendo texto libre de tres letras.
 - Las reglas `INT` del Invoice internacional buscan texto literal y aún no se calibran con invoices reales; no hay extracción automática de datos del Invoice.
 - Los correos (credenciales, decisión del PMO, cancelación) se envían de forma síncrona, sin cola ni reintentos automáticos; un envío fallido se reenvía a mano. No hay recordatorio antes de que venza el plazo de 72 horas de una cancelación.
+- El monto acumulado del tablero suma los totales sin convertir moneda: con facturas en MXN y USD es sólo una referencia.
 - La contraseña temporal no se resguarda aún en ClickCloud (falta su API), no expira y no hay recuperación de contraseña.
 - La verificación documental del Anexo A es presencia/vigencia referencial, no validación legal.
 - Bootstrap 5.3.3 y Bootstrap Icons están incluidos bajo `app/static/vendor/`; la interfaz tampoco requiere Internet.

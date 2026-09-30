@@ -5,7 +5,7 @@ import re
 import shutil
 import sys
 import tempfile
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
 
@@ -175,6 +175,10 @@ def seed_international(db, workdir: Path, demo: Path, password: str, admin_id: i
         )
     )
     db.commit()
+
+
+def audit_entry(user_id: int, action: str, invoice_id: int, at: datetime) -> AuditLog:
+    return AuditLog(user_id=user_id, action=action, entity="Invoice", entity_id=str(invoice_id), timestamp=at)
 
 
 def add_document(
@@ -437,38 +441,44 @@ def main(passwords: dict[str, str] | None = None) -> None:
                     )
                 db.commit()
                 run_validation(db, invoice, users[2].id)
-                invoice.status = final_status
-                if final_status in submitted:
-                    invoice.submitted_at = datetime.now(timezone.utc)
-                if final_status in decided:
-                    invoice.reviewed_by = users[1].id
-                    invoice.reviewed_at = datetime.now(timezone.utc)
-                    db.add(
-                        Review(
-                            invoice_id=invoice.id,
-                            reviewer_id=users[1].id,
-                            decision=final_status.value,
-                            comments=note
-                            if final_status == InvoiceStatus.REQUIRES_CORRECTION
-                            else f"Decision demo: {note}",
+                # Sin autoflush: ck_invoices_cancellation exige el estatus y los datos de la cancelacion juntos.
+                with db.no_autoflush:
+                    provider_id, pmo_id = users[2].id, users[1].id
+                    now = datetime.now(timezone.utc)
+                    invoice.status = final_status
+                    if final_status in submitted:
+                        # Envio con su auditoria: el "Seguimiento" (HU-17) lo muestra antes de la decision.
+                        invoice.submitted_at = now - timedelta(hours=2)
+                        db.add(audit_entry(provider_id, "INVOICE_SUBMITTED", invoice.id, invoice.submitted_at))
+                    if final_status in decided:
+                        invoice.reviewed_by = pmo_id
+                        invoice.reviewed_at = now
+                        db.add(
+                            Review(
+                                invoice_id=invoice.id,
+                                reviewer_id=pmo_id,
+                                decision=final_status.value,
+                                comments=note
+                                if final_status == InvoiceStatus.REQUIRES_CORRECTION
+                                else f"Decision demo: {note}",
+                                created_at=now,
+                            )
                         )
-                    )
-                if final_status == InvoiceStatus.CANCELLED:
-                    ack_pdf = workdir / "acuse_cancelacion_CANCELADA-001.pdf"
-                    create_cancellation_ack_pdf(ack_pdf)
-                    # Sin autoflush: ck_invoices_cancellation exige el estatus y los datos de la cancelacion juntos.
-                    with db.no_autoflush:
+                    if final_status == InvoiceStatus.CANCELLED:
+                        ack_pdf = workdir / "acuse_cancelacion_CANCELADA-001.pdf"
+                        create_cancellation_ack_pdf(ack_pdf)
                         add_document(
                             db,
-                            user_id=users[2].id,
+                            user_id=provider_id,
                             supplier_id=moral.id,
                             invoice_id=invoice.id,
                             doc_type=DocumentType.CANCELLATION_ACK.value,
                             source=ack_pdf,
                         )
-                        invoice.cancelled_at = datetime.now(timezone.utc)
-                        invoice.cancelled_by = users[2].id
-                        invoice.cancellation_deadline = invoice.cancelled_at + CANCELLATION_WINDOW
+                        invoice.cancelled_at = now
+                        invoice.cancelled_by = provider_id
+                        invoice.cancellation_deadline = now + CANCELLATION_WINDOW
+                        db.add(audit_entry(provider_id, "INVOICE_CANCELLED", invoice.id, now))
             db.add(
                 AuditLog(
                     user_id=users[0].id,
