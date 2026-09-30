@@ -40,8 +40,14 @@ Este mismo cambio también queda excluido, porque describe el error.
 ### D3. El comportamiento de RN-HU03-01 va en el cambio siguiente
 La RN corregida dice que el portal "no almacena contraseñas ni sus hashes". Hoy el portal guarda el hash Argon2. Si este cambio lo exigiera en la spec, la spec afirmaría algo falso hasta que se aplique `add-keycloak-authentication`. Aquí sólo se corrige el término en el requirement vigente. El requirement de custodia en el IdP lo agrega `add-keycloak-authentication`, que es el cambio donde se vuelve cierto.
 
-### D4. Edición de los `.docx` con python-docx, run a run
-Se usa python-docx desde un entorno virtual temporal, fuera del proyecto y sin agregarlo a las dependencias. Cada párrafo afectado tiene un único run: se reemplaza `run.text` y el estilo del run y del párrafo se conserva. La fila v1.4 se agrega copiando la fila 1.3 (`deepcopy` del `<w:tr>`) y cambiando sólo sus textos. La portada pasa de "Versión 1.3" a "Versión 1.4" y la fecha a la de la corrección.
+### D4. Edición de los `.docx` sobre el XML, run a run
+Se edita el paquete OOXML con la biblioteca estándar (`zipfile`), sin instalar dependencias:
+- Cada texto afectado ocupa un único `<w:t>`. Se reemplaza sólo ese contenido y se exige exactamente una aparición de cada texto de origen.
+- Las demás partes del paquete se copian byte a byte; sólo cambian `word/document.xml` y `word/footer1.xml`.
+- La fila v1.4 se agrega copiando la fila anterior de sombreado alterno (la 1.2) y cambiando sólo sus cuatro textos.
+- La portada pasa de "Versión 1.3" a "Versión 1.4", con la fecha de la corrección, y el pie de página de "v1.3" a "v1.4".
+
+*Alternativa:* python-docx. Se descarta: instala un paquete externo y reescribe todo el paquete al guardar.
 
 Si algún párrafo no pudiera editarse así, no se regenera el documento: se lista con el texto actual y el propuesto para editarlo a mano.
 
@@ -71,5 +77,6 @@ Si algún párrafo no pudiera editarse así, no se regenera el documento: se lis
 ## Risks / Trade-offs
 
 - **[El ERS está abierto en LibreOffice]** → si se guarda desde LibreOffice después de la edición, se pierde. Hay que cerrarlo antes (D4).
-- **[python-docx reescribe partes del paquete OOXML al guardar]** → al terminar se compara el texto de todos los párrafos antes y después: sólo pueden cambiar los 9 párrafos y la tabla de versiones.
+- **[Edición directa del XML]** → al terminar se compara el texto de todos los párrafos antes y después (sólo cambian la portada, los 8 párrafos y la fila nueva), se comprueba que las demás partes del paquete son idénticas y que el ZIP es íntegro.
+- **[La fila 1.4 menciona "ClickCloud"]** → es intencional: describe la corrección. Es la única aparición que queda en el ERS.
 - **[Grep con exclusiones]** → una aparición nueva en una ruta excluida no se detectaría. Las exclusiones son sólo de registro histórico, que no se edita.

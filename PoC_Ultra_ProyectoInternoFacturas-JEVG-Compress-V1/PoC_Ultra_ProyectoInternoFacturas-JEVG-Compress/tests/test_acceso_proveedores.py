@@ -32,7 +32,7 @@ PASSWORD_LINE = re.compile(r"Contraseña temporal: (\S+)")
 
 
 class RecordingVault:
-    """Gestor de secretos de prueba: registra cada resguardo y el estatus que el proveedor tiene en la base de datos
+    """Proveedor de identidad de prueba: registra cada entrega y el estatus que el proveedor tiene en la base de datos
     en ese momento (visto desde otra sesion)."""
 
     name = "recording"
@@ -43,7 +43,7 @@ class RecordingVault:
 
     def store_temporary_password(self, *, supplier_id: int, username: str, password: str) -> None:
         if self.fail_after is not None and len(self.calls) >= self.fail_after:
-            raise RuntimeError("Gestor de secretos no disponible")
+            raise RuntimeError("Proveedor de identidad no disponible")
         with SessionLocal() as other:
             committed = other.scalar(select(Supplier.status).where(Supplier.id == supplier_id))
         self.calls.append({"supplier_id": supplier_id, "username": username, "password": password, "seen": committed})
@@ -267,7 +267,7 @@ def test_fallo_del_resguardo_revierte_la_autorizacion(registered_suppliers, monk
     monkeypatch.setattr(secret_vault, "get_vault", lambda: failing)
     with SessionLocal() as db:
         admin = db.get(User, admin_id())
-        with pytest.raises(RuntimeError, match="Gestor de secretos"):
+        with pytest.raises(RuntimeError, match="Proveedor de identidad"):
             access.authorize(db, [s.id for s in rows], admin, "http://portal/login")
     for row in rows:
         assert supplier(row.id).status == SupplierStatus.REGISTERED
@@ -350,7 +350,7 @@ def test_proveedor_con_usuario_propio(client, registered_suppliers):
     assert "Autorizado · Ya tenía usuario" in client.get(response.headers["location"]).text
 
 
-def test_resguardo_en_el_gestor_de_secretos(client, registered_suppliers, vault):
+def test_entrega_al_proveedor_de_identidad(client, registered_suppliers, vault):
     [registered] = registered_suppliers()
     login(client)
     authorize(client, [registered.id])

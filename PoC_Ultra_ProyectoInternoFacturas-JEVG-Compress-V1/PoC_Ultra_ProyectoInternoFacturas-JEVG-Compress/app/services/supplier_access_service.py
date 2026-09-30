@@ -4,8 +4,8 @@
   usuario Proveedor de cada uno con una contrasena temporal y, despues del commit, envia el correo de credenciales (D3).
 - `resend_credentials()`: contrasena nueva mientras el proveedor no haya iniciado sesion (D9).
 
-La contrasena temporal solo existe en claro en memoria, en el gestor de secretos (secret_vault) y en el correo: nunca
-en la base de datos, la auditoria, la bitacora de envios ni el log (RN-HU03-01, D6).
+La contrasena temporal solo existe en claro en memoria, en la entrega al proveedor de identidad (secret_vault) y en el
+correo: nunca en la base de datos, la auditoria, la bitacora de envios ni el log (RN-HU03-01, D6).
 """
 
 import logging

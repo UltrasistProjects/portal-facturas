@@ -455,7 +455,7 @@ Plan conjunto con EP-02. Cada ola puede corresponder a un sprint de dos semanas 
 | Integración | Estado actual | Efecto en la épica | Mitigación |
 | --- | --- | --- | --- |
 | Servidor SMTP (HU-08) | En desarrollo se usa el transporte `file`. El README tiene la guía "Conectar el servidor SMTP" | El correo de cancelación (HU-14) no sale del portal hasta conectarlo | El envío se registra en la bitácora y las pruebas usan `MAIL_BACKEND=file`. Conectar el servidor antes del piloto |
-| ClickCloud (RN-HU03-01) | Adaptador `NullSecretVault`: hoy no se resguarda nada | HU-10 no depende de ClickCloud: la contraseña temporal deja de servir al cambiarla | Cuando se integre, evaluar si se purga la contraseña temporal del gestor después del cambio |
+| Keycloak, proveedor de identidad (RN-HU03-01) | Adaptador `NullSecretVault`: hoy las credenciales no se gestionan en Keycloak | HU-10 no depende de Keycloak: la contraseña temporal deja de servir al cambiarla | Lo resuelve el cambio `add-keycloak-authentication`: las credenciales y el primer acceso pasan a Keycloak |
 | Muestras de invoices extranjeros (minuta; Octavio Rivera, 22-sep-2026) | No están en el repositorio | Sin ellas no se pueden calibrar las reglas INT (HU-16) | Entregar las reglas como advertencias no bloqueantes y ajustarlas con las muestras |
 
 ## 10. Riesgos y mitigaciones

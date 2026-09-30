@@ -457,7 +457,7 @@ Un proveedor nace **"Registrado"** (carga masiva o formulario individual), sin u
 - **Resumen:** tras autorizar, el listado muestra a cada proveedor con "Credenciales enviadas", "Envío fallido" (con el error), "Ya tenía usuario", "Omitido" o "No autorizado". Los proveedores cuyo último envío falló llevan la marca "Credenciales no enviadas".
 - **Expediente:** la sección "Acceso al portal" muestra el usuario, el último acceso, si la contraseña sigue siendo la temporal y el último envío de credenciales. **"Reenviar credenciales"** genera una contraseña temporal nueva (la anterior deja de funcionar), sólo mientras el proveedor no la haya cambiado, aunque ya haya entrado con ella.
 - **Auditoría:** `SUPPLIER_STATUS_CHANGED`, `USER_CREATED` (origen `SUPPLIER_AUTHORIZATION`), `SUPPLIER_BULK_AUTHORIZED` y `SUPPLIER_CREDENTIALS_RESENT`, sin contraseñas. En el log técnico queda `supplier.bulk_authorize` sólo con contadores.
-- **ClickCloud (RN-HU03-01):** `app/services/secret_vault.py` es el punto de integración. Recibe la contraseña temporal antes de confirmar la transacción; si falla, la autorización se revierte. Hoy el adaptador activo (`NullSecretVault`) no guarda nada: falta la API de ClickCloud.
+- **Proveedor de identidad (RN-HU03-01):** las credenciales se gestionan en Keycloak, el proveedor de identidad (IdP) del portal. `app/services/secret_vault.py` es el punto de integración provisional: recibe la contraseña temporal antes de confirmar la transacción; si falla, la autorización se revierte. Hoy el adaptador activo (`NullSecretVault`) no hace nada; lo sustituye el aprovisionamiento en Keycloak (cambio `add-keycloak-authentication`).
 - **Primer acceso:** el proveedor debe cambiar la contraseña temporal antes de usar el portal; ver la sección siguiente.
 
 ## Primer acceso y cambio de contraseña
@@ -570,7 +570,7 @@ Los XML bajo `data/demo_documents/` son estructuralmente útiles para el parser,
 - Las reglas `INT` del Invoice internacional buscan texto literal y aún no se calibran con invoices reales; no hay extracción automática de datos del Invoice.
 - Los correos (credenciales, decisión del PMO, cancelación) se envían de forma síncrona, sin cola ni reintentos automáticos; un envío fallido se reenvía a mano. No hay recordatorio antes de que venza el plazo de 72 horas de una cancelación.
 - El monto acumulado del tablero suma los totales sin convertir moneda: con facturas en MXN y USD es sólo una referencia.
-- La contraseña temporal no se resguarda aún en ClickCloud (falta su API), no expira y no hay recuperación de contraseña.
+- La contraseña temporal aún no se gestiona en Keycloak (el portal guarda su hash), no expira y no hay recuperación de contraseña.
 - La verificación documental del Anexo A es presencia/vigencia referencial, no validación legal.
 - Bootstrap 5.3.3 y Bootstrap Icons están incluidos bajo `app/static/vendor/`; la interfaz tampoco requiere Internet.
 
