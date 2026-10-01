@@ -401,7 +401,7 @@ El Administrador define en **Administración › Plantillas de correo** (`/admin
 
 - **Texto:** plano, sin HTML. Una variable se escribe `{{numero_factura}}` (se admiten espacios interiores) y sólo se reemplaza por su valor: no hay expresiones, filtros ni condiciones, y el texto nunca pasa por Jinja2. Una llave sencilla es texto normal. El asunto ocupa una línea de hasta 200 caracteres; el cuerpo, hasta 5000. Al guardar se recortan los espacios de los extremos y `CRLF` pasa a `LF`.
 - **Validación:** al guardar y en la vista previa se reportan juntos, con HTTP 400 y el formato "Campo: mensaje", los campos vacíos o demasiado largos, las variables sin cerrar, las que no son de la plantilla y las obligatorias que faltan en el cuerpo.
-- **Vista previa:** compone el borrador con los datos de ejemplo de la tabla, sin JavaScript y sin guardar ni auditar.
+- **Vista previa:** compone el borrador con los datos de ejemplo de la tabla, sin JavaScript y sin guardar ni auditar. Muestra el correo tal como se envía, su versión HTML en un `iframe` aislado (`sandbox`, `srcdoc`), y debajo, plegada, la versión de texto plano.
 - **Texto predeterminado:** "Cargar texto predeterminado" lo pone en el formulario; la plantilla no cambia hasta pulsar Guardar.
 - **Concurrencia y auditoría:** el formulario lleva la versión de la plantilla; si otro Administrador guardó antes, el guardado responde 409 sin cambios. Un guardado sin cambios no aumenta la versión. Cada cambio queda en el Audit Log (`NOTIFICATION_TEMPLATE_UPDATED`) con el asunto, el cuerpo y la versión anteriores y nuevos, y en el log técnico (`notification_template.updated`), sin el texto.
 - **Composición para HU-20 y HU-14:** `app.services.notification_templates.compose(db, NotificationEvent.INVOICE_REJECTED, numero_factura=..., folio_interno=..., proveedor=..., monto=Decimal(...), moneda="MXN", fecha_estatus=..., observaciones=...)` devuelve `ComposedEmail(subject, body)` con la plantilla vigente.
@@ -441,7 +441,7 @@ notification_service.notify(
 )
 ```
 
-- Resuelve los destinatarios con la configuración vigente, compone el correo con la plantilla de HU-05 y lo envía en texto plano UTF-8.
+- Resuelve los destinatarios con la configuración vigente, compone el correo con la plantilla de HU-05 y lo envía como `multipart/alternative` UTF-8: el texto plano y una versión HTML con el logo de ULTRASIST incrustado (`cid:`) en una tarjeta centrada con estilos en línea (`app/services/mail_layout.py`, `app/email_templates/layout.html`). La versión HTML se deriva del texto: cada valor se escapa, las direcciones `http(s)` se vuelven enlaces y un párrafo de líneas `Etiqueta: valor` se muestra como bloque de datos. Las plantillas de HU-05 siguen siendo de texto plano.
 - Registra el intento en `email_deliveries` (evento, destinatarios, resultado, error técnico, entidad y usuario, **sin asunto ni cuerpo**) y confirma ese registro.
 - Un error del servidor de correo **no** se propaga: el envío queda `FAILED` en la bitácora y en el log (`notification.failed`). No hay cola ni reintentos automáticos.
 - Lanza `NotificationDataError` si falta el correo del proveedor o una variable de la plantilla.
@@ -513,7 +513,7 @@ Los aplica Keycloak (RF-06); el portal no muestra formularios de contraseña.
 - **Contraseñas e inicio de sesión:** en Keycloak (ver "Keycloak: inicio de sesión y cuentas"). El portal no recibe, guarda ni verifica contraseñas.
 - **Sesiones:** revocables del lado del servidor (`user_sessions`). La cookie firmada sólo lleva un identificador opaco y el token CSRF (y, durante el viaje a Keycloak, `state`, `nonce` y `code_verifier`). Expiran tras 60 minutos de inactividad u 8 horas de duración, y se revocan al cerrar sesión o al deshabilitar al usuario; ambas acciones cierran también la sesión de Keycloak.
 - **CSRF:** token de sesión en todas las operaciones mutables, que sólo aceptan POST.
-- **Cabeceras:** CSP `default-src 'self'` (con `form-action` que admite sólo el origen de Keycloak, destino del cierre de sesión), `X-Frame-Options: DENY`, `nosniff` y `Referrer-Policy`, más HSTS sobre HTTPS. **No agregue scripts ni estilos en línea:** la CSP los bloquea; use archivos bajo `app/static/`.
+- **Cabeceras:** CSP `default-src 'self'` (con `form-action` que admite sólo el origen de Keycloak, destino del cierre de sesión), `X-Frame-Options: DENY`, `nosniff` y `Referrer-Policy`, más HSTS sobre HTTPS. **No agregue scripts ni estilos en línea:** la CSP los bloquea; use archivos bajo `app/static/`. La única excepción es la vista previa del correo: su respuesta agrega `style-src 'self' 'unsafe-hashes'` con el hash de cada atributo `style` del correo (`content_security_policy_with_styles()`), sin `'unsafe-inline'`.
 - **Cargas:**
   - UUID interno como nombre de almacenamiento y SHA-256;
   - verificación del contenido contra la extensión (firmas PDF, PNG y JPEG; XML; texto UTF-8);

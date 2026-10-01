@@ -365,7 +365,7 @@ def test_aviso_a_recepcion_con_la_fecha_limite(client):
     [message] = [m for m in messages() if invoice.invoice_number in m["Subject"]]
     assert message["To"] == RECEPTION
     assert message["Subject"] == f"Cancelación de la factura {invoice.invoice_number} de {PROVIDER_NAME}"
-    body = message.get_content()
+    body = message.get_body(("plain",)).get_content()
     assert (
         f"La factura número {invoice.invoice_number} del proveedor {PROVIDER_NAME} ha sido cancelada. "
         f"Por favor acepte la “Cancelación” antes del {business(cancelled.cancellation_deadline)}."
@@ -400,7 +400,7 @@ def test_servidor_de_correo_caido_y_reenvio(client, smtp_down, monkeypatch):
     assert resent.headers["location"] == f"/invoices/{invoice.id}?notification={sent.id}#decision-result"
     [message] = [m for m in messages() if invoice.invoice_number in m["Subject"]]
     deadline = business(reload(invoice.id).cancellation_deadline)
-    assert message["To"] == RECEPTION and f"antes del {deadline}." in message.get_content()
+    assert message["To"] == RECEPTION and f"antes del {deadline}." in message.get_body(("plain",)).get_content()
     [entry] = audits(invoice.id, "INVOICE_NOTIFICATION_RESENT")
     assert entry.new_value == {"event": "INVOICE_CANCELLED"}
     page = client.get(resent.headers["location"]).text

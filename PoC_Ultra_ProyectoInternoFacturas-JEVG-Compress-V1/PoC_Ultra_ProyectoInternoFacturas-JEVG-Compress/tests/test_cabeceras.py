@@ -33,6 +33,12 @@ def test_csp_admite_solo_el_origen_de_keycloak():
     assert policy.count("http") == 1
 
 
+def test_csp_con_hashes_de_estilo():
+    # Solo la vista previa del correo la usa: admite esos atributos style y ningun otro estilo en linea.
+    policy = content_security_policy("http://keycloak.test", ["'sha256-a'", "'sha256-b'"])
+    assert policy == f"{CONTENT_SECURITY_POLICY}; style-src 'self' 'unsafe-hashes' 'sha256-a' 'sha256-b'"
+
+
 @pytest.mark.parametrize("path", ["/login", "/static/css/app.css", "/ruta-inexistente", "/health"])
 def test_cabeceras_en_paginas_estaticos_y_errores(client, path):
     response = client.get(path, follow_redirects=False)

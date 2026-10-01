@@ -126,7 +126,7 @@ def test_motivo_del_rechazo_igual_al_correo(client):
     text = "El RFC del receptor no corresponde.\nEmita un CFDI nuevo."
     invoice = decided("REJECTED", text)
     [message] = [m for m in messages() if invoice.invoice_number in m["Subject"]]
-    assert text in message.get_content()
+    assert text in message.get_body(("plain",)).get_content()
     login(client, PROVIDER_EMAIL)
     shown = cause(client.get(f"/invoices/{invoice.id}").text)
     assert "Motivo del rechazo" in shown and text in shown and "Corrija lo indicado" not in shown

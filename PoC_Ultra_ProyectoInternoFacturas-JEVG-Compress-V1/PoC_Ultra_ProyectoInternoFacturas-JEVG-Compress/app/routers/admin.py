@@ -18,6 +18,7 @@ from app.core.constants import (
 )
 from app.core.database import get_db
 from app.core.errors import BusinessRuleError, InvalidInputError, NotFoundError
+from app.core.middleware import content_security_policy_with_styles
 from app.core.security import require_roles, validate_csrf
 from app.models import AuditLog, EmailDelivery, Supplier, User
 from app.repositories.pagination import back_to, list_query, paginate, search
@@ -26,9 +27,9 @@ from app.schemas import UserCreate, validation_message
 from app.services import catalog_service as catalogs
 from app.services import document_requirements_service as requirements
 from app.services import identity_service as identity
+from app.services import mail_layout, session_service
 from app.services import notification_service as notifications
 from app.services import notification_templates as templates_service
-from app.services import session_service
 from app.services import validation_settings_service as validation_settings
 from app.services.audit_service import audit
 from app.services.catalog_template import build_catalog_template, template_filename
@@ -430,6 +431,7 @@ def _template_editor(
     error: str | None = None,
     notice: str | None = None,
     preview: templates_service.ComposedEmail | None = None,
+    preview_html: str | None = None,
     status_code: int = 200,
 ):
     context = {
@@ -442,6 +444,7 @@ def _template_editor(
         "error": error,
         "notice": notice,
         "preview": preview,
+        "preview_html": preview_html,
     }
     return templates.TemplateResponse(
         request, "admin/notification_template_edit.html", context, status_code=status_code
@@ -499,7 +502,14 @@ async def preview_notification_template(
             request, user, spec, draft.subject, draft.body, version, errors=draft.errors, status_code=400
         )
     preview = templates_service.compose_sample(spec, draft)
-    return _template_editor(request, user, spec, draft.subject, draft.body, version, preview=preview)
+    # El correo tal como se envia, en un iframe srcdoc que hereda la CSP: se admiten solo sus atributos style.
+    preview_html = mail_layout.render_preview(preview.subject, preview.body)
+    response = _template_editor(
+        request, user, spec, draft.subject, draft.body, version, preview=preview, preview_html=preview_html
+    )
+    hashes = mail_layout.style_hashes(preview_html)
+    response.headers["Content-Security-Policy"] = content_security_policy_with_styles(hashes)
+    return response
 
 
 @router.post("/notification-templates/{code}")

@@ -260,7 +260,7 @@ def test_autorizacion_notificada_a_recepcion(client):
     decide(client, invoice.id, "ACCEPTED")
     message = mail_for(invoice.invoice_number)
     assert message["To"] == RECEPTION and message["Subject"] == f"Factura {invoice.invoice_number} autorizada para pago"
-    body = message.get_content()
+    body = message.get_body(("plain",)).get_content()
     assert (
         f"La factura número {invoice.invoice_number} del proveedor Tecnologia Integral del Centro SA de CV "
         "por el monto $116,000.00 MXN ha sido Autorizada para su pago."
@@ -274,7 +274,7 @@ def test_rechazo_y_observaciones_notificados_al_proveedor(client, decision, labe
     decide(client, invoice.id, decision, "El RFC del receptor no corresponde")
     message = mail_for(invoice.invoice_number)
     assert message["To"] == PROVIDER_EMAIL
-    body = message.get_content()
+    body = message.get_body(("plain",)).get_content()
     assert f"“{label}”" in body and "El RFC del receptor no corresponde" in body
     [delivery] = deliveries(invoice.id)
     assert delivery.event == ("INVOICE_REJECTED" if decision == "REJECTED" else "INVOICE_OBSERVATIONS")
@@ -322,7 +322,7 @@ def test_reenvio_tras_una_falla(client, monkeypatch):
     failed, sent = deliveries(invoice.id)
     assert (failed.status, sent.status) == ("FAILED", "SENT")
     assert response.headers["location"] == f"/invoices/{invoice.id}?notification={sent.id}#decision-result"
-    assert "Corrija el periodo" in mail_for(invoice.invoice_number).get_content()
+    assert "Corrija el periodo" in mail_for(invoice.invoice_number).get_body(("plain",)).get_content()
     [entry] = audits(invoice.id, "INVOICE_NOTIFICATION_RESENT")
     assert entry.new_value == {"event": "INVOICE_OBSERVATIONS"}
     page = client.get(response.headers["location"]).text

@@ -2,7 +2,7 @@
 
 import re
 import uuid
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from contextvars import ContextVar
 
@@ -12,17 +12,30 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 from app.core.config import settings
 
 
-def content_security_policy(keycloak_origin: str) -> str:
+def content_security_policy(keycloak_origin: str, style_hashes: Sequence[str] = ()) -> str:
     """Viable sin excepciones: todos los assets son locales y no hay scripts ni estilos en linea. Bootstrap usa
     imagenes SVG en data: URIs, por eso img-src admite data:. form-action admite ademas el origen de Keycloak:
-    Chrome aplica form-action a la redireccion que sigue a POST /logout (end_session_endpoint)."""
-    return (
+    Chrome aplica form-action a la redireccion que sigue a POST /logout (end_session_endpoint).
+
+    `style_hashes` solo lo usa la vista previa del correo (HU-05): su iframe srcdoc hereda esta politica y necesita
+    los atributos style del correo. 'unsafe-hashes' admite exactamente esos valores y ningun otro estilo en linea."""
+    policy = (
         "default-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'self'; "
         f"form-action 'self' {keycloak_origin}; frame-ancestors 'none'"
     )
+    if style_hashes:
+        policy += f"; style-src 'self' 'unsafe-hashes' {' '.join(style_hashes)}"
+    return policy
 
 
 CONTENT_SECURITY_POLICY = content_security_policy(settings.keycloak_origin)
+
+
+def content_security_policy_with_styles(style_hashes: Sequence[str]) -> str:
+    """La CSP del portal con los atributos style de `style_hashes` admitidos (vista previa del correo)."""
+    return content_security_policy(settings.keycloak_origin, style_hashes)
+
+
 SECURITY_HEADERS = {
     "Content-Security-Policy": CONTENT_SECURITY_POLICY,
     "X-Frame-Options": "DENY",
@@ -79,6 +92,9 @@ class SecurityHeadersMiddleware:
             if message["type"] == "http.response.start":
                 headers = MutableHeaders(scope=message)
                 for name, value in extra.items():
+                    # La vista previa del correo trae su propia CSP, armada con content_security_policy().
+                    if name == "Content-Security-Policy" and name in headers:
+                        continue
                     headers[name] = value
             await send(message)
 

@@ -115,7 +115,7 @@ El sistema SHALL reportar todos los errores juntos, con el formato "Campo: mensa
 - **THEN** la respuesta HTTP 400 incluye "Asunto: es obligatorio" y "Cuerpo: debe incluir la variable obligatoria {{numero_factura}}"
 
 ### Requirement: Vista previa con datos de ejemplo
-`POST /admin/notification-templates/{codigo}/preview` SHALL validar el borrador con las mismas reglas del guardado. Si es válido, SHALL responder HTTP 200 con el formulario y, debajo, el asunto y el cuerpo compuestos con estos datos de ejemplo:
+`POST /admin/notification-templates/{codigo}/preview` SHALL validar el borrador con las mismas reglas del guardado. Si es válido, SHALL responder HTTP 200 con el formulario y, debajo, el asunto y el correo compuestos con estos datos de ejemplo:
 - `numero_factura` = "A-1024";
 - `folio_interno` = "FAC-2026-00042";
 - `proveedor` = "Servicios Digitales del Norte SA de CV";
@@ -129,6 +129,8 @@ El sistema SHALL reportar todos los errores juntos, con el formato "Campo: mensa
 - `url_portal` = "https://proveedores.ultrasist.com.mx/login".
 
 Si el borrador no es válido, SHALL responder HTTP 400 con los errores y sin vista previa. La vista previa MUST NOT guardar la plantilla, cambiar su versión ni generar registros de auditoría. SHALL funcionar sin JavaScript y mostrar el texto compuesto escapado.
+
+El correo SHALL mostrarse como lo recibe el destinatario: la misma versión HTML que se envía (spec `notificaciones-correo`), con el logo como `data:` URI, en un `iframe` con `sandbox` sin `allow-scripts` y el documento en `srcdoc`. Debajo, plegada, SHALL mostrarse la versión de texto plano. La respuesta SHALL admitir en su CSP sólo los atributos `style` de ese correo (spec `proteccion-http`).
 
 #### Scenario: Vista previa del texto predeterminado
 - **WHEN** el Administrador pide la vista previa de la plantilla Autorizada con su texto predeterminado
@@ -149,6 +151,10 @@ Si el borrador no es válido, SHALL responder HTTP 400 con los errores y sin vis
 #### Scenario: Borrador inválido
 - **WHEN** el Administrador pide la vista previa de un borrador sin una variable obligatoria
 - **THEN** la respuesta es HTTP 400 con el error correspondiente y la página no muestra la vista previa
+
+#### Scenario: Vista previa como el correo
+- **WHEN** el Administrador pide la vista previa de la plantilla Credenciales de acceso con su texto predeterminado
+- **THEN** la página contiene un `iframe` `sandbox="allow-same-origin"` cuyo `srcdoc` es el HTML del correo con el logo, el asunto "Acceso al Portal de Proveedores ULTRASIST" como título y "Contraseña temporal" con "Ejemplo#Temporal2026" en el bloque de datos, y la versión de texto plano plegada debajo
 
 ### Requirement: Guardado con control de edición concurrente
 `POST /admin/notification-templates/{codigo}` SHALL recibir `subject`, `body` y `version`, que es la versión que el Administrador tenía al abrir el formulario. Si el texto es válido y `version` coincide con la vigente, el sistema SHALL guardar el asunto y el cuerpo, aumentar la versión en 1 y registrar la fecha y el Administrador de la modificación. Después SHALL redirigir con HTTP 303 al listado, que muestra el aviso "Plantilla actualizada".

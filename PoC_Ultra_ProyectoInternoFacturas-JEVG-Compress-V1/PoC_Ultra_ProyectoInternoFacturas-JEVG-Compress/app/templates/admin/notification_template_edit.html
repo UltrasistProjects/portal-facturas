@@ -15,5 +15,8 @@
 {% for item in spec.variable_rows() %}<tr><td><span class="mono">{{ item.tag }}</span>{% if item.required %}<small>Obligatoria</small>{% endif %}</td><td>{{ item.description }}</td><td>{{ item.example }}</td></tr>
 {% endfor %}</tbody></table></div></section>
 </div>
-{% if preview %}<section class="panel template-preview"><div class="panel-header"><div><h2>Vista previa</h2><p>Compuesta con datos de ejemplo. La plantilla no se ha guardado.</p></div></div><dl class="data-list"><dt>Asunto</dt><dd>{{ preview.subject }}</dd></dl><div class="template-preview-body">{{ preview.body }}</div></section>{% endif %}
+{% if preview %}<section class="panel template-preview"><div class="panel-header"><div><h2>Vista previa</h2><p>Así se verá el correo, compuesto con datos de ejemplo. La plantilla no se ha guardado.</p></div></div><dl class="data-list"><dt>Asunto</dt><dd>{{ preview.subject }}</dd></dl>
+{# sandbox sin allow-scripts: nada se ejecuta en el correo; allow-same-origin solo deja que app.js ajuste la altura. #}
+<iframe class="email-preview" title="Vista previa del correo" sandbox="allow-same-origin" srcdoc="{{ preview_html }}"></iframe>
+<details class="template-preview-plain"><summary>Versión de texto plano</summary><div class="template-preview-body">{{ preview.body }}</div></details></section>{% endif %}
 {% endblock %}

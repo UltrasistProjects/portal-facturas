@@ -82,7 +82,7 @@ def messages() -> list:
 def password_for(email: str) -> str:
     """Contrasena temporal del ultimo correo de credenciales enviado a `email`."""
     found = [m for m in messages() if m["To"] == email]
-    return PASSWORD_LINE.search(found[-1].get_content()).group(1)
+    return PASSWORD_LINE.search(found[-1].get_body(("plain",)).get_content()).group(1)
 
 
 def audit_count() -> int:
@@ -392,7 +392,7 @@ def test_credenciales_enviadas(client, registered_suppliers):
     [message] = messages()
     assert message["To"] == registered.email and message["Cc"] is None
     assert message["Subject"] == "Acceso al Portal de Proveedores ULTRASIST"
-    body = message.get_content()
+    body = message.get_body(("plain",)).get_content()
     assert f"Usuario: {registered.email}" in body and "Portal: http://testserver/login" in body
     assert PASSWORD_LINE.search(body)
     [delivery] = deliveries()
