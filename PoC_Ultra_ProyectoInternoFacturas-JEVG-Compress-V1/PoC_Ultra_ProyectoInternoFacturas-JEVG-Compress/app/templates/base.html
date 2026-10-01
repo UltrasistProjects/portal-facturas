@@ -42,6 +42,7 @@
 </div>
 {% else %}{% block anonymous %}{% endblock %}{% endif %}
 <script src="{{ url_for('static', path='/vendor/bootstrap.bundle.min.js') }}"></script>
+<script src="{{ url_for('static', path='/js/form_validation.js') }}"></script>
 <script src="{{ url_for('static', path='/js/app.js') }}"></script>
 {% block scripts %}{% endblock %}
 </body></html>

@@ -217,6 +217,8 @@ Login → alta de factura → carga/reemplazo documental → "Verificar" (opcion
 
 El proveedor registra, carga, verifica y envía sus facturas, y sólo ve las suyas. `PMO` revisa y decide. `Administrador` añade administración de usuarios, proveedores, contratos, reglas visibles y Audit Log. `PMO` y `Administrador` consultan las facturas y descargan sus documentos, pero no las registran, cargan, verifican ni envían (403).
 
+**Formularios y confirmaciones.** Con JavaScript (`form_validation.js`, en todas las páginas), los errores de validación aparecen en español debajo de cada campo, en lugar de la burbuja del navegador. Al enviar se marcan todos y el foco va al primero. Un campo se valida al salir de él con un valor cambiado; desde que muestra un error, el mensaje se actualiza al escribir y desaparece cuando el valor es válido. Las reglas siguen siendo los atributos de cada campo (`required`, `pattern`, `minlength`, `min`, `step`, `type`): el script sólo cambia cómo se muestran, y el servidor valida igual. Las confirmaciones usan modales de Bootstrap, nunca `alert`, `confirm` ni `prompt`. Sin JavaScript queda la validación nativa del navegador.
+
 ### Estatus de la factura
 
 Modelo del ERS (§3.6), fijado por EP-01 para el proveedor y el PMO:
@@ -367,7 +369,7 @@ El PMO (rol `PMO`) y el Administrador (rol `Administrador`) revisan las facturas
 - **Ver documentos:** el ícono del ojo abre el documento en una pestaña del portal. Las páginas de un PDF se muestran como imágenes renderizadas en el servidor (hasta 20 páginas); las imágenes se muestran tal cual y el XML o el texto, escapados (hasta 200,000 caracteres). El navegador nunca abre el PDF ni el XML como documento, así que no depende de su visor ni se relaja la CSP. La autorización es la de la descarga, que sigue siendo un adjunto.
 - **Detalle:** para el PMO y el Administrador, un bloque "Proveedor" (origen, identificador fiscal, correo y estatus) y el "Historial" con los envíos del proveedor, las revisiones (decisión, observaciones y revisor) y la cancelación, en orden cronológico. El proveedor ve el mismo historial como "Seguimiento" (ver [Seguimiento del proveedor](#seguimiento-del-proveedor)).
 - **Decisión (HU-20):** en el panel "Decisión" del detalle de una factura "Enviada" (el botón "Decidir" del encabezado lleva ahí), con tres botones:
-  - **Autorizar** pide confirmación y envía a Recepción de Facturas el correo "Autorizada" (RN-HU20-02: número, proveedor y monto total con moneda);
+  - **Autorizar** pide confirmación en un modal y envía a Recepción de Facturas el correo "Autorizada" (RN-HU20-02: número, proveedor y monto total con moneda);
   - **Observaciones** y **Rechazar** exigen las observaciones (hasta 2,000 caracteres; RN-HU20-01) y envían al correo del proveedor el correo respectivo con la causa (RN-HU20-03). Con Observaciones el proveedor corrige y reenvía; Rechazada y Autorizada no admiten otra decisión (sólo la cancelación del proveedor).
 - **Una decisión por envío:** la factura se bloquea al decidir; una segunda decisión responde 409 "La factura ya fue revisada" sin revisión ni correo.
 - **Correo de la decisión:** sale después de confirmarla; el detalle muestra "Correo enviado a …" o el error. Si el último envío falló, "Reenviar notificación" lo intenta de nuevo (auditoría `INVOICE_NOTIFICATION_RESENT`).

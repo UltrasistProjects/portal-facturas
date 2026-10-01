@@ -30,3 +30,6 @@
 .kpi-grid{grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}a.kpi-card{display:block;color:inherit;text-decoration:none;transition:box-shadow .15s,transform .15s}a.kpi-card:hover,a.kpi-card:focus-visible{box-shadow:0 6px 18px #14273d1f;transform:translateY(-1px)}.kpi-card.danger{border-top-color:#d96a6a}.kpi-card.muted{border-top-color:#6b7684}.decision-cause p{margin:4px 0 0;white-space:pre-wrap;overflow-wrap:anywhere}.decision-cause .decision-next{white-space:normal;font-weight:600}.history-detail{white-space:pre-wrap;overflow-wrap:anywhere}
 /* Alta de usuarios: contrasena temporal que se muestra una sola vez (add-keycloak-authentication) */
 .temporary-credentials{display:grid;gap:6px}.temporary-credentials code{font-size:15px;color:var(--ink);background:white;border:1px solid var(--line);border-radius:6px;padding:6px 10px;justify-self:start;user-select:all}
+
+/* Errores de validacion junto al campo (interfaz-sin-dialogos-nativos) */
+.dropzone.is-invalid{border-color:var(--bs-form-invalid-border-color);background:#fff8f8}.catalog-edit-form{flex-wrap:wrap}.catalog-edit-form .form-control{flex:1 1 0;min-width:0}.catalog-edit-form .invalid-feedback{flex-basis:100%;order:1;margin-top:0}
