@@ -25,6 +25,7 @@ from app.services.audit_service import audit
 from app.services.catalog_service import active_entries
 
 MSG_RFC_IN_USE = "Ya existe un proveedor con ese RFC."
+MSG_FOREIGN_TAX_ID_IN_USE = "Ya existe un proveedor con ese identificador fiscal extranjero en ese pais."
 MSG_EMAIL_IN_USE = "El correo ya lo usa otro proveedor o usuario."
 MSG_ACTIVITY = "Actividad principal: no es una actividad activa del catalogo"
 # Campos de SupplierProfile que se guardan tal cual en el proveedor (supplier_type solo decide que se exige).
@@ -126,8 +127,12 @@ def _check_activity(db: Session, data: SupplierProfile, current: str | None = No
 
 def create_supplier(db: Session, data: SupplierCreate, user_id: int) -> Supplier:
     _check_activity(db, data)
-    if db.scalar(select(Supplier.id).where(Supplier.rfc == data.rfc)):
+    # Cada origen se compara solo por su identidad: `rfc == None` seria `IS NULL` y chocaria con los internacionales.
+    if data.rfc and db.scalar(select(Supplier.id).where(Supplier.rfc == data.rfc)):
         raise BusinessRuleError(MSG_RFC_IN_USE)
+    foreign_identity = (Supplier.country == data.country, Supplier.foreign_tax_id == data.foreign_tax_id)
+    if data.foreign_tax_id and db.scalar(select(Supplier.id).where(*foreign_identity)):
+        raise BusinessRuleError(MSG_FOREIGN_TAX_ID_IN_USE)
     # Un correo corresponde a un solo proveedor y a su usuario (RD-06 de HU-01): HU-03 lo usa como usuario del portal.
     email_in_use = db.scalar(select(Supplier.id).where(func.lower(Supplier.email) == data.email)) or db.scalar(
         select(User.id).where(func.lower(User.email) == data.email)
@@ -136,7 +141,10 @@ def create_supplier(db: Session, data: SupplierCreate, user_id: int) -> Supplier
         raise BusinessRuleError(MSG_EMAIL_IN_USE)
     # Nace Registrado, como la carga masiva: el acceso al portal llega con la autorizacion (HU-02).
     supplier = Supplier(
+        origin=data.origin,
         rfc=data.rfc,
+        foreign_tax_id=data.foreign_tax_id,
+        country=data.country,
         supplier_type=data.supplier_type,
         email=data.email,
         status=SupplierStatus.REGISTERED,

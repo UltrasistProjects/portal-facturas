@@ -486,6 +486,10 @@ Los tres modos (STARTTLS con usuario, TLS directo y certificado no confiable) se
 
 Un proveedor nace **"Registrado"** (carga masiva o formulario individual), sin usuario ni acceso al portal, y no puede facturar: SUP-001 exige el estatus operativo, que ahora se muestra como **"Autorizado"** (HU-02).
 
+En ambos casos, el **Origen** decide la identidad fiscal: el **Nacional** se registra con RFC y país MX; el **Internacional**, con identificador fiscal extranjero y país distinto de MX, sin RFC. El formulario individual ("+ Agregar proveedor") rechaza combinaciones incongruentes (400) y un RFC o un par (país, identificador) ya registrados (409). El origen no se edita después.
+
+Con JavaScript (`supplier_form.js`), el alta muestra sólo los campos que aplican: RFC para el Nacional; identificador fiscal extranjero y país para el Internacional; fecha de constitución sólo para persona moral. Un campo que deja de aplicar se oculta, se limpia y se deshabilita: no se valida ni se envía. Al volver a aplicar, recupera su obligatoriedad. Sin JavaScript se ven todos y el servidor valida la combinación. En la edición, el origen y el tipo de persona no cambian, y el servidor pinta sólo los campos que aplican.
+
 - **Autorización masiva:** en **Proveedores**, el Administrador filtra por "Registrado", marca las casillas (o "seleccionar todos") y pulsa "Autorizar seleccionados". Un modal pide confirmación, porque se enviarán las credenciales. Se autorizan hasta 100 proveedores por operación, en una transacción con las filas bloqueadas y un punto de guardado por proveedor:
   - los que no están "Registrado" se omiten;
   - si el correo de un proveedor lo usa otro usuario, ese proveedor no se autoriza;

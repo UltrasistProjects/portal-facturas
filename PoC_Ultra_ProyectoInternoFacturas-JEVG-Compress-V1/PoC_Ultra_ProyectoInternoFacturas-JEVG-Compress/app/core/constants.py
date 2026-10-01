@@ -49,6 +49,9 @@ SUPPLIER_CLASSIFICATION_LABELS = {
 # Telefono del proveedor, de su contacto y de su representante legal: la misma regla que la carga masiva (HU-01).
 PHONE_FORMAT = r"[0-9+() -]{7,30}"
 PHONE_FORMAT_MESSAGE = "debe tener de 7 a 30 caracteres: digitos, espacios, +, (, ) o -"
+# Identificador fiscal del proveedor internacional, ya en mayusculas: la misma regla que la carga masiva (HU-01).
+FOREIGN_TAX_ID_FORMAT = r"[A-Z0-9 ./-]{1,40}"
+FOREIGN_TAX_ID_FORMAT_MESSAGE = "use hasta 40 caracteres: letras, digitos, espacios, puntos, guiones o diagonales"
 
 
 SUPPLIER_ORIGIN_LABELS = {SupplierOrigin.NATIONAL: "Nacional", SupplierOrigin.INTERNATIONAL: "Internacional"}

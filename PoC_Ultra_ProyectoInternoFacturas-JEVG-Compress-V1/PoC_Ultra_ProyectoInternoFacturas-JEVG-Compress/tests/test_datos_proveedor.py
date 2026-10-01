@@ -148,6 +148,166 @@ def test_alta_invalida(client, overrides, message):
     assert supplier_by_rfc("PCO260101INV") is None
 
 
+# Identificadores propios de estas pruebas: el proveedor internacional de la demo ya usa US 98-7654321.
+INTERNATIONAL = {"origin": "INTERNATIONAL", "rfc": "", "foreign_tax_id": "PCO-0001", "country": "US"}
+
+
+def delete_foreign_suppliers(*tax_ids: str) -> None:
+    with SessionLocal() as db:
+        db.execute(delete(Supplier).where(Supplier.foreign_tax_id.in_(tax_ids)))
+        db.commit()
+
+
+def test_alta_de_proveedor_internacional(client):
+    login(client)
+    try:
+        response = create_supplier(client, **{**INTERNATIONAL, "foreign_tax_id": " pco-00  01 ", "country": "us"})
+        assert response.status_code == 303
+        supplier = supplier_by_email("contacto@perfilcompleto.mx")
+        assert supplier.origin == SupplierOrigin.INTERNATIONAL
+        assert (supplier.rfc, supplier.foreign_tax_id, supplier.country) == (None, "PCO-00 01", "US")
+        page = html.unescape(client.get(f"/suppliers/{supplier.id}").text)
+        assert "US PCO-00 01 · Internacional" in page
+        # Sin RFC no hay conflicto con otro internacional; el par (pais, identificador) si es unico.
+        second = {**INTERNATIONAL, "email": "billing@segundo.example"}
+        assert create_supplier(client, **second).status_code == 303
+        repeated = create_supplier(client, **{**second, "email": "otro@segundo.example"})
+        assert repeated.status_code == 409
+        assert "Ya existe un proveedor con ese identificador fiscal extranjero en ese pais." in repeated.text
+        # El mismo identificador en otro pais es otro proveedor.
+        other_country = create_supplier(client, **{**second, "country": "CA", "email": "canada@segundo.example"})
+        assert other_country.status_code == 303
+    finally:
+        delete_foreign_suppliers("PCO-00 01", "PCO-0001")
+
+
+def test_alta_nacional_por_omision(client):
+    """Sin origen, el alta es nacional: su pais es MX."""
+    login(client)
+    try:
+        assert create_supplier(client).status_code == 303
+        supplier = supplier_by_rfc("PCO260101AB1")
+        assert (supplier.origin, supplier.country, supplier.foreign_tax_id) == (SupplierOrigin.NATIONAL, "MX", None)
+    finally:
+        delete_supplier("PCO260101AB1")
+
+
+@pytest.mark.parametrize(
+    ("overrides", "message"),
+    [
+        ({"rfc": ""}, "RFC: es obligatorio para proveedores nacionales"),
+        (
+            {"foreign_tax_id": "PCO-0001"},
+            "Identificador fiscal extranjero: debe quedar vacio para proveedores nacionales",
+        ),
+        ({"country": "US"}, "Pais: debe quedar vacio o ser MX para proveedores nacionales"),
+        ({**INTERNATIONAL, "rfc": "PCO260101INV"}, "RFC: debe quedar vacio para proveedores internacionales"),
+        (
+            {**INTERNATIONAL, "foreign_tax_id": ""},
+            "Identificador fiscal extranjero: es obligatorio para proveedores internacionales",
+        ),
+        ({**INTERNATIONAL, "foreign_tax_id": "98_765"}, "Identificador fiscal extranjero: use hasta 40 caracteres"),
+        ({**INTERNATIONAL, "foreign_tax_id": "9" * 41}, "Identificador fiscal extranjero: use hasta 40 caracteres"),
+        ({**INTERNATIONAL, "country": ""}, "Pais: es obligatorio para proveedores internacionales"),
+        ({**INTERNATIONAL, "country": "MX"}, "Pais: un proveedor internacional no puede tener pais MX"),
+        ({**INTERNATIONAL, "country": "USA"}, "Pais: use el codigo ISO de dos letras"),
+        ({"origin": "EXTRANJERO"}, "Origen: no es una opcion valida"),
+    ],
+)
+def test_alta_con_identidad_fiscal_incongruente(client, overrides, message):
+    login(client)
+    response = create_supplier(client, **overrides)
+    assert response.status_code == 400
+    page = html.unescape(response.text)
+    assert message in page
+    assert supplier_by_email("contacto@perfilcompleto.mx") is None
+
+
+def test_alta_internacional_invalida_conserva_lo_capturado(client):
+    login(client)
+    response = create_supplier(client, **{**INTERNATIONAL, "country": "CA", "foreign_tax_id": ""})
+    assert response.status_code == 400
+    page = response.text
+    assert '<option value="INTERNATIONAL" selected>' in page
+    assert '<option value="CA" selected>' in page
+    # Mexico corresponde al origen Nacional: no se ofrece como pais del internacional.
+    countries = re.search(r'<select[^>]*name="country".*?</select>', page, re.S).group(0)
+    assert 'value="MX"' not in countries and 'value="US"' in countries
+
+
+# --- Campos condicionados (supplier_form.js) ----------------------------------------------------------------------
+
+FIELD = re.compile(
+    r'<div class="field[^"]*"(?: data-depends-on="(\w+)" data-applies-when="([\w ]+)")?>(.*?)</div>', re.S
+)
+REQUIRED = re.compile(r"\srequired\b")
+
+
+def conditional_control(page: str, name: str) -> tuple[str, str, str] | None:
+    """(selector del que depende, valores con los que aplica, etiqueta del control) del campo `name`; None si aplica
+    siempre."""
+    for depends_on, applies_when, content in FIELD.findall(page):
+        control = re.search(rf'<(?:input|select)[^>]*name="{name}"[^>]*>', content)
+        if control:
+            return (depends_on, applies_when, control.group(0)) if depends_on else None
+    raise AssertionError(f"El formulario no tiene el campo {name}")
+
+
+@pytest.mark.parametrize(
+    ("name", "rule"),
+    [
+        ("rfc", ("origin", "NATIONAL")),
+        ("foreign_tax_id", ("origin", "INTERNATIONAL")),
+        ("country", ("origin", "INTERNATIONAL")),
+        ("incorporation_date", ("supplier_type", "PERSONA_MORAL")),
+    ],
+)
+def test_alta_declara_los_campos_condicionados(client, name, rule):
+    login(client)
+    depends_on, applies_when, control = conditional_control(client.get("/suppliers").text, name)
+    assert (depends_on, applies_when) == rule
+    # Obligatorio solo cuando aplica: lo activa supplier_form.js; sin JavaScript, el servidor valida la combinacion.
+    assert "data-required" in control and not REQUIRED.search(control)
+
+
+def test_alta_sin_dependencias_en_los_demas_campos(client):
+    login(client)
+    page = client.get("/suppliers").text
+    assert "/static/js/supplier_form.js" in page
+    always = ("origin", "business_name", "supplier_type", "email", "phone", "classification", "main_activity")
+    always += ("website", "contact_name", "contact_phone", "legal_rep_name", "legal_rep_phone", "bank_information")
+    for name in (*always, "confidentiality_agreement", "economic_proposal"):
+        assert conditional_control(page, name) is None, name
+    hint = 'data-depends-on="supplier_type" data-applies-when="PERSONA_FISICA">En persona física, el representante'
+    assert hint in html.unescape(page)
+
+
+def test_alta_sin_los_campos_que_no_aplican(client):
+    """El navegador no envia los campos deshabilitados: el pais del nacional es MX y la persona fisica no necesita
+    fecha de constitucion."""
+    login(client)
+    try:
+        response = create_supplier(
+            client, origin="NATIONAL", rfc="PCO260101PAY", supplier_type="PERSONA_FISICA", incorporation_date=""
+        )
+        assert response.status_code == 303
+        supplier = supplier_by_rfc("PCO260101PAY")
+        assert (supplier.country, supplier.foreign_tax_id, supplier.incorporation_date) == ("MX", None, None)
+    finally:
+        delete_supplier("PCO260101PAY")
+
+
+def test_edicion_sin_selectores_de_identidad(client, registered_suppliers):
+    """En la edicion el origen y el tipo de persona no cambian: no hay selectores y el servidor decide los campos. La
+    fecha de constitucion de la persona moral es obligatoria sin depender del script."""
+    (supplier,) = registered_suppliers()
+    login(client)
+    page = client.get(f"/suppliers/{supplier.id}").text
+    assert 'name="supplier_type"' not in page and 'name="origin"' not in page
+    _, _, control = conditional_control(page, "incorporation_date")
+    assert REQUIRED.search(control)
+
+
 def test_alta_con_actividad_inactiva(client, restore_validation_rules):
     login(client)
     set_activity_active("54", False)

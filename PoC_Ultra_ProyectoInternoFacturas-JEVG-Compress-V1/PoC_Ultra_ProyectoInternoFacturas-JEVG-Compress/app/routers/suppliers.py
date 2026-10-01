@@ -1,3 +1,4 @@
+import unicodedata
 from datetime import date
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
@@ -9,6 +10,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.core.constants import (
     SUPPLIER_CLASSIFICATION_LABELS,
+    SUPPLIER_ORIGIN_LABELS,
     SUPPLIER_STATUS_LABELS,
     CatalogType,
     ProcessingStatus,
@@ -16,6 +18,7 @@ from app.core.constants import (
     SupplierStatus,
     SupplierType,
 )
+from app.core.countries import COUNTRIES
 from app.core.database import get_db
 from app.core.errors import BusinessRuleError, NotFoundError
 from app.core.security import get_current_user, require_roles, validate_csrf
@@ -34,7 +37,12 @@ from app.services.supplier_template import MAX_FILE_MB, MAX_ROWS, TEMPLATE_FILEN
 
 router = APIRouter(prefix="/suppliers")
 
-CREATE_FIELDS = ("rfc", "supplier_type", "email", *PROFILE_FIELDS)
+CREATE_FIELDS = ("origin", "rfc", "foreign_tax_id", "country", "supplier_type", "email", *PROFILE_FIELDS)
+# Pais del proveedor internacional, por nombre sin acentos; Mexico corresponde al origen Nacional.
+COUNTRY_OPTIONS = sorted(
+    ((code, name) for code, name in COUNTRIES.items() if code != "MX"),
+    key=lambda option: unicodedata.normalize("NFKD", option[1]).encode("ascii", "ignore"),
+)
 
 
 def portal_url(request: Request) -> str:
@@ -118,6 +126,8 @@ def _suppliers_page(
         "activities": active_entries(db, CatalogType.INDUSTRY) if is_admin else [],
         "classification_options": SUPPLIER_CLASSIFICATION_LABELS.items(),
         "type_options": [SupplierType.PERSONA_MORAL, SupplierType.PERSONA_FISICA],
+        "origin_options": SUPPLIER_ORIGIN_LABELS.items(),
+        "country_options": COUNTRY_OPTIONS,
     }
     return templates.TemplateResponse(request, "suppliers/list.html", context, status_code=status_code)
 

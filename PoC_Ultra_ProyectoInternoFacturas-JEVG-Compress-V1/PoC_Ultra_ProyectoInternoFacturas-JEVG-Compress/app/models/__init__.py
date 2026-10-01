@@ -112,7 +112,7 @@ class Supplier(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     business_name: Mapped[str] = mapped_column(String(250))
     rfc: Mapped[str | None] = mapped_column(String(13), unique=True, index=True)
-    # Los valores por defecto mantienen el alta individual (solo nacionales) sin cambios.
+    # Los valores por defecto corresponden al proveedor nacional; el alta individual y la carga masiva los asignan.
     origin: Mapped[SupplierOrigin] = mapped_column(enum_column(SupplierOrigin), default=SupplierOrigin.NATIONAL)
     foreign_tax_id: Mapped[str | None] = mapped_column(String(40))
     country: Mapped[str] = mapped_column(String(2), default="MX")

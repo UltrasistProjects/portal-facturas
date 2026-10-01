@@ -15,14 +15,18 @@ from pydantic import (
 )
 
 from app.core.constants import (
+    FOREIGN_TAX_ID_FORMAT,
+    FOREIGN_TAX_ID_FORMAT_MESSAGE,
     FORMAT_EXTENSIONS,
     PHONE_FORMAT,
     PHONE_FORMAT_MESSAGE,
     DocumentRequirement,
     Role,
     SupplierClassification,
+    SupplierOrigin,
     SupplierType,
 )
+from app.core.countries import COUNTRIES
 from app.core.timeutils import to_business
 
 MIN_INCORPORATION_DATE = date(1900, 1, 1)
@@ -31,7 +35,10 @@ FIELD_LABELS = {
     "email": "Correo",
     "password": "Contrasena",
     "business_name": "Razon social",
+    "origin": "Origen",
     "rfc": "RFC",
+    "foreign_tax_id": "Identificador fiscal extranjero",
+    "country": "Pais",
     "supplier_type": "Tipo de persona",
     "phone": "Telefono",
     "bank_information": "Informacion bancaria",
@@ -185,13 +192,58 @@ class SupplierUpdate(SupplierProfile):
 
 
 class SupplierCreate(SupplierProfile):
-    rfc: str = Field(min_length=12, max_length=13)
+    """Alta individual. El origen decide la identidad fiscal, con las reglas de la carga masiva (HU-01): el nacional
+    se identifica por RFC y su pais es MX; el internacional, por pais distinto de MX e identificador fiscal
+    extranjero, sin RFC. `origin` va antes que los campos que valida."""
+
+    origin: SupplierOrigin = SupplierOrigin.NATIONAL
+    rfc: str | None = Field(None, min_length=12, max_length=13, validate_default=True)
+    foreign_tax_id: str | None = Field(None, validate_default=True)
+    country: str | None = Field(None, validate_default=True)
     email: EmailStr
 
     @field_validator("rfc")
     @classmethod
-    def upper_rfc(cls, value: str) -> str:
-        return value.upper()
+    def national_rfc(cls, value: str | None, info: ValidationInfo) -> str | None:
+        origin = info.data.get("origin")
+        if origin == SupplierOrigin.NATIONAL and value is None:
+            raise ValueError("es obligatorio para proveedores nacionales")
+        if origin == SupplierOrigin.INTERNATIONAL and value is not None:
+            raise ValueError("debe quedar vacio para proveedores internacionales")
+        return value.upper() if value else value
+
+    @field_validator("foreign_tax_id")
+    @classmethod
+    def international_tax_id(cls, value: str | None, info: ValidationInfo) -> str | None:
+        origin = info.data.get("origin")
+        if origin == SupplierOrigin.NATIONAL and value is not None:
+            raise ValueError("debe quedar vacio para proveedores nacionales")
+        if origin == SupplierOrigin.INTERNATIONAL:
+            if value is None:
+                raise ValueError("es obligatorio para proveedores internacionales")
+            # Espacios internos colapsados, como en la carga masiva: la unicidad compara el valor guardado.
+            value = " ".join(value.split()).upper()
+            if not re.fullmatch(FOREIGN_TAX_ID_FORMAT, value):
+                raise ValueError(FOREIGN_TAX_ID_FORMAT_MESSAGE)
+        return value
+
+    @field_validator("country")
+    @classmethod
+    def origin_country(cls, value: str | None, info: ValidationInfo) -> str | None:
+        origin = info.data.get("origin")
+        value = value.upper() if value else value
+        if origin == SupplierOrigin.NATIONAL:
+            if value not in (None, "MX"):
+                raise ValueError("debe quedar vacio o ser MX para proveedores nacionales")
+            return "MX"
+        if origin == SupplierOrigin.INTERNATIONAL:
+            if value is None:
+                raise ValueError("es obligatorio para proveedores internacionales")
+            if value == "MX":
+                raise ValueError("un proveedor internacional no puede tener pais MX")
+            if value not in COUNTRIES:
+                raise ValueError("use el codigo ISO de dos letras (p. ej. US)")
+        return value
 
     @field_validator("email", mode="before")
     @classmethod
