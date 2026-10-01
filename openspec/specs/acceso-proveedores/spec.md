@@ -1,7 +1,7 @@
 # acceso-proveedores Specification
 
 ## Purpose
-Autorización de proveedores y credenciales de acceso al portal (HU-02 y HU-03, RF-02, RF-03, RN-HU03-01): estatus "Autorizado", alta individual en "Registrado", autorización masiva exclusiva del Administrador, selección en el listado, reglas de la autorización, usuario y contraseña temporal, correo de credenciales, resumen, acceso en el expediente, reenvío de credenciales y auditoría.
+Autorización de proveedores y credenciales de acceso al portal (HU-02 y HU-03, RF-02, RF-03, RN-HU03-01): estatus "Autorizado", alta individual en "Registrado" por origen (Nacional o Internacional), autorización masiva exclusiva del Administrador, selección en el listado, reglas de la autorización, usuario y contraseña temporal, correo de credenciales, resumen, acceso en el expediente, reenvío de credenciales y auditoría.
 ## Requirements
 ### Requirement: Estatus "Autorizado"
 El estatus operativo `ACTIVE` de un proveedor SHALL mostrarse como "Autorizado" en el listado y en el expediente. La interfaz SHALL ofrecer como única transición de estatus el paso de "Registrado" (`REGISTERED`) a "Autorizado", mediante la autorización masiva. Un proveedor autorizado cumple la regla SUP-001.
@@ -11,7 +11,25 @@ El estatus operativo `ACTIVE` de un proveedor SHALL mostrarse como "Autorizado" 
 - **THEN** los proveedores con estatus `ACTIVE` se muestran como "Autorizado"
 
 ### Requirement: Alta individual en "Registrado"
-`POST /suppliers` SHALL crear el proveedor con estatus `REGISTERED`, sin usuario del portal y sin enviar correos. Si el correo, sin distinguir mayúsculas, ya lo usa otro proveedor o un usuario, la respuesta SHALL ser HTTP 409 con el mensaje "El correo ya lo usa otro proveedor o usuario." y nada se crea.
+`POST /suppliers` SHALL crear el proveedor con estatus `REGISTERED`, sin usuario del portal y sin enviar correos.
+
+El campo **Origen** (`origin`: `NATIONAL`, el valor por omisión, o `INTERNATIONAL`) SHALL decidir la identidad fiscal, con las reglas de la carga masiva:
+- **Nacional:** RFC obligatorio, guardado en mayúsculas; sin identificador fiscal extranjero; país vacío o `MX`, que se guarda como `MX`.
+- **Internacional:** identificador fiscal extranjero obligatorio, de hasta 40 caracteres (letras, dígitos, espacios, puntos, guiones o diagonales). Se guarda en mayúsculas y con los espacios internos colapsados. País obligatorio, con código ISO de dos letras distinto de `MX`. Sin RFC.
+
+Una combinación incongruente o un valor inválido SHALL responder HTTP 400 con el motivo de cada campo, y nada se crea. Cada origen se compara sólo por su identidad:
+- un RFC ya registrado SHALL responder HTTP 409 "Ya existe un proveedor con ese RFC.";
+- un par (país, identificador fiscal extranjero) ya registrado SHALL responder HTTP 409 "Ya existe un proveedor con ese identificador fiscal extranjero en ese pais."; el mismo identificador en otro país es otro proveedor;
+- si el correo, sin distinguir mayúsculas, ya lo usa otro proveedor o un usuario, la respuesta SHALL ser HTTP 409 "El correo ya lo usa otro proveedor o usuario.".
+
+Un alta rechazada SHALL volver a mostrar el formulario con lo capturado, incluidos el origen y el país. El selector de país MUST NOT ofrecer México, que corresponde al origen Nacional. El origen y el tipo de persona no se editan después del alta.
+
+**Campos según el origen y el tipo de persona.** Con JavaScript (`supplier_form.js`), el formulario de alta SHALL mostrar sólo los campos que aplican:
+- el RFC, con el origen Nacional;
+- el identificador fiscal extranjero y el país, con el Internacional;
+- la fecha de constitución, sólo con persona moral.
+
+Un campo que deja de aplicar SHALL ocultarse, limpiarse y deshabilitarse, de modo que el navegador no lo valida ni lo envía. Al volver a aplicar, SHALL recuperar su obligatoriedad. Sin JavaScript se muestran todos los campos y el servidor valida la combinación. La página de edición MUST NOT ofrecer el origen ni el tipo de persona: el servidor muestra sólo los campos que aplican, y la fecha de constitución de la persona moral es obligatoria sin depender del script.
 
 #### Scenario: Proveedor nuevo registrado
 - **WHEN** el Administrador da de alta un proveedor con el formulario
@@ -20,6 +38,34 @@ El estatus operativo `ACTIVE` de un proveedor SHALL mostrarse como "Autorizado" 
 #### Scenario: Correo en uso
 - **WHEN** el Administrador da de alta un proveedor con el correo "Proveedor1@poc.local", que ya usa un usuario
 - **THEN** la respuesta es HTTP 409 con el mensaje del correo en uso y no se crea el proveedor
+
+#### Scenario: Alta nacional por omisión
+- **WHEN** el alta llega sin origen y con un RFC válido
+- **THEN** el proveedor es Nacional, con país `MX` y sin identificador fiscal extranjero
+
+#### Scenario: Alta de proveedor internacional
+- **WHEN** el Administrador da de alta un proveedor Internacional con el identificador " pco-00  01 " y el país "us"
+- **THEN** el proveedor queda "Registrado" sin RFC, con el identificador "PCO-00 01" y el país "US"
+
+#### Scenario: Identificador fiscal extranjero repetido
+- **WHEN** ya existe un proveedor de "US" con el identificador "PCO-0001" y se da de alta otro con el mismo par
+- **THEN** la respuesta es HTTP 409 "Ya existe un proveedor con ese identificador fiscal extranjero en ese pais."; con el país "CA", el alta procede
+
+#### Scenario: Identidad fiscal incongruente
+- **WHEN** el alta Internacional trae el país "MX", o el alta Nacional trae un identificador fiscal extranjero
+- **THEN** la respuesta es HTTP 400 con "Pais: un proveedor internacional no puede tener pais MX" o "Identificador fiscal extranjero: debe quedar vacio para proveedores nacionales", y no se crea el proveedor
+
+#### Scenario: Alta rechazada conserva lo capturado
+- **WHEN** un alta Internacional con el país "CA" se rechaza por falta del identificador
+- **THEN** el formulario vuelve con el origen Internacional y el país "CA" seleccionados, y el selector de país no ofrece México
+
+#### Scenario: Campos que no aplican
+- **WHEN** con JavaScript el Administrador elige el origen Internacional y el tipo persona física
+- **THEN** el RFC y la fecha de constitución se ocultan, se limpian y no se envían, y el identificador fiscal y el país se vuelven obligatorios
+
+#### Scenario: Edición sin selectores de identidad
+- **WHEN** el Administrador abre el expediente de una persona moral para editarla
+- **THEN** el formulario no tiene los campos de origen ni de tipo de persona, y la fecha de constitución es obligatoria
 
 ### Requirement: Autorización masiva exclusiva del Administrador
 `POST /suppliers/authorize` y `POST /suppliers/{supplier_id}/credentials` SHALL estar disponibles únicamente para el rol `Administrador` y MUST exigir un token CSRF válido. Las casillas de selección, el botón "Autorizar seleccionados" y la sección de acceso al portal del expediente SHALL mostrarse sólo al rol `Administrador`.
@@ -48,14 +94,18 @@ El estatus operativo `ACTIVE` de un proveedor SHALL mostrarse como "Autorizado" 
 - **THEN** los proveedores "Autorizado" no tienen casilla de selección
 
 ### Requirement: Reglas de la autorización masiva
-`POST /suppliers/authorize` SHALL recibir de 1 a 100 identificadores `supplier_ids` distintos. Sin selección, la respuesta SHALL ser HTTP 400 "Seleccione al menos un proveedor."; con más de 100, HTTP 400 "Autorice hasta 100 proveedores por operación."; con un identificador inexistente, HTTP 404. En estos casos nada cambia.
+`POST /suppliers/authorize` SHALL recibir de 1 a 100 identificadores `supplier_ids` distintos. En estos casos nada cambia:
+- sin selección: HTTP 400 "Seleccione al menos un proveedor.";
+- con más de 100: HTTP 400 "Autorice hasta 100 proveedores por operación.";
+- con un identificador inexistente: HTTP 404.
 
-Con una selección válida, el sistema SHALL procesar todos los proveedores seleccionados en una sola transacción y con sus filas bloqueadas:
+Con una selección válida, el sistema SHALL procesar los proveedores seleccionados en una transacción, con sus filas bloqueadas y un punto de guardado por proveedor:
 - un proveedor que no está "Registrado" SHALL omitirse sin cambios;
-- un proveedor cuyo correo usa un usuario distinto de su propio usuario `Proveedor` MUST NOT autorizarse;
+- un proveedor cuyo correo usa un usuario distinto de su propio usuario `Proveedor`, en el portal o en Keycloak según las reglas de enlace, MUST NOT autorizarse;
+- un proveedor cuyo aprovisionamiento en Keycloak falla MUST NOT autorizarse: se revierte sólo su punto de guardado y los demás se procesan;
 - los demás SHALL pasar a "Autorizado".
 
-Si la transacción no puede completarse, ningún proveedor SHALL cambiar.
+Si la transacción no puede confirmarse, ningún proveedor SHALL cambiar en el portal.
 
 #### Scenario: Autorización de proveedores registrados
 - **WHEN** el Administrador autoriza 3 proveedores "Registrado"
@@ -69,6 +119,10 @@ Si la transacción no puede completarse, ningún proveedor SHALL cambiar.
 - **WHEN** existe un usuario `PMO` con el correo de un proveedor "Registrado" seleccionado
 - **THEN** ese proveedor sigue "Registrado", no se crea usuario ni se envía correo, y el resumen lo muestra como no autorizado por correo en uso
 
+#### Scenario: Fallo parcial al aprovisionar
+- **WHEN** el Administrador autoriza 3 proveedores y Keycloak rechaza la creación de uno de ellos
+- **THEN** los otros 2 quedan "Autorizado" con su usuario en Keycloak, el fallido sigue "Registrado" sin usuario local, y el error queda en la auditoría
+
 #### Scenario: Selección vacía
 - **WHEN** el Administrador envía la autorización sin proveedores seleccionados
 - **THEN** la respuesta es HTTP 400 con "Seleccione al menos un proveedor."
@@ -78,36 +132,44 @@ Si la transacción no puede completarse, ningún proveedor SHALL cambiar.
 - **THEN** la respuesta es HTTP 400 con "Autorice hasta 100 proveedores por operación." y ningún proveedor cambia
 
 ### Requirement: Usuario y contraseña temporal al autorizar
-Por cada proveedor que pasa a "Autorizado" y no tiene un usuario `Proveedor` propio con su correo, el sistema SHALL crear, en la misma transacción, un usuario activo con:
+Por cada proveedor que pasa a "Autorizado" y no tiene un usuario `Proveedor` propio con su correo, el sistema SHALL crear, en la misma transacción, un usuario local activo con:
 - rol `Proveedor` y el `supplier_id` del proveedor;
 - el correo del proveedor en minúsculas como usuario;
 - la razón social como nombre, recortada a 150 caracteres;
-- una contraseña temporal aleatoria de 20 caracteres que cumple la política de contraseñas;
-- la marca de contraseña asignada activa, para que el proveedor la cambie en su primer acceso.
+- sin contraseña ni hash.
 
-El sistema SHALL guardar sólo el hash de la contraseña. SHALL entregar la contraseña en claro únicamente al punto de integración del gestor de secretos, antes de confirmar la transacción, y al correo de credenciales. La contraseña MUST NOT escribirse en la base de datos en claro, en la auditoría, en el log ni en la bitácora de envíos.
+Antes de confirmar, SHALL aprovisionar al usuario en Keycloak:
+- crear el usuario con usuario y correo iguales al correo del proveedor en minúsculas, habilitado; o enlazar el existente según las reglas de enlace;
+- asignarle el realm role `Proveedor`;
+- registrar una contraseña temporal aleatoria de 20 caracteres que cumple la política, con `temporary=true`;
+- agregar la acción requerida `UPDATE_PASSWORD`;
+- guardar el `sub` resultante en `users.keycloak_sub`.
 
-Un proveedor que ya tiene su propio usuario `Proveedor` con su correo SHALL autorizarse sin crear otro usuario ni generar credenciales.
+**Reglas de enlace:** si Keycloak ya tiene un usuario con ese correo, el sistema SHALL enlazarlo en lugar de crear otro, siempre que ningún usuario local tenga su `sub` y que sus roles reconocidos sean ninguno o sólo `Proveedor`. En otro caso, el proveedor se trata como correo en uso.
+
+La contraseña temporal SHALL existir en claro sólo en memoria, en la llamada a Keycloak y en el correo de credenciales. MUST NOT escribirse en la base de datos, en la auditoría, en el log ni en la bitácora de envíos.
+
+Un proveedor que ya tiene su propio usuario `Proveedor` enlazado SHALL autorizarse sin crear otro usuario ni generar credenciales.
 
 #### Scenario: Usuario creado al autorizar
 - **WHEN** el Administrador autoriza un proveedor "Registrado" con el correo "Contacto@Proveedor.mx"
-- **THEN** existe un usuario `Proveedor` activo con el correo "contacto@proveedor.mx", el `supplier_id` del proveedor y la marca de contraseña asignada activa, cuyo hash verifica la contraseña del correo de credenciales
+- **THEN** existe un usuario local `Proveedor` activo con el correo "contacto@proveedor.mx", el `supplier_id` del proveedor, `keycloak_sub` y sin `password_hash`, y en Keycloak un usuario habilitado con el rol `Proveedor`, la contraseña del correo de credenciales como temporal y la acción `UPDATE_PASSWORD`
 
-#### Scenario: Inicio de sesión con la contraseña temporal
-- **WHEN** el proveedor inicia sesión con el usuario y la contraseña del correo de credenciales
-- **THEN** el inicio de sesión es exitoso y redirige a `/account/password`
+#### Scenario: Proveedor ya existente en Keycloak
+- **WHEN** el correo del proveedor ya existe en Keycloak como usuario sin roles del portal y sin enlazar
+- **THEN** el sistema enlaza ese usuario en lugar de duplicarlo, le asigna el rol `Proveedor`, una contraseña temporal nueva y `UPDATE_PASSWORD`
+
+#### Scenario: Correo de un usuario interno en Keycloak
+- **WHEN** el correo del proveedor pertenece en Keycloak a un usuario con el rol `PMO`
+- **THEN** el proveedor sigue "Registrado", no se crea usuario local y el resumen lo muestra como no autorizado por correo en uso
 
 #### Scenario: Contraseña temporal fuera de registros
 - **WHEN** se autoriza un proveedor y se busca su contraseña temporal en `users`, `audit_logs`, `email_deliveries` y el log de la aplicación
 - **THEN** no aparece en ninguno
 
 #### Scenario: Proveedor con usuario propio
-- **WHEN** se autoriza un proveedor "Registrado" que ya tiene un usuario `Proveedor` con su correo
-- **THEN** el proveedor queda "Autorizado", no se crea otro usuario, su contraseña y su marca no cambian y no se envía correo de credenciales
-
-#### Scenario: Resguardo en el gestor de secretos
-- **WHEN** se autoriza un proveedor
-- **THEN** el punto de integración del gestor de secretos recibe el identificador del proveedor, el usuario y la contraseña temporal antes de confirmar la transacción
+- **WHEN** se autoriza un proveedor "Registrado" que ya tiene un usuario `Proveedor` enlazado con su correo
+- **THEN** el proveedor queda "Autorizado", no se crea otro usuario, su contraseña en Keycloak no cambia y no se envía correo de credenciales
 
 ### Requirement: Correo de credenciales
 Después de confirmar la autorización, el sistema SHALL enviar a cada proveedor con credenciales nuevas el correo del evento `SUPPLIER_CREDENTIALS`, compuesto con su plantilla vigente, con:
@@ -128,9 +190,10 @@ El correo SHALL dirigirse al correo del proveedor, sin copias, y registrarse en 
 
 ### Requirement: Resumen de la autorización
 Tras la autorización, el sistema SHALL redirigir al listado con un resumen que muestre:
-- los proveedores autorizados, cada uno con el resultado de su correo de credenciales ("Credenciales enviadas" o "Envío fallido" con el error), o "Ya tenía usuario" si no se generaron credenciales;
+- los proveedores autorizados, cada uno con el resultado de su correo de credenciales ("Credenciales enviadas", o "Envío fallido" con el error), o "Ya tenía usuario" si no se generaron credenciales;
 - los omitidos por no estar "Registrado";
-- los no autorizados por correo en uso.
+- los no autorizados por correo en uso;
+- los no autorizados porque el servicio de identidad no pudo crear su cuenta.
 
 El resumen SHALL reconstruirse con el registro de auditoría de la operación y la bitácora de envíos. Un parámetro que no corresponde a una autorización MUST NOT mostrar ningún resumen.
 
@@ -138,11 +201,18 @@ El resumen SHALL reconstruirse con el registro de auditoría de la operación y 
 - **WHEN** el Administrador autoriza 2 proveedores y el correo de uno falla
 - **THEN** el resumen lista los 2 proveedores autorizados, uno con "Credenciales enviadas" y el otro con "Envío fallido" y el error técnico
 
+#### Scenario: Resumen con un aprovisionamiento fallido
+- **WHEN** el Administrador autoriza 2 proveedores y Keycloak rechaza uno
+- **THEN** el resumen lista uno como autorizado y el otro como no autorizado porque el servicio de identidad no pudo crear su cuenta
+
 ### Requirement: Acceso al portal en el expediente
 El expediente del proveedor SHALL mostrar al Administrador:
 - el usuario del portal, o "Sin usuario del portal";
 - el último acceso, o "Nunca";
-- si tiene usuario, el estado de su contraseña: "Temporal, pendiente de cambio" si la marca de contraseña asignada está activa, o "Cambiada por el proveedor" si no;
+- si tiene usuario, el estado de su contraseña leído de Keycloak:
+  - "Temporal, pendiente de cambio" si su cuenta tiene la acción requerida `UPDATE_PASSWORD`;
+  - "Cambiada por el proveedor" si no;
+  - "No disponible" si Keycloak no responde, sin que la página falle;
 - el resultado del último envío de credenciales con su fecha, o "Sin envío registrado".
 
 El listado SHALL marcar con "Credenciales no enviadas" a los proveedores autorizados cuyo último envío de credenciales falló.
@@ -152,40 +222,69 @@ El listado SHALL marcar con "Credenciales no enviadas" a los proveedores autoriz
 - **THEN** ve el usuario, "Nunca" como último acceso, "Temporal, pendiente de cambio" como estado de la contraseña y "Credenciales enviadas" con la fecha del envío
 
 #### Scenario: Expediente después del primer cambio
-- **WHEN** el proveedor cambió su contraseña temporal y el Administrador abre su expediente
+- **WHEN** el proveedor cambió su contraseña temporal en Keycloak y el Administrador abre su expediente
 - **THEN** ve la fecha de su último acceso y "Cambiada por el proveedor" como estado de la contraseña
+
+#### Scenario: Keycloak no disponible
+- **WHEN** Keycloak no responde y el Administrador abre el expediente
+- **THEN** la página se muestra con "No disponible" como estado de la contraseña
 
 ### Requirement: Reenvío de credenciales
 El Administrador SHALL poder reenviar las credenciales con `POST /suppliers/{supplier_id}/credentials` cuando se cumplan todas estas condiciones:
 - el proveedor está "Autorizado";
-- tiene su usuario `Proveedor` con su correo;
+- tiene su usuario `Proveedor` enlazado con su correo;
 - el usuario está activo;
-- el usuario conserva la contraseña temporal, es decir, su marca de contraseña asignada está activa.
+- su cuenta de Keycloak conserva la acción requerida `UPDATE_PASSWORD`.
 
-Si alguna no se cumple, la respuesta SHALL ser HTTP 409 con el motivo y nada cambia. El reenvío SHALL generar una contraseña temporal nueva, que invalida la anterior, mantener activa la marca de contraseña asignada, resguardar la contraseña y enviar el correo de credenciales. Después SHALL redirigir al expediente con el resultado del envío. El botón "Reenviar credenciales" SHALL mostrarse sólo cuando el reenvío es posible.
+Si alguna no se cumple, la respuesta SHALL ser HTTP 409 con el motivo y nada cambia. Si Keycloak no responde, la respuesta SHALL ser HTTP 503 y nada cambia.
+
+El reenvío SHALL:
+1. registrar en Keycloak una contraseña temporal nueva, que invalida la anterior, y mantener `UPDATE_PASSWORD`;
+2. enviar el correo de credenciales;
+3. redirigir al expediente con el resultado del envío.
+
+El botón "Reenviar credenciales" SHALL mostrarse sólo cuando el reenvío es posible.
 
 #### Scenario: Reenvío tras un envío fallido
 - **WHEN** el correo de credenciales de un proveedor falló y el Administrador pulsa "Reenviar credenciales" con el transporte funcionando
-- **THEN** el proveedor recibe un correo con una contraseña nueva, la anterior deja de funcionar y el expediente muestra "Credenciales enviadas"
-
-#### Scenario: Proveedor que entró sin cambiar la contraseña
-- **WHEN** el proveedor inició sesión con la contraseña temporal pero no la cambió, y el Administrador pide reenviar sus credenciales
-- **THEN** el proveedor recibe una contraseña temporal nueva, la anterior deja de funcionar y la marca sigue activa
+- **THEN** el proveedor recibe un correo con una contraseña nueva, Keycloak deja de aceptar la anterior y el expediente muestra "Credenciales enviadas"
 
 #### Scenario: Proveedor que ya cambió su contraseña
-- **WHEN** el Administrador pide reenviar las credenciales de un proveedor que ya cambió su contraseña temporal
+- **WHEN** el Administrador pide reenviar las credenciales de un proveedor cuya cuenta de Keycloak ya no tiene `UPDATE_PASSWORD`
 - **THEN** la respuesta es HTTP 409 con "El proveedor ya cambió su contraseña temporal; no se generan credenciales nuevas." y su contraseña no cambia
+
+#### Scenario: Keycloak no disponible en el reenvío
+- **WHEN** Keycloak no responde y el Administrador pide reenviar credenciales
+- **THEN** la respuesta es HTTP 503 con "El servicio de identidad no está disponible. Intente más tarde.", no se envía correo y no se registra `SUPPLIER_CREDENTIALS_RESENT`
 
 ### Requirement: Auditoría del acceso de proveedores
 El sistema SHALL registrar en `audit_logs`:
 - por cada proveedor autorizado: `SUPPLIER_STATUS_CHANGED`, con `old_value = {"status": "REGISTERED"}` y `new_value = {"status": "ACTIVE"}`;
-- por cada usuario creado: `USER_CREATED`, con el rol, el `supplier_id` y el origen `SUPPLIER_AUTHORIZATION`;
-- por cada operación: `SUPPLIER_BULK_AUTHORIZED`, con las listas de proveedores autorizados, con usuario previo, omitidos y no autorizados;
+- por cada usuario creado: `USER_CREATED`, con el rol, el `supplier_id`, el origen `SUPPLIER_AUTHORIZATION` y si la cuenta de Keycloak se creó o se enlazó (`idp_account`: `created` o `linked`);
+- por cada proveedor cuyo aprovisionamiento falló: `SUPPLIER_PROVISIONING_FAILED`, con el código del error y sin el cuerpo de la respuesta de Keycloak;
+- por cada operación: `SUPPLIER_BULK_AUTHORIZED`, con las listas de autorizados, con usuario previo, omitidos, no autorizados por correo en uso y no autorizados por fallo de aprovisionamiento;
 - por cada reenvío: `SUPPLIER_CREDENTIALS_RESENT`, con el usuario.
 
-Estos registros MUST NOT contener la contraseña temporal ni su hash. Las operaciones rechazadas (HTTP 400, 404 o 409) MUST NOT generar registros.
+Estos registros MUST NOT contener la contraseña temporal, tokens ni secretos. Las operaciones rechazadas (HTTP 400, 404, 409 o 503) MUST NOT generar registros, salvo `SUPPLIER_PROVISIONING_FAILED`.
 
 #### Scenario: Auditoría de una autorización
 - **WHEN** el Administrador autoriza un proveedor "Registrado" sin usuario
-- **THEN** `audit_logs` contiene `SUPPLIER_STATUS_CHANGED`, `USER_CREATED` y `SUPPLIER_BULK_AUTHORIZED` con su `user_id`, y ninguno contiene la contraseña temporal
+- **THEN** `audit_logs` contiene `SUPPLIER_STATUS_CHANGED`, `USER_CREATED` con `idp_account = "created"` y `SUPPLIER_BULK_AUTHORIZED` con su `user_id`, y ninguno contiene la contraseña temporal
+
+#### Scenario: Auditoría de un aprovisionamiento fallido
+- **WHEN** Keycloak rechaza la creación del usuario de un proveedor
+- **THEN** `audit_logs` contiene `SUPPLIER_PROVISIONING_FAILED` para ese proveedor, y no contiene `SUPPLIER_STATUS_CHANGED` ni `USER_CREATED` para él
+
+### Requirement: Custodia de credenciales en el proveedor de identidad
+Las credenciales de los usuarios del portal, incluida la contraseña temporal del proveedor, SHALL gestionarse exclusivamente en Keycloak (RN-HU03-01, corregida). El sistema MUST NOT persistir contraseñas ni hashes de contraseña en su base de datos:
+- los usuarios creados por la autorización, el alta de usuarios o el seed SHALL tener `password_hash` nulo;
+- el script de migración SHALL vaciar `password_hash` de cada usuario que enlaza.
+
+#### Scenario: Alta de proveedor autorizado
+- **WHEN** un proveedor pasa a "Autorizado"
+- **THEN** su cuenta y su credencial temporal existen en Keycloak, y su usuario local tiene `keycloak_sub` y `password_hash` nulo
+
+#### Scenario: Consulta de la tabla de usuarios
+- **WHEN** después de ejecutar el script de migración se inspecciona la tabla `users`
+- **THEN** ningún usuario enlazado tiene `password_hash`, y ninguna columna contiene un valor que permita autenticarse
 

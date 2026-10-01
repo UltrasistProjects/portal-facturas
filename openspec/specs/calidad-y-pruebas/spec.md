@@ -2,7 +2,6 @@
 
 ## Purpose
 Pruebas aisladas de los datos de trabajo, cobertura de los módulos de riesgo con umbral, lint y formato automatizados y verificación integrada con el pipeline compartido.
-
 ## Requirements
 ### Requirement: Pruebas aisladas de los datos de trabajo
 Cada sesión de pruebas SHALL crear una base de datos temporal `portal_test_<aleatorio>` en el servidor indicado por `TEST_DATABASE_URL` (o, si no existe, en el servidor de `DATABASE_URL`), aplicarle las migraciones y el seed, y eliminarla al terminar, también cuando la sesión falla. Usará además un directorio de almacenamiento temporal. La suite MUST NOT leer, modificar ni borrar la base de trabajo ni `storage/` del proyecto. Si el servidor no es alcanzable, la sesión SHALL fallar con un mensaje que indique cómo levantar el contenedor. Las pruebas MUST NOT depender de identificadores autoincrementales ni de folios del seed; SHALL localizar los datos por atributos de negocio.
@@ -27,7 +26,12 @@ La suite SHALL incluir pruebas de:
 - bloqueo de aceptación por severidad `CRITICAL` en `POST /invoices/{id}/review`;
 - reglas FIN-002, FIN-003, FIN-005 y FIN-006;
 - el límite de DAT-001 en la zona horaria de negocio;
-- limitación de intentos de login, política de contraseñas y revocación de sesiones;
+- el callback OIDC: callback válido, `state` inválido, `nonce` inválido, token expirado, audiencia incorrecta y firma inválida;
+- enlace por `sub` y roles: cuenta desconocida, rol ausente o distinto (403), usuario inactivo, y aislamiento entre proveedores (404);
+- el aprovisionamiento en Keycloak: éxito, fallo parcial, usuario ya existente y correo con otro rol;
+- la ausencia de contraseñas temporales en la base de datos, la auditoría y el log;
+- la configuración del realm versionado (política, fuerza bruta, clientes, sin secretos);
+- revocación de sesiones y logout en Keycloak;
 - cabeceras de seguridad y ausencia de traceback;
 - migraciones hasta `head` sobre una base PostgreSQL vacía, con `alembic check` sin diferencias;
 - respaldo y restauración con `pg_dump`/`pg_restore`.
@@ -74,4 +78,15 @@ El script SHALL terminar con código distinto de cero si alguno falla.
 #### Scenario: Base temporal de alembic check
 - **WHEN** termina `scripts/check.py`
 - **THEN** no queda en el servidor la base temporal usada por `alembic check`
+
+### Requirement: Pruebas sin Keycloak ni red
+La suite MUST NOT requerir un servidor Keycloak ni acceso a la red:
+- el flujo OIDC SHALL probarse contra un IdP simulado con un par de claves generado por sesión, un JWKS, un *discovery* y un token endpoint servidos por un transporte simulado del cliente HTTP, y ID tokens firmados a medida de cada prueba;
+- la API de administración SHALL sustituirse por un cliente falso en memoria que registra las llamadas y permite simular fallos.
+
+El helper de inicio de sesión de `tests/conftest.py` SHALL recorrer el flujo real `/login` → `/auth/callback` contra ese IdP simulado.
+
+#### Scenario: Suite sin Keycloak
+- **WHEN** se ejecuta `pytest` con el servicio `keycloak` detenido y sin red
+- **THEN** la suite pasa y ninguna prueba intenta conectarse a `KEYCLOAK_SERVER_URL`
 
