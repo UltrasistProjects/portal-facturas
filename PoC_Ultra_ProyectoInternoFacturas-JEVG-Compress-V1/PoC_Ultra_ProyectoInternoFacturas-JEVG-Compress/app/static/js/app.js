@@ -1,20 +1,14 @@
-document.querySelectorAll('[data-demo]').forEach(button => button.addEventListener('click', () => {
-  const [email, password] = button.dataset.demo.split('|');
-  document.querySelector('[name=email]').value = email;
-  document.querySelector('[name=password]').value = password;
-}));
 document.querySelectorAll('input[type=file]').forEach(input => input.addEventListener('change', () => {
   const label = input.closest('label')?.querySelector('.file-name');
   if (label) label.textContent = input.files[0]?.name || 'Ningun archivo seleccionado';
 }));
-const supplier = document.querySelector('#supplier');
+// Alta de factura: el servidor solo envia los contratos del proveedor del usuario; se copian proyecto y lider.
 const contract = document.querySelector('#contract');
-function syncContract() {
-  if (!supplier || !contract) return;
-  [...contract.options].forEach(o => o.hidden = o.dataset.supplier !== supplier.value);
-  const visible = [...contract.options].find(o => !o.hidden); if (visible) contract.value = visible.value;
-  syncProject();
-}
 function syncProject() { const o = contract?.selectedOptions[0]; if (o) { document.querySelector('#project').value = o.dataset.project || ''; document.querySelector('#leader').value = o.dataset.leader || ''; } }
-supplier?.addEventListener('change', syncContract); contract?.addEventListener('change', syncProject); syncContract();
+contract?.addEventListener('change', syncProject); syncProject();
 
+// Vista previa del correo (HU-05): el iframe toma la altura del correo. Sin JavaScript conserva la de app.css.
+document.querySelectorAll('iframe.email-preview').forEach(frame => {
+  const fit = () => { const body = frame.contentDocument?.body; if (body?.firstElementChild) frame.style.height = `${body.scrollHeight + 2}px`; };
+  frame.addEventListener('load', fit); window.addEventListener('resize', fit); fit();
+});

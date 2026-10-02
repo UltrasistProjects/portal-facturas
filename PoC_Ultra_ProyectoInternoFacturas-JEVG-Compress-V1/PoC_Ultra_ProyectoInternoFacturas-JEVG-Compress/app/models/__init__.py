@@ -5,7 +5,19 @@ from decimal import Decimal
 from enum import StrEnum
 from typing import Any
 
-from sqlalchemy import Boolean, CheckConstraint, Date, ForeignKey, Index, String, Text, UniqueConstraint, event, func
+from sqlalchemy import (
+    Boolean,
+    CheckConstraint,
+    Date,
+    ForeignKey,
+    Index,
+    String,
+    Text,
+    UniqueConstraint,
+    event,
+    false,
+    func,
+)
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import Mapped, Session, mapped_column, relationship
@@ -16,7 +28,6 @@ from app.core.constants import (
     DeliveryStatus,
     DocumentRequirement,
     InvoiceStatus,
-    LoginResult,
     Mailbox,
     NotificationEvent,
     ProcessingStatus,
@@ -24,6 +35,7 @@ from app.core.constants import (
     Role,
     RuleStatus,
     Severity,
+    SupplierClassification,
     SupplierOrigin,
     SupplierStatus,
     SupplierType,
@@ -39,8 +51,16 @@ def now_utc() -> datetime:
 
 def enum_column(enum: type[StrEnum], name: str | None = None) -> SAEnum:
     """Enumeracion como VARCHAR con CHECK: la BD rechaza valores fuera del catalogo (AUDITORIA BD-05). El CHECK
-    se llama como la enumeracion; `name` lo cambia cuando dos columnas de una tabla usan la misma."""
-    return SAEnum(enum, name=name, native_enum=False, create_constraint=True, validate_strings=True)
+    se llama como la enumeracion; `name` lo cambia cuando dos columnas de una tabla usan la misma. Se guarda el valor,
+    no el nombre del miembro: en Role difieren (ADMINISTRADOR -> "Administrador")."""
+    return SAEnum(
+        enum,
+        name=name,
+        native_enum=False,
+        create_constraint=True,
+        validate_strings=True,
+        values_callable=lambda members: [member.value for member in members],
+    )
 
 
 def restrict(target: str) -> ForeignKey:
@@ -48,17 +68,33 @@ def restrict(target: str) -> ForeignKey:
     return ForeignKey(target, ondelete="RESTRICT")
 
 
+# Un usuario Proveedor activo tiene proveedor; un PMO o Administrador, ninguno. Un Proveedor deshabilitado sin
+# proveedor se admite: asi quedan los registros previos (0013_provider_user_supplier).
+USER_PROVIDER_SUPPLIER_CHECK = (
+    "(role = 'Proveedor' AND (supplier_id IS NOT NULL OR NOT is_active))"
+    " OR (role <> 'Proveedor' AND supplier_id IS NULL)"
+)
+
+
 class User(Base):
     __tablename__ = "users"
+    __table_args__ = (CheckConstraint(USER_PROVIDER_SUPPLIER_CHECK, name="ck_users_provider_supplier"),)
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(150))
     email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
-    password_hash: Mapped[str] = mapped_column(String(512))
+    # Obsoleta (add-keycloak-authentication): las credenciales viven en Keycloak y el portal no guarda hashes
+    # (RN-HU03-01). Queda nula en todo usuario enlazado; se elimina en el cambio de limpieza.
+    password_hash: Mapped[str | None] = mapped_column(String(512))
+    # Identificador (sub) de la cuenta en Keycloak: el inicio de sesion enlaza al usuario solo por este valor (D7).
+    keycloak_sub: Mapped[str | None] = mapped_column(String(36), unique=True, index=True)
     role: Mapped[Role] = mapped_column(enum_column(Role), index=True)
     supplier_id: Mapped[int | None] = mapped_column(restrict("suppliers.id"), nullable=True, index=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=now_utc)
     last_login_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
+    # Obsoleta (add-keycloak-authentication): el cambio en el primer acceso lo exige Keycloak (UPDATE_PASSWORD).
+    # Nadie la lee ni la escribe; se elimina en el cambio de limpieza.
+    must_change_password: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
     supplier: Mapped[Supplier | None] = relationship(back_populates="users")
 
 
@@ -76,7 +112,7 @@ class Supplier(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     business_name: Mapped[str] = mapped_column(String(250))
     rfc: Mapped[str | None] = mapped_column(String(13), unique=True, index=True)
-    # Los valores por defecto mantienen el alta individual (solo nacionales) sin cambios.
+    # Los valores por defecto corresponden al proveedor nacional; el alta individual y la carga masiva los asignan.
     origin: Mapped[SupplierOrigin] = mapped_column(enum_column(SupplierOrigin), default=SupplierOrigin.NATIONAL)
     foreign_tax_id: Mapped[str | None] = mapped_column(String(40))
     country: Mapped[str] = mapped_column(String(2), default="MX")
@@ -88,6 +124,17 @@ class Supplier(Base):
     economic_proposal: Mapped[bool] = mapped_column(Boolean, default=False)
     bank_information: Mapped[str | None] = mapped_column(String(255))
     notes: Mapped[str | None] = mapped_column(Text)
+    # Perfil del proveedor. Admite NULL: los proveedores previos y los de la carga masiva lo completan al editarse;
+    # el alta individual y la edicion exigen los obligatorios (SupplierProfile).
+    classification: Mapped[SupplierClassification | None] = mapped_column(enum_column(SupplierClassification))
+    # Clave del catalogo de actividades economicas (catalog_entries, INDUSTRY): el servicio exige que este activa.
+    main_activity: Mapped[str | None] = mapped_column(String(10))
+    incorporation_date: Mapped[date | None] = mapped_column(Date)
+    website: Mapped[str | None] = mapped_column(String(255))
+    legal_rep_name: Mapped[str | None] = mapped_column(String(150))
+    legal_rep_phone: Mapped[str | None] = mapped_column(String(30))
+    contact_name: Mapped[str | None] = mapped_column(String(150))
+    contact_phone: Mapped[str | None] = mapped_column(String(30))
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=now_utc)
     updated_at: Mapped[datetime] = mapped_column(UTCDateTime, default=now_utc, onupdate=now_utc)
     users: Mapped[list[User]] = relationship(back_populates="supplier")
@@ -144,6 +191,13 @@ class ContractAmendment(Base):
     author: Mapped[User] = relationship()
 
 
+INVOICE_CANCELLATION_CHECK = (
+    "(status = 'CANCELLED' AND cancelled_at IS NOT NULL AND cancelled_by IS NOT NULL"
+    " AND cancellation_deadline IS NOT NULL AND cancellation_deadline > cancelled_at)"
+    " OR (status <> 'CANCELLED' AND cancelled_at IS NULL AND cancelled_by IS NULL AND cancellation_deadline IS NULL)"
+)
+
+
 class Invoice(Base):
     __tablename__ = "invoices"
     __table_args__ = (
@@ -158,6 +212,8 @@ class Invoice(Base):
         CheckConstraint(
             "validation_score IS NULL OR validation_score BETWEEN 0 AND 100", name="ck_invoices_score_range"
         ),
+        # Una factura cancelada tiene fecha, autor y fecha limite posterior; las demas, ninguno (HU-14).
+        CheckConstraint(INVOICE_CANCELLATION_CHECK, name="ck_invoices_cancellation"),
     )
     id: Mapped[int] = mapped_column(primary_key=True)
     internal_folio: Mapped[str] = mapped_column(String(30), unique=True, index=True)
@@ -182,6 +238,9 @@ class Invoice(Base):
     reviewed_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
     reviewed_by: Mapped[int | None] = mapped_column(restrict("users.id"), index=True)
     comments: Mapped[str | None] = mapped_column(Text)
+    cancelled_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
+    cancelled_by: Mapped[int | None] = mapped_column(restrict("users.id"), index=True)
+    cancellation_deadline: Mapped[datetime | None] = mapped_column(UTCDateTime)
     supplier: Mapped[Supplier] = relationship(back_populates="invoices")
     contract: Mapped[Contract | None] = relationship()
     # Sin delete/delete-orphan: documentos, validaciones y revisiones son evidencia fiscal (AUDITORIA BD-12).
@@ -240,12 +299,15 @@ class InvoiceDocumentType(Base):
             name="ck_invoice_document_types_formats",
         ),
         CheckConstraint("is_active OR NOT is_system", name="ck_invoice_document_types_system_active"),
-        # Niveles fijos (RD-04): el nacional factura con CFDI y el internacional con Invoice.
+        # Niveles fijos (RD-04): el nacional factura con CFDI y el internacional con Invoice; el acuse de
+        # cancelacion solo se carga al cancelar (HU-14).
         CheckConstraint(
             "(code NOT IN ('INVOICE_XML', 'INVOICE_PDF')"
             " OR (national_requirement = 'REQUIRED' AND international_requirement = 'NOT_APPLICABLE'))"
             " AND (code <> 'FOREIGN_INVOICE'"
-            " OR (national_requirement = 'NOT_APPLICABLE' AND international_requirement = 'REQUIRED'))",
+            " OR (national_requirement = 'NOT_APPLICABLE' AND international_requirement = 'REQUIRED'))"
+            " AND (code <> 'CANCELLATION_ACK'"
+            " OR (national_requirement = 'NOT_APPLICABLE' AND international_requirement = 'NOT_APPLICABLE'))",
             name="ck_invoice_document_types_fixed_levels",
         ),
     )
@@ -308,21 +370,6 @@ class AuditLog(Base):
     user: Mapped[User | None] = relationship()
 
 
-class LoginAttempt(Base):
-    """Intento de inicio de sesion; base de la limitacion por correo y por IP (AUDITORIA SEC-04)."""
-
-    __tablename__ = "login_attempts"
-    __table_args__ = (
-        Index("ix_login_attempts_email_attempted_at", "email", "attempted_at"),
-        Index("ix_login_attempts_ip_attempted_at", "ip", "attempted_at"),
-    )
-    id: Mapped[int] = mapped_column(primary_key=True)
-    email: Mapped[str] = mapped_column(String(255))
-    ip: Mapped[str | None] = mapped_column(String(50))
-    result: Mapped[LoginResult] = mapped_column(SAEnum(LoginResult, native_enum=False, create_constraint=True))
-    attempted_at: Mapped[datetime] = mapped_column(UTCDateTime, default=now_utc)
-
-
 class UserSession(Base):
     """Sesion del lado del servidor: la cookie solo lleva un identificador opaco; aqui se guarda su SHA-256
     (AUDITORIA SEC-07)."""
@@ -334,6 +381,9 @@ class UserSession(Base):
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=now_utc)
     last_seen_at: Mapped[datetime] = mapped_column(UTCDateTime, default=now_utc)
     revoked_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
+    # ID token de Keycloak, solo del lado del servidor: es el id_token_hint del cierre de sesion (D9). Se borra al
+    # revocar la sesion; nunca viaja en la cookie.
+    id_token_hint: Mapped[str | None] = mapped_column(Text)
     ip: Mapped[str | None] = mapped_column(String(50))
     user_agent: Mapped[str | None] = mapped_column(String(255))
 
@@ -490,7 +540,6 @@ __all__ = [
     "InvoiceDocumentType",
     "ValidationResult",
     "AuditLog",
-    "LoginAttempt",
     "Review",
     "UserSession",
     "NotificationTemplate",

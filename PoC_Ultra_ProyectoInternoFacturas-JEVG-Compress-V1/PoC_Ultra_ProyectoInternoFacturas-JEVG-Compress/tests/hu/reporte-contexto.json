@@ -1,0 +1,48 @@
+{
+  "proyecto": "Portal de Proveedores ULTRASIST — Portal Interno de Recepción y Prevalidación de Facturas (Invoice Portal PoC)",
+  "version_app": "Rama hu-auth-keycloak, commit ce835db (01/10/2026 14:07): «feat(interfaz-sin-dialogos-nativos): modales y validacion junto al campo»",
+  "ambiente": [
+    "Portal: http://127.0.0.1:8000 (FastAPI + uvicorn, Python 3.12 del .venv del proyecto), APP_ENV=development.",
+    "PostgreSQL 18.6 (contenedor portal-facturas-db-1) y Keycloak 26.7.4 (contenedor portal-facturas-keycloak-1, realm ultrasist-portal, http://127.0.0.1:58080), definidos en compose.yaml.",
+    "Docker Desktop estaba detenido; los contenedores se levantaron en el Docker Engine del sistema (contexto «default») con volúmenes nuevos. No se tocó el entorno de Docker Desktop.",
+    "Correo: el .env del proyecto apunta a un SMTP real (Gmail). Para no enviar correos reales a recepcionfacturas@ultrasist.com.mx ni a terceros, el portal se arrancó con MAIL_BACKEND=file y MAIL_OUTBOX_DIR=./evidencias/_correos como variables de entorno (sin modificar .env). Cada correo queda como .eml y la bitácora del portal registra el envío como «Enviado».",
+    "Navegador: Chromium 153 (Playwright 1.63.0), viewport 1440×900, idioma es-MX, zona America/Mexico_City.",
+    "Cuentas: admin@poc.local (Administrador), pmo@poc.local (PMO), proveedor1@poc.local (proveedor nacional) y proveedor3@poc.local (proveedor internacional) con DEMO_PASSWORD; los proveedores nuevos de HU-01/02/03/10 los crea la propia suite."
+  ],
+  "estado_inicial": [
+    "Base migrada a 0015_keycloak_identity y sembrada con la demo (scripts/init_db.py: 5 usuarios, 3 proveedores, 3 contratos, 12 facturas).",
+    "La base conserva además los datos de las ejecuciones previas de esta misma suite (depuración RMUQ6OD6H y RMUQ6QF4W; corridas completas previas RMUQ7G82D y RMUQ7MM3B). Cada ejecución usa identificadores propios (RFC, correos, números de factura, UUID, claves de catálogo), así que no interfieren entre sí; algunas capturas (bitácora de envíos, bandeja del PMO) muestran esos registros previos, que son el estado real de la base.",
+    "Datos de prueba de la ejecución en evidencias/_datos-prueba/<id>/: CFDI XML con UUID nuevos (uno con C.P. del receptor 06600 y otro con UUID repetido), PDF del CFDI, Invoices PDF, acuse de cancelación, orden de compra y Vo.Bo. Las plantillas de Excel se descargan del propio portal y se llenan durante la prueba."
+  ],
+  "metodo": [
+    "Una prueba Playwright por HU (tests/hu/specs), ejecutadas en un solo worker en el orden de dependencias de DEPENDENCIAS_HUs.md: HU-01, HU-02, HU-03, HU-10, HU-04, HU-05, HU-06, HU-07, HU-08, HU-12, HU-13, HU-15, HU-16, HU-14, HU-18, HU-19, HU-20, HU-17. Las HUs se reportan en orden de ID.",
+    "Inicio de sesión real por OIDC contra Keycloak para cada rol; todas las acciones se hacen en la interfaz (clics, formularios, cargas de archivo, descargas).",
+    "Cada paso registra el resultado esperado y el obtenido, leído de la pantalla (avisos, estatus, tablas, matriz de reglas). Un paso que no cumple lo esperado se marca FAIL y se captura la pantalla en ese momento.",
+    "Las capturas son page.screenshot de Playwright en el momento del paso. Las capturas de «página completa» amplían la ventana a la altura del documento. Los correos se muestran en Chromium a partir del .eml que generó el portal; su cabecera indica el archivo de origen.",
+    "Dos comprobaciones complementarias no usan la interfaz: la lectura de los .eml del outbox y una consulta de solo lectura a la base del portal para RN-HU03-01 (password_hash vacío).",
+    "Clasificación: PASS si todos los escenarios pasaron; FAIL si algún paso no cumplió lo esperado; BLOCKED si no se pudo ejecutar por ambiente, autenticación o una dependencia de otra HU."
+  ],
+  "modificaciones": [
+    "No se modificó código funcional de la aplicación ni su .env.",
+    "Se agregó la suite tests/hu/ (paquete Node aislado con @playwright/test 1.63.0; el portal sigue sin requerir Node para operar) y los artefactos evidencias/, test-results/, playwright-report/ y este PDF.",
+    "La configuración de correo se cambió sólo en el proceso de uvicorn con variables de entorno (ver Ambiente)."
+  ],
+  "problemas": [
+    {
+      "titulo": "scripts/reset_demo.py deja la base vacía cuando las cuentas demo ya existen en Keycloak",
+      "detalle": "Al intentar restablecer la demo para la corrida final, el script respaldó y recreó el esquema, y luego el seed falló: Keycloak respondió HTTP 400 «invalidPasswordHistoryMessage» al reasignar la misma DEMO_PASSWORD a las cuentas demo (política passwordHistory(1) del realm). El script informó «Keycloak no respondio (reset_password: http_400)… la base no se modifico», pero la base quedó migrada y vacía (0 usuarios). Se reprodujo la respuesta 400 directamente contra la API de administración de Keycloak.",
+      "accion": "Se restauró el respaldo automático que el propio script generó (scripts/restore_backup.py backups/20261002-000701 --yes). No se borraron volúmenes ni cuentas de Keycloak. Es un defecto de las herramientas de operación, no de una HU."
+    },
+    {
+      "titulo": "Ajustes de la propia suite durante la depuración",
+      "detalle": "En las corridas de depuración se corrigieron errores de la suite, no del portal: el nombre accesible del enlace «Facturas» incluye el glifo del ícono; las capturas tras desplazamientos se tomaban a mitad de la animación (scroll-behavior: smooth de Bootstrap); y algunas capturas no mostraban la fila o el estatus verificado. Las evidencias de este documento son de la corrida final completa, ejecutada con la suite ya corregida."
+    }
+  ],
+  "observaciones_ejecutor": [
+    {
+      "titulo": "Las páginas de error se muestran como si el usuario no tuviera sesión",
+      "detalle": "Con sesión iniciada, las respuestas 404 y 409 del portal muestran la variante para usuario anónimo: sin menú lateral y con el botón «Ir al acceso» (lleva a /login) en lugar de «Volver al inicio». Causa: render_error (app/main.py) no pasa el usuario al contexto de error.html, y base.html usa entonces el bloque anónimo. No afecta los criterios de las HUs.",
+      "evidencias": ["HU-04/06-envio-bloqueado-por-obligatorio.png", "HU-17/09-factura-ajena-404.png"]
+    }
+  ]
+}

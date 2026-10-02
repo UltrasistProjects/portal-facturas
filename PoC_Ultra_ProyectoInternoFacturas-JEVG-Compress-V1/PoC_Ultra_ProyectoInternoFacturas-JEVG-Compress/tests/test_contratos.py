@@ -106,7 +106,7 @@ def test_historial_visible_para_internal(client, contract):
     page = client.get("/contracts").text
     assert "Ampliacion de alcance" in page
     assert "$120,000.00" in page
-    assert "Modificar monto" not in page  # el formulario es solo para ADMIN
+    assert "Modificar monto" not in page  # el formulario es solo para Administrador
 
 
 def test_fin_001_registra_el_monto_y_la_enmienda_vigentes(client, contract):

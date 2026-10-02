@@ -1,10 +1,12 @@
+from datetime import timedelta
 from enum import StrEnum
 
 
 class Role(StrEnum):
-    PROVIDER = "PROVIDER"
-    INTERNAL = "INTERNAL"
-    ADMIN = "ADMIN"
+    # Nombres del negocio (ERS): el valor es el que se guarda en users.role y el que se muestra.
+    ADMINISTRADOR = "Administrador"
+    PROVEEDOR = "Proveedor"
+    PMO = "PMO"
 
 
 class SupplierType(StrEnum):
@@ -34,6 +36,27 @@ class SupplierOrigin(StrEnum):
     INTERNATIONAL = "INTERNATIONAL"
 
 
+class SupplierClassification(StrEnum):
+    INTERNAL = "INTERNAL"
+    EXTERNAL = "EXTERNAL"
+
+
+SUPPLIER_CLASSIFICATION_LABELS = {
+    SupplierClassification.INTERNAL: "Interno",
+    SupplierClassification.EXTERNAL: "Externo",
+}
+
+# Telefono del proveedor, de su contacto y de su representante legal: la misma regla que la carga masiva (HU-01).
+PHONE_FORMAT = r"[0-9+() -]{7,30}"
+PHONE_FORMAT_MESSAGE = "debe tener de 7 a 30 caracteres: digitos, espacios, +, (, ) o -"
+# Identificador fiscal del proveedor internacional, ya en mayusculas: la misma regla que la carga masiva (HU-01).
+FOREIGN_TAX_ID_FORMAT = r"[A-Z0-9 ./-]{1,40}"
+FOREIGN_TAX_ID_FORMAT_MESSAGE = "use hasta 40 caracteres: letras, digitos, espacios, puntos, guiones o diagonales"
+
+
+SUPPLIER_ORIGIN_LABELS = {SupplierOrigin.NATIONAL: "Nacional", SupplierOrigin.INTERNATIONAL: "Internacional"}
+
+
 class ContractStatus(StrEnum):
     ACTIVE = "ACTIVE"
     INACTIVE = "INACTIVE"
@@ -46,32 +69,32 @@ class ProcessingStatus(StrEnum):
 
 
 class InvoiceStatus(StrEnum):
+    """Modelo de estatus del ERS (EP-01, DT-01). Se conservan las claves que ya significaban lo mismo; cambia la
+    etiqueta. Los pasos de ClickBalance del PoC se retiraron con HU-20: Autorizada y Rechazada solo admiten la
+    cancelacion del proveedor (HU-14), y Cancelada es final."""
+
     DRAFT = "DRAFT"
     UPLOADED = "UPLOADED"
-    VALIDATING = "VALIDATING"
-    VALIDATION_FAILED = "VALIDATION_FAILED"
-    REQUIRES_CORRECTION = "REQUIRES_CORRECTION"
-    PREVALIDATED = "PREVALIDATED"
     UNDER_REVIEW = "UNDER_REVIEW"
     ACCEPTED = "ACCEPTED"
     REJECTED = "REJECTED"
-    READY_FOR_CLICKBALANCE = "READY_FOR_CLICKBALANCE"
-    UPLOADED_TO_CLICKBALANCE = "UPLOADED_TO_CLICKBALANCE"
+    REQUIRES_CORRECTION = "REQUIRES_CORRECTION"
+    CANCELLED = "CANCELLED"
 
 
 STATUS_LABELS = {
     InvoiceStatus.DRAFT: "Borrador",
     InvoiceStatus.UPLOADED: "Cargada",
-    InvoiceStatus.VALIDATING: "Validando",
-    InvoiceStatus.VALIDATION_FAILED: "Validacion fallida",
-    InvoiceStatus.REQUIRES_CORRECTION: "Requiere correccion",
-    InvoiceStatus.PREVALIDATED: "Prevalidada",
-    InvoiceStatus.UNDER_REVIEW: "En revision",
-    InvoiceStatus.ACCEPTED: "Aceptada",
+    InvoiceStatus.UNDER_REVIEW: "Enviada",
+    InvoiceStatus.ACCEPTED: "Autorizada",
     InvoiceStatus.REJECTED: "Rechazada",
-    InvoiceStatus.READY_FOR_CLICKBALANCE: "Lista para ClickBalance",
-    InvoiceStatus.UPLOADED_TO_CLICKBALANCE: "Cargada a ClickBalance",
+    InvoiceStatus.REQUIRES_CORRECTION: "Observaciones",
+    InvoiceStatus.CANCELLED: "Cancelada",
 }
+
+# Plazo que tiene Recepcion de Facturas para aceptar ante el SAT la cancelacion del CFDI (HU-14): horas naturales
+# desde la cancelacion en el portal.
+CANCELLATION_WINDOW = timedelta(hours=72)
 
 
 class DocumentType(StrEnum):
@@ -88,6 +111,8 @@ class DocumentType(StrEnum):
     PAYMENT_COMPLEMENT_XML = "PAYMENT_COMPLEMENT_XML"
     PAYMENT_COMPLEMENT_PDF = "PAYMENT_COMPLEMENT_PDF"
     ADDITIONAL = "ADDITIONAL"
+    # Se carga solo al cancelar la factura (HU-14): "No aplica" fijo para ambos origenes.
+    CANCELLATION_ACK = "CANCELLATION_ACK"
 
 
 class DocumentRequirement(StrEnum):
@@ -113,7 +138,8 @@ FORMAT_EXTENSIONS: dict[str, tuple[str, ...]] = {
     "TXT": (".txt",),
 }
 
-# Niveles que el Administrador no puede cambiar (RD-04): el nacional factura con CFDI, el internacional con Invoice.
+# Niveles que el Administrador no puede cambiar (RD-04): el nacional factura con CFDI, el internacional con Invoice;
+# el acuse de cancelacion no se pide en la carga documental (HU-14).
 # Clave -> {origen: nivel}. La base de datos los garantiza con ck_invoice_document_types_fixed_levels.
 FIXED_REQUIREMENTS: dict[str, dict[SupplierOrigin, DocumentRequirement]] = {
     DocumentType.INVOICE_XML: {
@@ -128,11 +154,16 @@ FIXED_REQUIREMENTS: dict[str, dict[SupplierOrigin, DocumentRequirement]] = {
         SupplierOrigin.NATIONAL: DocumentRequirement.NOT_APPLICABLE,
         SupplierOrigin.INTERNATIONAL: DocumentRequirement.REQUIRED,
     },
+    DocumentType.CANCELLATION_ACK: {
+        SupplierOrigin.NATIONAL: DocumentRequirement.NOT_APPLICABLE,
+        SupplierOrigin.INTERNATIONAL: DocumentRequirement.NOT_APPLICABLE,
+    },
 }
 FIXED_REQUIREMENT_REASONS = {
     DocumentType.INVOICE_XML: "El proveedor nacional factura con CFDI",
     DocumentType.INVOICE_PDF: "El proveedor nacional factura con CFDI",
     DocumentType.FOREIGN_INVOICE: "El proveedor internacional factura con Invoice",
+    DocumentType.CANCELLATION_ACK: "Se carga al cancelar la factura",
 }
 
 
@@ -151,12 +182,6 @@ class Severity(StrEnum):
     CRITICAL = "CRITICAL"
 
 
-class LoginResult(StrEnum):
-    SUCCESS = "SUCCESS"
-    FAILURE = "FAILURE"
-    THROTTLED = "THROTTLED"
-
-
 class ReviewDecision(StrEnum):
     ACCEPTED = "ACCEPTED"
     REJECTED = "REJECTED"
@@ -164,20 +189,21 @@ class ReviewDecision(StrEnum):
     COMMENT = "COMMENT"
 
 
+# DRAFT <-> UPLOADED lo asigna el sistema segun los archivos obligatorios; UNDER_REVIEW, un envio que procede;
+# REQUIRES_CORRECTION ("Observaciones"), solo la decision del PMO. El proveedor cancela desde cualquier estatus
+# distinto de CANCELLED (HU-14, EP-01 P-05); CANCELLED no tiene salidas.
 ALLOWED_TRANSITIONS: dict[InvoiceStatus, set[InvoiceStatus]] = {
-    InvoiceStatus.DRAFT: {InvoiceStatus.UPLOADED},
-    InvoiceStatus.UPLOADED: {InvoiceStatus.VALIDATING},
-    InvoiceStatus.VALIDATING: {
-        InvoiceStatus.PREVALIDATED,
+    InvoiceStatus.DRAFT: {InvoiceStatus.UPLOADED, InvoiceStatus.CANCELLED},
+    InvoiceStatus.UPLOADED: {InvoiceStatus.DRAFT, InvoiceStatus.UNDER_REVIEW, InvoiceStatus.CANCELLED},
+    InvoiceStatus.REQUIRES_CORRECTION: {InvoiceStatus.UNDER_REVIEW, InvoiceStatus.CANCELLED},
+    InvoiceStatus.UNDER_REVIEW: {
+        InvoiceStatus.ACCEPTED,
+        InvoiceStatus.REJECTED,
         InvoiceStatus.REQUIRES_CORRECTION,
-        InvoiceStatus.VALIDATION_FAILED,
+        InvoiceStatus.CANCELLED,
     },
-    InvoiceStatus.VALIDATION_FAILED: {InvoiceStatus.VALIDATING},
-    InvoiceStatus.REQUIRES_CORRECTION: {InvoiceStatus.UPLOADED, InvoiceStatus.VALIDATING},
-    InvoiceStatus.PREVALIDATED: {InvoiceStatus.UNDER_REVIEW},
-    InvoiceStatus.UNDER_REVIEW: {InvoiceStatus.ACCEPTED, InvoiceStatus.REJECTED, InvoiceStatus.REQUIRES_CORRECTION},
-    InvoiceStatus.ACCEPTED: {InvoiceStatus.READY_FOR_CLICKBALANCE},
-    InvoiceStatus.READY_FOR_CLICKBALANCE: {InvoiceStatus.UPLOADED_TO_CLICKBALANCE},
+    InvoiceStatus.ACCEPTED: {InvoiceStatus.CANCELLED},
+    InvoiceStatus.REJECTED: {InvoiceStatus.CANCELLED},
 }
 
 
@@ -188,17 +214,22 @@ BUSINESS_RULES = {
 }
 
 
+# Expediente del proveedor (Anexo A) por tipo de persona: los documentos que se pueden cargar. Cuentan para el
+# expediente minimo (SUP-003) salvo los opcionales y la propuesta economica sin cotizacion; los comprobantes de
+# domicilio alternativos cuentan como uno.
 SUPPLIER_REQUIREMENTS = {
     SupplierType.PERSONA_MORAL: [
         "DUE_DILIGENCE",
         "INCORPORATION_ACT",
         "LEGAL_REP_ID",
+        "LEGAL_REP_ADDRESS_PROOF",
         "TAX_STATUS",
         "SAT_OPINION",
         "ADDRESS_PROOF",
         "LOCATION",
         "BANK_STATEMENT",
         "ECONOMIC_PROPOSAL",
+        "SUPPLIER_CONTRACT",
     ],
     SupplierType.PERSONA_FISICA: [
         "OFFICIAL_ID",
@@ -208,8 +239,34 @@ SUPPLIER_REQUIREMENTS = {
         "LOCATION",
         "BANK_STATEMENT",
         "ECONOMIC_PROPOSAL",
+        "SUPPLIER_CONTRACT",
     ],
 }
+SUPPLIER_DOCUMENT_LABELS = {
+    "DUE_DILIGENCE": "Debida diligencia",
+    "INCORPORATION_ACT": "Acta constitutiva",
+    "LEGAL_REP_ID": "Identificación del representante legal",
+    "LEGAL_REP_ADDRESS_PROOF": "Comprobante de domicilio del representante legal",
+    "OFFICIAL_ID": "Identificación oficial",
+    "TAX_STATUS": "Cédula fiscal",
+    "SAT_OPINION": "Opinión de cumplimiento",
+    "ADDRESS_PROOF": "Comprobante de domicilio",
+    "LOCATION": "Ubicación",
+    "BANK_STATEMENT": "Estado de cuenta bancario",
+    "ECONOMIC_PROPOSAL": "Propuesta económica",
+    "SUPPLIER_CONTRACT": "Contrato",
+}
+# Dependen de la etapa del proceso (el contrato formaliza el expediente completo) o del nivel de riesgo.
+OPTIONAL_SUPPLIER_DOCUMENTS = {"SUPPLIER_CONTRACT", "DUE_DILIGENCE", "LOCATION"}
+# Obligatoria solo si el alta responde a una cotizacion o licitacion (Supplier.economic_proposal).
+QUOTATION_DOCUMENT = "ECONOMIC_PROPOSAL"
+# Requisitos que se cumplen con cualquiera de los dos documentos: el domicilio de la empresa o el del representante.
+ALTERNATIVE_SUPPLIER_DOCUMENTS = {
+    "ADDRESS_PROOF": "LEGAL_REP_ADDRESS_PROOF",
+    "LEGAL_REP_ADDRESS_PROOF": "ADDRESS_PROOF",
+}
+# Documentos con vigencia: advertencia (SUP-004) si su fecha tiene mas de tres meses.
+DATED_SUPPLIER_DOCUMENTS = {"TAX_STATUS", "SAT_OPINION", "ADDRESS_PROOF", "LEGAL_REP_ADDRESS_PROOF", "BANK_STATEMENT"}
 
 
 class NotificationEvent(StrEnum):
@@ -241,13 +298,15 @@ class DeliveryStatus(StrEnum):
 
 
 class CatalogType(StrEnum):
-    """Catalogos de referencia administrables (HU-07). Sus claves las usan las Reglas de Validacion (HU-06)."""
+    """Catalogos de referencia administrables (HU-07). Las claves del SAT las usan las Reglas de Validacion (HU-06);
+    las actividades economicas (sectores del SCIAN), la actividad principal del proveedor."""
 
     CURRENCY = "CURRENCY"
     CFDI_USE = "CFDI_USE"
     PAYMENT_FORM = "PAYMENT_FORM"
     PAYMENT_METHOD = "PAYMENT_METHOD"
     TAX_REGIME = "TAX_REGIME"
+    INDUSTRY = "INDUSTRY"
 
 
 CATALOG_LABELS = {
@@ -256,12 +315,14 @@ CATALOG_LABELS = {
     CatalogType.PAYMENT_FORM: "Formas de pago",
     CatalogType.PAYMENT_METHOD: "Métodos de pago",
     CatalogType.TAX_REGIME: "Regímenes fiscales",
+    CatalogType.INDUSTRY: "Actividades económicas",
 }
-# Formato de la clave por catalogo (claves del SAT) y su descripcion para los mensajes de error.
+# Formato de la clave por catalogo (claves del SAT y del SCIAN) y su descripcion para los mensajes de error.
 CATALOG_CODE_FORMATS = {
     CatalogType.CURRENCY: (r"[A-Z]{3}", "debe tener tres letras"),
     CatalogType.CFDI_USE: (r"[A-Z]{1,2}[0-9]{2}", "debe tener una o dos letras seguidas de dos dígitos"),
     CatalogType.PAYMENT_FORM: (r"[0-9]{2}", "debe tener dos dígitos"),
     CatalogType.PAYMENT_METHOD: (r"[A-Z]{3}", "debe tener tres letras"),
     CatalogType.TAX_REGIME: (r"[0-9]{3}", "debe tener tres dígitos"),
+    CatalogType.INDUSTRY: (r"[0-9]{2,6}", "debe tener de 2 a 6 dígitos (clave del SCIAN)"),
 }

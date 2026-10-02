@@ -1,4 +1,5 @@
-"""Autorizacion masiva de proveedores y credenciales de acceso (HU-02 y HU-03, spec acceso-proveedores)."""
+"""Autorizacion masiva de proveedores y credenciales de acceso (HU-02 y HU-03, spec acceso-proveedores), con las
+cuentas en el Keycloak simulado (add-keycloak-authentication)."""
 
 import json
 import re
@@ -14,12 +15,12 @@ from app.core.config import settings
 from app.core.constants import DeliveryStatus, NotificationEvent, Role, SupplierStatus
 from app.core.database import SessionLocal
 from app.core.errors import BusinessRuleError
-from app.core.security import hash_password, verify_password
 from app.models import AuditLog, EmailDelivery, Supplier, User
 from app.rules.supplier_rules import supplier_rules
-from app.services import mail_transport, secret_vault
+from app.services import mail_transport
 from app.services import supplier_access_service as access
-from tests.conftest import OUTBOX, csrf, login, supplier_by_email
+from app.services.keycloak_admin import UPDATE_PASSWORD
+from tests.conftest import OUTBOX, csrf, identity_account, login, supplier_by_email
 
 pytestmark = pytest.mark.usefixtures("restore_notification_recipients")
 
@@ -29,31 +30,6 @@ PASSWORD_LINE = re.compile(r"Contraseña temporal: (\S+)")
 
 
 # --- Datos de prueba ----------------------------------------------------------------------------------------------
-
-
-class RecordingVault:
-    """Gestor de secretos de prueba: registra cada resguardo y el estatus que el proveedor tiene en la base de datos
-    en ese momento (visto desde otra sesion)."""
-
-    name = "recording"
-
-    def __init__(self, fail_after: int | None = None):
-        self.calls: list[dict] = []
-        self.fail_after = fail_after
-
-    def store_temporary_password(self, *, supplier_id: int, username: str, password: str) -> None:
-        if self.fail_after is not None and len(self.calls) >= self.fail_after:
-            raise RuntimeError("Gestor de secretos no disponible")
-        with SessionLocal() as other:
-            committed = other.scalar(select(Supplier.status).where(Supplier.id == supplier_id))
-        self.calls.append({"supplier_id": supplier_id, "username": username, "password": password, "seen": committed})
-
-
-@pytest.fixture()
-def vault(monkeypatch):
-    recording = RecordingVault()
-    monkeypatch.setattr(secret_vault, "get_vault", lambda: recording)
-    return recording
 
 
 def closed_port() -> int:
@@ -106,7 +82,7 @@ def messages() -> list:
 def password_for(email: str) -> str:
     """Contrasena temporal del ultimo correo de credenciales enviado a `email`."""
     found = [m for m in messages() if m["To"] == email]
-    return PASSWORD_LINE.search(found[-1].get_content()).group(1)
+    return PASSWORD_LINE.search(found[-1].get_body(("plain",)).get_content()).group(1)
 
 
 def audit_count() -> int:
@@ -221,7 +197,7 @@ def test_proveedor_ya_autorizado_se_omite(client, registered_suppliers):
 def test_correo_usado_por_otro_usuario(client, registered_suppliers):
     [registered] = registered_suppliers()
     with SessionLocal() as db:
-        db.add(User(name="Interno", email=registered.email, password_hash="x", role=Role.INTERNAL, is_active=True))
+        db.add(User(name="Interno", email=registered.email, password_hash="x", role=Role.PMO, is_active=True))
         db.commit()
     try:
         login(client)
@@ -261,43 +237,72 @@ def test_proveedor_inexistente_no_autoriza_a_nadie(client, registered_suppliers)
     assert supplier(registered.id).status == SupplierStatus.REGISTERED
 
 
-def test_fallo_del_resguardo_revierte_la_autorizacion(registered_suppliers, monkeypatch):
-    rows = registered_suppliers(2)
-    failing = RecordingVault(fail_after=1)
-    monkeypatch.setattr(secret_vault, "get_vault", lambda: failing)
+def test_fallo_parcial_al_aprovisionar(client, registered_suppliers, keycloak):
+    first, rejected, third = registered_suppliers(3)
+    keycloak.rejected_emails.add(rejected.email)
+    login(client)
+    response = authorize(client, [first.id, rejected.id, third.id])
+    assert [supplier(row.id).status for row in (first, rejected, third)] == [
+        SupplierStatus.ACTIVE,
+        SupplierStatus.REGISTERED,
+        SupplierStatus.ACTIVE,
+    ]
+    assert portal_user(rejected.id) is None and portal_user(first.id).keycloak_sub
+    assert sorted(m["To"] for m in messages()) == sorted([first.email, third.email])
     with SessionLocal() as db:
-        admin = db.get(User, admin_id())
-        with pytest.raises(RuntimeError, match="Gestor de secretos"):
-            access.authorize(db, [s.id for s in rows], admin, "http://portal/login")
+        failed = db.scalar(
+            select(AuditLog).where(
+                AuditLog.action == access.PROVISIONING_FAILED, AuditLog.entity_id == str(rejected.id)
+            )
+        )
+        other = db.scalars(select(AuditLog.action).where(AuditLog.entity_id == str(rejected.id))).all()
+    assert failed.new_value == {"operation": "create_user", "error": "http_400"} and failed.user_id == admin_id()
+    assert "SUPPLIER_STATUS_CHANGED" not in other
+    page = client.get(response.headers["location"]).text
+    assert "2 autorizados · 0 omitidos · 1 no autorizados" in page
+    row = re.search(rf"{re.escape(rejected.business_name)}.*?</tr>", page, re.DOTALL).group(0)
+    assert "No autorizado: el servicio de identidad no pudo crear su cuenta" in row
+
+
+def test_keycloak_caido_no_autoriza_a_nadie(client, registered_suppliers, keycloak):
+    rows = registered_suppliers(2)
+    login(client)
+    keycloak.unavailable = True
+    response = authorize(client, [s.id for s in rows])
+    assert response.status_code == 303
     for row in rows:
-        assert supplier(row.id).status == SupplierStatus.REGISTERED
-        assert portal_user(row.id) is None
+        assert supplier(row.id).status == SupplierStatus.REGISTERED and portal_user(row.id) is None
     assert deliveries() == [] and messages() == []
+    assert "0 autorizados · 0 omitidos · 2 no autorizados" in client.get(response.headers["location"]).text
 
 
 # --- Usuario y contrasena temporal ---------------------------------------------------------------------------------
 
 
-def test_usuario_creado_al_autorizar(client, registered_suppliers):
+def test_usuario_creado_al_autorizar(client, registered_suppliers, keycloak):
     [registered] = registered_suppliers(email="Contacto.Mixto@Acceso-Proveedor.mx")
     login(client)
     authorize(client, [registered.id])
     user = portal_user(registered.id)
-    assert (user.email, user.role, user.is_active) == ("contacto.mixto@acceso-proveedor.mx", Role.PROVIDER, True)
+    assert (user.email, user.role, user.is_active) == ("contacto.mixto@acceso-proveedor.mx", Role.PROVEEDOR, True)
     assert user.name == registered.business_name and user.last_login_at is None
+    # RN-HU03-01: sin contrasena ni hash en el portal; la credencial vive en Keycloak, enlazada por sub.
+    assert user.password_hash is None and user.keycloak_sub
+    account = keycloak.account(user.email)
+    assert (account.id, account.enabled, account.roles) == (user.keycloak_sub, True, {"Proveedor"})
     password = password_for(user.email)
-    assert len(password) == 20 and verify_password(password, user.password_hash)
+    assert len(password) == 20 and account.password == password
+    assert account.required_actions == [UPDATE_PASSWORD]  # Keycloak exige cambiarla en el primer acceso
 
 
-def test_inicio_de_sesion_con_la_contrasena_temporal(client, registered_suppliers):
+def test_primer_acceso_del_proveedor_autorizado(client, registered_suppliers, keycloak):
     [registered] = registered_suppliers()
     login(client)
     authorize(client, [registered.id])
-    password = password_for(registered.email)
-    client.post("/logout", data={"csrf_token": csrf(client, "/")})
-    response = login(client, registered.email, password)
+    # Keycloak pide la contrasena nueva antes de volver al portal; el callback enlaza la cuenta por su sub.
+    response = login(client, registered.email)
     assert response.status_code == 303 and response.headers["location"] == "/"
-    assert registered.business_name in client.get("/").text  # nombre del usuario en el menu lateral
+    assert "Proveedor" in client.get("/").text and portal_user(registered.id).last_login_at is not None
 
 
 def test_contrasena_temporal_fuera_de_registros(client, registered_suppliers):
@@ -317,22 +322,23 @@ def test_contrasena_temporal_fuera_de_registros(client, registered_suppliers):
             for d in db.scalars(select(EmailDelivery))
             for column in EmailDelivery.__table__.columns
         ]
-    assert all(password not in value for value in user_columns)
-    assert password not in audits and user.password_hash not in audits
+    assert all(password not in value for value in user_columns) and user.password_hash is None
+    assert password not in audits
     assert all(password not in value for value in stored)
     assert password not in log_since(offset)
 
 
-def test_proveedor_con_usuario_propio(client, registered_suppliers):
+def test_proveedor_con_usuario_propio(client, registered_suppliers, keycloak):
     [registered] = registered_suppliers()
-    original = hash_password("Propia#Clave2026")
+    sub = identity_account(registered.email, Role.PROVEEDOR)
+    keycloak.change_password(registered.email, "Propia#Clave2026")
     with SessionLocal() as db:
         db.add(
             User(
                 name="Usuario previo",
                 email=registered.email,
-                password_hash=original,
-                role=Role.PROVIDER,
+                keycloak_sub=sub,
+                role=Role.PROVEEDOR,
                 supplier_id=registered.id,
                 is_active=True,
             )
@@ -343,24 +349,37 @@ def test_proveedor_con_usuario_propio(client, registered_suppliers):
     assert supplier(registered.id).status == SupplierStatus.ACTIVE
     with SessionLocal() as db:
         users = list(db.scalars(select(User).where(User.supplier_id == registered.id)))
-    assert len(users) == 1 and users[0].password_hash == original
+    assert len(users) == 1 and users[0].keycloak_sub == sub
+    assert keycloak.account(registered.email).password == "Propia#Clave2026"  # su contrasena no cambia
     assert deliveries() == []
     assert "Autorizado · Ya tenía usuario" in client.get(response.headers["location"]).text
 
 
-def test_resguardo_en_el_gestor_de_secretos(client, registered_suppliers, vault):
+def test_proveedor_ya_existente_en_keycloak(client, registered_suppliers, keycloak):
     [registered] = registered_suppliers()
+    existing = keycloak.add_account(registered.email, enabled=False)
     login(client)
     authorize(client, [registered.id])
-    [call] = vault.calls
-    assert call["supplier_id"] == registered.id and call["username"] == registered.email
-    assert call["password"] == password_for(registered.email)
-    assert call["seen"] == SupplierStatus.REGISTERED  # antes del commit
+    user = portal_user(registered.id)
+    assert user.keycloak_sub == existing.id  # se enlaza, no se duplica
+    assert sum(account.email == registered.email for account in keycloak.accounts.values()) == 1
+    assert existing.enabled and existing.roles == {"Proveedor"}
+    assert existing.password == password_for(registered.email) and existing.required_actions == [UPDATE_PASSWORD]
+    with SessionLocal() as db:
+        created = db.scalar(
+            select(AuditLog).where(AuditLog.action == "USER_CREATED", AuditLog.entity_id == str(user.id))
+        )
+    assert created.new_value["idp_account"] == "linked"
 
 
-def test_adaptador_nulo_por_omision():
-    assert isinstance(secret_vault.get_vault(), secret_vault.NullSecretVault)
-    assert secret_vault.get_vault().store_temporary_password(supplier_id=1, username="a@b.mx", password="x") is None
+def test_correo_de_un_usuario_interno_en_keycloak(client, registered_suppliers, keycloak):
+    [registered] = registered_suppliers()
+    internal = keycloak.add_account(registered.email, "PMO")
+    login(client)
+    response = authorize(client, [registered.id])
+    assert supplier(registered.id).status == SupplierStatus.REGISTERED and portal_user(registered.id) is None
+    assert internal.roles == {"PMO"} and internal.password is None and deliveries() == []
+    assert "No autorizado: el correo lo usa otro usuario" in client.get(response.headers["location"]).text
 
 
 # --- Correo de credenciales ---------------------------------------------------------------------------------------
@@ -373,7 +392,7 @@ def test_credenciales_enviadas(client, registered_suppliers):
     [message] = messages()
     assert message["To"] == registered.email and message["Cc"] is None
     assert message["Subject"] == "Acceso al Portal de Proveedores ULTRASIST"
-    body = message.get_content()
+    body = message.get_body(("plain",)).get_content()
     assert f"Usuario: {registered.email}" in body and "Portal: http://testserver/login" in body
     assert PASSWORD_LINE.search(body)
     [delivery] = deliveries()
@@ -436,7 +455,21 @@ def test_expediente_de_un_proveedor_recien_autorizado(client, registered_supplie
     page = client.get(f"/suppliers/{registered.id}").text
     assert "Acceso al portal" in page and registered.email in page
     assert "<dt>Último acceso</dt><dd>Nunca</dd>" in page
+    assert "<dt>Contraseña</dt><dd>Temporal, pendiente de cambio</dd>" in page
     assert "Credenciales enviadas el " in page and "Reenviar credenciales" in page
+
+
+def test_expediente_despues_del_primer_cambio(client, registered_suppliers, keycloak):
+    [registered] = registered_suppliers()
+    login(client)
+    authorize(client, [registered.id])
+    # Primer acceso: Keycloak exige la contrasena nueva y el proveedor entra al portal.
+    keycloak.change_password(registered.email, "Portal#2026x")
+    login(client, registered.email)
+    login(client)
+    page = client.get(f"/suppliers/{registered.id}").text
+    assert "<dt>Contraseña</dt><dd>Cambiada por el proveedor</dd>" in page
+    assert "<dt>Último acceso</dt><dd>Nunca</dd>" not in page and "Reenviar credenciales" not in page
 
 
 def test_expediente_de_un_proveedor_registrado(client, registered_suppliers):
@@ -450,14 +483,24 @@ def test_expediente_de_un_proveedor_registrado(client, registered_suppliers):
     assert "Acceso al portal" not in client.get(f"/suppliers/{registered.id}").text
 
 
-def test_reenvio_tras_un_envio_fallido(client, registered_suppliers, vault, monkeypatch):
+def test_expediente_con_keycloak_caido(client, registered_suppliers, keycloak):
+    [registered] = registered_suppliers()
+    login(client)
+    authorize(client, [registered.id])
+    keycloak.unavailable = True
+    response = client.get(f"/suppliers/{registered.id}")
+    assert response.status_code == 200
+    assert "<dt>Contraseña</dt><dd>No disponible</dd>" in response.text and "Reenviar credenciales" not in response.text
+
+
+def test_reenvio_tras_un_envio_fallido(client, registered_suppliers, keycloak, monkeypatch):
     [registered] = registered_suppliers()
     login(client)
     monkeypatch.setattr(settings, "mail_backend", "smtp")
     monkeypatch.setattr(settings, "smtp_host", "127.0.0.1")
     monkeypatch.setattr(settings, "smtp_port", closed_port())
     authorize(client, [registered.id])
-    first_password = vault.calls[0]["password"]
+    first_password = keycloak.account(registered.email).password
     monkeypatch.setattr(settings, "mail_backend", "file")
     response = resend(client, registered.id)
     delivery = deliveries()[-1]
@@ -465,12 +508,46 @@ def test_reenvio_tras_un_envio_fallido(client, registered_suppliers, vault, monk
     page = client.get(response.headers["location"]).text
     assert f"Credenciales enviadas a {registered.email}" in page
     new_password = password_for(registered.email)
-    assert new_password == vault.calls[1]["password"] != first_password
-    user = portal_user(registered.id)
-    assert verify_password(new_password, user.password_hash) and not verify_password(first_password, user.password_hash)
-    client.post("/logout", data={"csrf_token": csrf(client, "/")})
-    assert login(client, registered.email, first_password).status_code == 400
-    assert login(client, registered.email, new_password).status_code == 303
+    # Keycloak solo acepta la nueva: la temporal anterior deja de funcionar.
+    assert keycloak.account(registered.email).password == new_password != first_password
+
+
+def test_reenvio_a_quien_entro_sin_cambiar_la_contrasena(client, registered_suppliers, keycloak):
+    [registered] = registered_suppliers()
+    login(client)
+    authorize(client, [registered.id])
+    first_password = keycloak.account(registered.email).password
+    # Entro con la temporal pero no la cambio: aun puede recibir credenciales nuevas.
+    _set_user(registered.id, last_login_at=datetime.now(timezone.utc))
+    assert "Reenviar credenciales</button>" in client.get(f"/suppliers/{registered.id}").text
+    response = resend(client, registered.id)
+    assert response.status_code == 303
+    account = keycloak.account(registered.email)
+    assert account.password != first_password and account.required_actions == [UPDATE_PASSWORD]
+
+
+def test_reenvio_con_keycloak_caido(client, registered_suppliers, keycloak):
+    [registered] = registered_suppliers()
+    login(client)
+    authorize(client, [registered.id])
+    password = keycloak.account(registered.email).password
+    before_deliveries, before_audit = len(deliveries()), audit_count()
+    keycloak.unavailable = True
+    response = resend(client, registered.id)
+    assert response.status_code == 503
+    assert "El servicio de identidad no está disponible. Intente más tarde." in response.text
+    assert len(deliveries()) == before_deliveries and audit_count() == before_audit
+    assert keycloak.account(registered.email).password == password
+
+
+def test_reenvio_a_un_usuario_sin_enlazar(client, registered_suppliers):
+    [target] = registered_suppliers(status=SupplierStatus.ACTIVE)
+    with SessionLocal() as db:
+        db.add(User(name="Previo", email=target.email, role=Role.PROVEEDOR, supplier_id=target.id, is_active=True))
+        db.commit()
+    login(client)
+    response = resend(client, target.id)
+    assert response.status_code == 409 and access.MSG_NOT_LINKED in response.text
 
 
 def _set_user(supplier_id: int, **values) -> None:
@@ -485,28 +562,29 @@ def _set_user(supplier_id: int, **values) -> None:
         ("registered", "Sólo se reenvían credenciales a proveedores autorizados."),
         ("without_user", "El proveedor no tiene usuario del portal."),
         ("disabled", "El usuario del proveedor está deshabilitado."),
-        ("logged_in", "El proveedor ya inició sesión; no se generan credenciales nuevas."),
+        ("password_changed", "El proveedor ya cambió su contraseña temporal; no se generan credenciales nuevas."),
     ],
 )
-def test_condiciones_del_reenvio(client, registered_suppliers, setup, message):
+def test_condiciones_del_reenvio(client, registered_suppliers, keycloak, setup, message):
     [target] = registered_suppliers(
         status=SupplierStatus.ACTIVE if setup == "without_user" else SupplierStatus.REGISTERED
     )
     login(client)
-    if setup in {"disabled", "logged_in"}:
+    if setup == "disabled":
         authorize(client, [target.id])
-        values = {"is_active": False} if setup == "disabled" else {"last_login_at": datetime.now(timezone.utc)}
-        _set_user(target.id, **values)
-    user = portal_user(target.id)
-    before_hash, before_deliveries, before_audit = (
-        (user.password_hash if user else None),
-        len(deliveries()),
-        audit_count(),
-    )
+        _set_user(target.id, is_active=False)
+    elif setup == "password_changed":
+        authorize(client, [target.id])
+        keycloak.change_password(target.email, "Portal#2026x")
+        _set_user(target.id, last_login_at=datetime.now(timezone.utc))
+
+    def password() -> str | None:
+        return keycloak.account(target.email).password if portal_user(target.id) else None
+
+    before_password, before_deliveries, before_audit = password(), len(deliveries()), audit_count()
     response = resend(client, target.id)
     assert response.status_code == 409 and message in response.text
-    after = portal_user(target.id)
-    assert (after.password_hash if after else None) == before_hash
+    assert password() == before_password
     assert len(deliveries()) == before_deliveries and audit_count() == before_audit
     assert "Reenviar credenciales</button>" not in client.get(f"/suppliers/{target.id}").text
 
@@ -550,13 +628,19 @@ def test_auditoria_de_la_autorizacion(client, registered_suppliers):
     status = entries["SUPPLIER_STATUS_CHANGED"]
     assert (status.old_value, status.new_value) == ({"status": "REGISTERED"}, {"status": "ACTIVE"})
     created = entries["USER_CREATED"]
-    assert created.new_value == {"role": "PROVIDER", "supplier_id": registered.id, "origin": "SUPPLIER_AUTHORIZATION"}
+    assert created.new_value == {
+        "role": "Proveedor",
+        "supplier_id": registered.id,
+        "origin": "SUPPLIER_AUTHORIZATION",
+        "idp_account": "created",
+    }
     bulk = entries["SUPPLIER_BULK_AUTHORIZED"]
     assert bulk.new_value == {
         "authorized": [registered.id],
         "existing_access": [],
         "skipped": [],
         "conflicts": [],
+        "provisioning_failed": [],
     }
     assert {e.user_id for e in entries.values()} == {admin_id()}
     password = password_for(registered.email)

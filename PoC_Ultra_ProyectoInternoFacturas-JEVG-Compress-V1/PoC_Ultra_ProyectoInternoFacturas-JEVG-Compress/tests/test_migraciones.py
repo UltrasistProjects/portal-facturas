@@ -1,7 +1,7 @@
 import pytest
 from alembic import command
 from sqlalchemy import create_engine, text
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import DataError, IntegrityError
 from sqlalchemy.pool import NullPool
 
 from scripts import pgtools
@@ -18,7 +18,6 @@ DOMAIN_TABLES = {
     "documents",
     "validation_results",
     "audit_logs",
-    "login_attempts",
     "reviews",
     "user_sessions",
     "invoice_document_types",
@@ -33,7 +32,7 @@ NOTIFICATION_TABLES = {"notification_mailboxes", "notification_copies", "email_d
 VALIDATION_TABLES = {"validation_settings", "catalog_entries"}
 BASELINE_TABLES = (
     DOMAIN_TABLES - {"invoice_document_types", "notification_templates"} - NOTIFICATION_TABLES - VALIDATION_TABLES
-)
+) | {"login_attempts"}
 
 
 @pytest.fixture()
@@ -394,7 +393,14 @@ def test_instalacion_nueva_con_reglas_y_catalogos(empty_db):
     )
     assert settings == [("ULT940623AG0", "ULTRASIST", "", "03930", "601", "PPD", "99", ["G03", "I04"], True, 1, None)]
     counts = dict(query(empty_db, "SELECT catalog, count(*) FROM catalog_entries WHERE is_active GROUP BY catalog"))
-    assert counts == {"CURRENCY": 3, "CFDI_USE": 24, "PAYMENT_FORM": 22, "PAYMENT_METHOD": 2, "TAX_REGIME": 19}
+    assert counts == {
+        "CURRENCY": 3,
+        "CFDI_USE": 24,
+        "PAYMENT_FORM": 22,
+        "PAYMENT_METHOD": 2,
+        "TAX_REGIME": 19,
+        "INDUSTRY": 20,
+    }
     currencies = query(empty_db, "SELECT code FROM catalog_entries WHERE catalog = 'CURRENCY' ORDER BY code")
     assert currencies == [("EUR",), ("MXN",), ("USD",)]
 
@@ -424,3 +430,462 @@ def test_downgrade_de_reglas_modificadas(empty_db, sql):
     with pytest.raises(NotImplementedError, match="Restaure un respaldo"):
         command.downgrade(config, SUPPLIER_CREDENTIALS)
     assert VALIDATION_TABLES <= tables(empty_db)
+
+
+PASSWORD_CHANGE = "0008_password_change_required"
+
+
+def insert_user(url: str, email: str, *, audited: bool) -> None:
+    """Usuario previo a HU-10; con `audited`, como lo crean la autorizacion de proveedores o /admin/users."""
+    execute(
+        url,
+        "INSERT INTO users (name, email, password_hash, role, is_active, created_at, last_login_at)"
+        f" VALUES ('Usuario previo', '{email}', 'hash', 'PROVIDER', true, now(), now())",
+    )
+    if audited:
+        execute(
+            url,
+            "INSERT INTO audit_logs (action, entity, entity_id, timestamp)"
+            f" SELECT 'USER_CREATED', 'User', id::text, now() FROM users WHERE email = '{email}'",
+        )
+
+
+def test_usuarios_creados_desde_la_aplicacion_quedan_marcados(empty_db):
+    config = alembic_config(empty_db)
+    command.upgrade(config, VALIDATION_RULES)
+    # Aunque ya inicio sesion, conserva la contrasena que le asigno otra persona: nadie podia cambiarla.
+    insert_user(empty_db, "autorizado@proveedor.mx", audited=True)
+    insert_user(empty_db, "demo@poc.local", audited=False)
+    command.upgrade(config, PASSWORD_CHANGE)
+    marks = dict(query(empty_db, "SELECT email, must_change_password FROM users"))
+    assert marks == {"autorizado@proveedor.mx": True, "demo@poc.local": False}
+
+
+def test_downgrade_del_cambio_de_contrasena(empty_db):
+    config = alembic_config(empty_db)
+    command.upgrade(config, PASSWORD_CHANGE)
+    insert_user(empty_db, "autorizado@proveedor.mx", audited=True)
+    command.downgrade(config, VALIDATION_RULES)
+    columns = {
+        name
+        for (name,) in query(empty_db, "SELECT column_name FROM information_schema.columns WHERE table_name = 'users'")
+    }
+    assert "must_change_password" not in columns
+    assert query(empty_db, "SELECT count(*) FROM users") == [(1,)]
+    command.upgrade(config, "head")
+    command.check(config)
+
+
+SUPPLIER_PROFILE = "0009_supplier_profile"
+PROFILE_COLUMNS = {
+    "classification",
+    "main_activity",
+    "incorporation_date",
+    "website",
+    "legal_rep_name",
+    "legal_rep_phone",
+    "contact_name",
+    "contact_phone",
+}
+
+
+def test_proveedores_previos_sin_datos_de_perfil(empty_db):
+    config = alembic_config(empty_db)
+    command.upgrade(config, PASSWORD_CHANGE)
+    insert_supplier(empty_db, NATIONAL_COLUMNS, NATIONAL_VALUES)
+    command.upgrade(config, SUPPLIER_PROFILE)
+    assert PROFILE_COLUMNS <= supplier_columns(empty_db)
+    columns = ", ".join(sorted(PROFILE_COLUMNS))
+    assert query(empty_db, f"SELECT {columns} FROM suppliers") == [(None,) * len(PROFILE_COLUMNS)]
+    industries = query(empty_db, "SELECT count(*) FROM catalog_entries WHERE catalog = 'INDUSTRY' AND is_active")
+    assert industries == [(20,)]
+    with pytest.raises(IntegrityError, match="supplierclassification"):
+        execute(empty_db, "UPDATE suppliers SET classification = 'OTRA'")
+
+
+def test_downgrade_del_perfil_sin_datos(empty_db):
+    config = alembic_config(empty_db)
+    command.upgrade(config, SUPPLIER_PROFILE)
+    insert_supplier(empty_db, NATIONAL_COLUMNS, NATIONAL_VALUES)
+    command.downgrade(config, PASSWORD_CHANGE)
+    assert not PROFILE_COLUMNS & supplier_columns(empty_db)
+    assert query(empty_db, "SELECT count(*) FROM catalog_entries WHERE catalog = 'INDUSTRY'") == [(0,)]
+    assert query(empty_db, "SELECT count(*) FROM suppliers") == [(1,)]
+    command.upgrade(config, "head")
+    command.check(config)
+
+
+@pytest.mark.parametrize(
+    "sql",
+    [
+        "UPDATE suppliers SET contact_name = 'Contacto previo'",
+        "UPDATE catalog_entries SET is_active = false WHERE catalog = 'INDUSTRY' AND code = '54'",
+        "INSERT INTO catalog_entries (catalog, code, name, is_active, created_at, updated_at)"
+        " VALUES ('INDUSTRY', '5415', 'Servicios de diseño de sistemas de cómputo', true, now(), now())",
+    ],
+)
+def test_downgrade_del_perfil_con_datos(empty_db, sql):
+    config = alembic_config(empty_db)
+    command.upgrade(config, SUPPLIER_PROFILE)
+    insert_supplier(empty_db, NATIONAL_COLUMNS, NATIONAL_VALUES)
+    execute(empty_db, sql)
+    with pytest.raises(NotImplementedError, match="Restaure un respaldo"):
+        command.downgrade(config, PASSWORD_CHANGE)
+    assert PROFILE_COLUMNS <= supplier_columns(empty_db)
+
+
+INVOICE_STATUS_MODEL = "0010_invoice_status_model"
+NATIONAL_REQUIRED = ("INVOICE_XML", "INVOICE_PDF", "PURCHASE_ORDER", "APPROVAL")
+
+
+def add_invoice(url: str, number: str, status: str, document_types=(), decisions=()) -> None:
+    """Factura del primer proveedor, con un documento vigente por tipo y las revisiones en orden cronologico."""
+    execute(
+        url,
+        "INSERT INTO invoices (internal_folio, supplier_id, uploaded_by, invoice_number, service_period, project_name,"
+        " subtotal, tax, total, currency, status, created_at)"
+        f" SELECT 'FAC-{number}', s.id, u.id, '{number}', '08/2026', 'Proyecto', 0, 0, 0, 'MXN', '{status}', now()"
+        " FROM suppliers s, users u ORDER BY s.id, u.id LIMIT 1",
+    )
+    for document_type in document_types:
+        execute(
+            url,
+            "INSERT INTO documents (invoice_id, supplier_id, document_type, original_filename, stored_filename, path,"
+            " mime_type, file_size, sha256, uploaded_at, uploaded_by, processing_status, is_current)"
+            f" SELECT i.id, i.supplier_id, '{document_type}', 'a.pdf', 'a.pdf', 'invoices/1/a.pdf', 'application/pdf',"
+            " 1, repeat('0', 64), now(), i.uploaded_by, 'PROCESSED', true"
+            f" FROM invoices i WHERE i.invoice_number = '{number}'",
+        )
+    for minutes, decision in enumerate(decisions):
+        execute(
+            url,
+            "INSERT INTO reviews (invoice_id, reviewer_id, decision, comments, created_at)"
+            f" SELECT i.id, i.uploaded_by, '{decision}', 'Revision previa', now() + interval '{minutes} minutes'"
+            f" FROM invoices i WHERE i.invoice_number = '{number}'",
+        )
+
+
+def invoice_statuses(url: str) -> dict[str, str]:
+    return dict(query(url, "SELECT invoice_number, status FROM invoices"))
+
+
+def test_estatus_previos_al_envio_se_reasignan(empty_db):
+    config = alembic_config(empty_db)
+    command.upgrade(config, SUPPLIER_PROFILE)
+    insert_supplier(empty_db, NATIONAL_COLUMNS, NATIONAL_VALUES)
+    insert_user(empty_db, "previo@proveedor.mx", audited=False)
+    add_invoice(empty_db, "PREVALIDADA", "PREVALIDATED", NATIONAL_REQUIRED)
+    add_invoice(empty_db, "SIN-VOBO", "REQUIRES_CORRECTION", NATIONAL_REQUIRED[:3])
+    add_invoice(empty_db, "BORRADOR-COMPLETO", "DRAFT", NATIONAL_REQUIRED)
+    add_invoice(empty_db, "VALIDANDO", "VALIDATING")
+    # Devuelta por el PMO y prevalidada de nuevo sin reenviarse; el comentario posterior no es una decision.
+    add_invoice(empty_db, "DEVUELTA", "PREVALIDATED", NATIONAL_REQUIRED, ("REQUIRES_CORRECTION", "COMMENT"))
+    # Devuelta, reenviada y aceptada: ya no esta en un estatus previo al envio.
+    add_invoice(empty_db, "ACEPTADA", "ACCEPTED", NATIONAL_REQUIRED, ("REQUIRES_CORRECTION", "ACCEPTED"))
+    add_invoice(empty_db, "BORRADOR", "DRAFT")
+    command.upgrade(config, INVOICE_STATUS_MODEL)
+    assert invoice_statuses(empty_db) == {
+        "PREVALIDADA": "UPLOADED",
+        "SIN-VOBO": "DRAFT",
+        "BORRADOR-COMPLETO": "UPLOADED",
+        "VALIDANDO": "DRAFT",
+        "DEVUELTA": "REQUIRES_CORRECTION",
+        "ACEPTADA": "ACCEPTED",
+        "BORRADOR": "DRAFT",
+    }
+    migrated = query(
+        empty_db,
+        "SELECT i.invoice_number, a.old_value ->> 'status', a.new_value ->> 'status', a.user_id FROM audit_logs a"
+        " JOIN invoices i ON i.id::text = a.entity_id WHERE a.action = 'STATUS_MIGRATED' AND a.entity = 'Invoice'",
+    )
+    assert sorted(migrated) == [
+        ("BORRADOR-COMPLETO", "DRAFT", "UPLOADED", None),
+        ("DEVUELTA", "PREVALIDATED", "REQUIRES_CORRECTION", None),
+        ("PREVALIDADA", "PREVALIDATED", "UPLOADED", None),
+        ("SIN-VOBO", "REQUIRES_CORRECTION", "DRAFT", None),
+        ("VALIDANDO", "VALIDATING", "DRAFT", None),
+    ]
+
+
+def test_check_de_estatus_y_downgrade(empty_db):
+    config = alembic_config(empty_db)
+    command.upgrade(config, INVOICE_STATUS_MODEL)
+    insert_supplier(empty_db, NATIONAL_COLUMNS, NATIONAL_VALUES)
+    insert_user(empty_db, "previo@proveedor.mx", audited=False)
+    add_invoice(empty_db, "CARGADA", "UPLOADED", NATIONAL_REQUIRED)
+    with pytest.raises(IntegrityError, match="invoicestatus"):
+        execute(empty_db, "UPDATE invoices SET status = 'PREVALIDATED'")
+    command.downgrade(config, SUPPLIER_PROFILE)
+    assert invoice_statuses(empty_db) == {"CARGADA": "UPLOADED"}
+    execute(empty_db, "UPDATE invoices SET status = 'PREVALIDATED'")
+    execute(empty_db, "UPDATE invoices SET status = 'UPLOADED'")
+    command.upgrade(config, "head")
+    command.check(config)
+
+
+RETIRE_CLICKBALANCE = "0011_retire_clickbalance"
+
+
+def test_clickbalance_pasa_a_autorizada(empty_db):
+    config = alembic_config(empty_db)
+    command.upgrade(config, INVOICE_STATUS_MODEL)
+    insert_supplier(empty_db, NATIONAL_COLUMNS, NATIONAL_VALUES)
+    insert_user(empty_db, "previo@proveedor.mx", audited=False)
+    add_invoice(empty_db, "LISTA", "READY_FOR_CLICKBALANCE", NATIONAL_REQUIRED, ("ACCEPTED",))
+    add_invoice(empty_db, "CARGADA-CB", "UPLOADED_TO_CLICKBALANCE", NATIONAL_REQUIRED, ("ACCEPTED",))
+    add_invoice(empty_db, "AUTORIZADA", "ACCEPTED", NATIONAL_REQUIRED, ("ACCEPTED",))
+    command.upgrade(config, RETIRE_CLICKBALANCE)
+    assert invoice_statuses(empty_db) == {"LISTA": "ACCEPTED", "CARGADA-CB": "ACCEPTED", "AUTORIZADA": "ACCEPTED"}
+    migrated = query(
+        empty_db,
+        "SELECT i.invoice_number, a.old_value ->> 'status', a.new_value ->> 'status' FROM audit_logs a"
+        " JOIN invoices i ON i.id::text = a.entity_id WHERE a.action = 'STATUS_MIGRATED' AND a.entity = 'Invoice'",
+    )
+    assert sorted(migrated) == [
+        ("CARGADA-CB", "UPLOADED_TO_CLICKBALANCE", "ACCEPTED"),
+        ("LISTA", "READY_FOR_CLICKBALANCE", "ACCEPTED"),
+    ]
+    with pytest.raises(DataError, match="value too long"):
+        execute(empty_db, "UPDATE invoices SET status = 'READY_FOR_CLICKBALANCE'")
+
+
+def test_downgrade_del_retiro_de_clickbalance(empty_db):
+    config = alembic_config(empty_db)
+    command.upgrade(config, RETIRE_CLICKBALANCE)
+    insert_supplier(empty_db, NATIONAL_COLUMNS, NATIONAL_VALUES)
+    insert_user(empty_db, "previo@proveedor.mx", audited=False)
+    add_invoice(empty_db, "AUTORIZADA", "ACCEPTED", NATIONAL_REQUIRED, ("ACCEPTED",))
+    command.downgrade(config, INVOICE_STATUS_MODEL)
+    assert invoice_statuses(empty_db) == {"AUTORIZADA": "ACCEPTED"}
+    execute(empty_db, "UPDATE invoices SET status = 'READY_FOR_CLICKBALANCE'")
+    execute(empty_db, "UPDATE invoices SET status = 'ACCEPTED'")
+    command.upgrade(config, "head")
+    command.check(config)
+
+
+INVOICE_CANCELLATION = "0012_invoice_cancellation"
+CANCEL_SQL = (
+    "UPDATE invoices SET status = 'CANCELLED', cancelled_at = now(), cancelled_by = uploaded_by,"
+    " cancellation_deadline = now() + interval '72 hours'"
+)
+
+
+def test_cancelacion_en_el_esquema(empty_db):
+    config = alembic_config(empty_db)
+    command.upgrade(config, RETIRE_CLICKBALANCE)
+    insert_supplier(empty_db, NATIONAL_COLUMNS, NATIONAL_VALUES)
+    insert_user(empty_db, "previo@proveedor.mx", audited=False)
+    add_invoice(empty_db, "AUTORIZADA", "ACCEPTED", NATIONAL_REQUIRED, ("ACCEPTED",))
+    command.upgrade(config, INVOICE_CANCELLATION)
+    assert catalog(empty_db)["CANCELLATION_ACK"] == [
+        "Acuse de cancelación",
+        ["PDF", "XML"],
+        "NOT_APPLICABLE",
+        "NOT_APPLICABLE",
+        True,
+        True,
+    ]
+    assert query(empty_db, "SELECT cancelled_at, cancelled_by, cancellation_deadline FROM invoices") == [
+        (None, None, None)
+    ]
+    with pytest.raises(IntegrityError, match="ck_invoices_cancellation"):
+        execute(empty_db, "UPDATE invoices SET status = 'CANCELLED'")
+    execute(empty_db, CANCEL_SQL)
+    assert invoice_statuses(empty_db) == {"AUTORIZADA": "CANCELLED"}
+
+
+def test_nombre_del_acuse_ocupado_detiene_la_migracion(empty_db):
+    config = alembic_config(empty_db)
+    command.upgrade(config, RETIRE_CLICKBALANCE)
+    execute(
+        empty_db,
+        "INSERT INTO invoice_document_types (code, name, formats, is_system, is_active, national_requirement,"
+        " international_requirement, created_at, updated_at) VALUES ('SOPORTE_11', 'ACUSE DE Cancelación', '{PDF}',"
+        " false, true, 'OPTIONAL', 'OPTIONAL', now(), now())",
+    )
+    with pytest.raises(RuntimeError, match="SOPORTE_11 ya se llama «Acuse de cancelación»"):
+        command.upgrade(config, INVOICE_CANCELLATION)
+    assert query(empty_db, "SELECT version_num FROM alembic_version") == [(RETIRE_CLICKBALANCE,)]
+    execute(empty_db, "UPDATE invoice_document_types SET name = 'Acuse previo' WHERE code = 'SOPORTE_11'")
+    command.upgrade(config, INVOICE_CANCELLATION)
+
+
+def test_downgrade_de_la_cancelacion(empty_db):
+    config = alembic_config(empty_db)
+    command.upgrade(config, INVOICE_CANCELLATION)
+    insert_supplier(empty_db, NATIONAL_COLUMNS, NATIONAL_VALUES)
+    insert_user(empty_db, "previo@proveedor.mx", audited=False)
+    add_invoice(empty_db, "CANCELADA", "UPLOADED", NATIONAL_REQUIRED)
+    execute(empty_db, CANCEL_SQL)
+    with pytest.raises(NotImplementedError, match="Hay facturas canceladas"):
+        command.downgrade(config, RETIRE_CLICKBALANCE)
+    assert query(empty_db, "SELECT version_num FROM alembic_version") == [(INVOICE_CANCELLATION,)]
+    execute(
+        empty_db,
+        "UPDATE invoices SET status = 'UPLOADED', cancelled_at = NULL, cancelled_by = NULL,"
+        " cancellation_deadline = NULL",
+    )
+    command.downgrade(config, RETIRE_CLICKBALANCE)
+    assert "CANCELLATION_ACK" not in catalog(empty_db)
+    with pytest.raises(IntegrityError, match="invoicestatus"):
+        execute(empty_db, "UPDATE invoices SET status = 'CANCELLED'")
+    command.upgrade(config, "head")
+    command.check(config)
+
+
+PROVIDER_USER_SUPPLIER = "0013_provider_user_supplier"
+
+
+def test_usuarios_proveedor_sin_proveedor_se_deshabilitan(empty_db):
+    config = alembic_config(empty_db)
+    command.upgrade(config, INVOICE_CANCELLATION)
+    insert_supplier(empty_db, NATIONAL_COLUMNS, NATIONAL_VALUES)
+    insert_user(empty_db, "huerfano@proveedor.mx", audited=True)  # PROVIDER activo sin proveedor
+    insert_user(empty_db, "vinculado@proveedor.mx", audited=False)
+    execute(
+        empty_db, "UPDATE users SET supplier_id = (SELECT id FROM suppliers) WHERE email = 'vinculado@proveedor.mx'"
+    )
+    insert_user(empty_db, "interno@ultrasist.mx", audited=False)
+    execute(
+        empty_db,
+        "UPDATE users SET role = 'INTERNAL', supplier_id = (SELECT id FROM suppliers)"
+        " WHERE email = 'interno@ultrasist.mx'",
+    )
+    execute(
+        empty_db,
+        "INSERT INTO user_sessions (user_id, sid_hash, created_at, last_seen_at)"
+        " SELECT id, repeat('a', 64), now(), now() FROM users WHERE email = 'huerfano@proveedor.mx'",
+    )
+    command.upgrade(config, PROVIDER_USER_SUPPLIER)
+    users = {
+        email: (active, supplier)
+        for email, active, supplier in query(empty_db, "SELECT email, is_active, supplier_id IS NOT NULL FROM users")
+    }
+    assert users == {
+        "huerfano@proveedor.mx": (False, False),
+        "vinculado@proveedor.mx": (True, True),
+        "interno@ultrasist.mx": (True, False),
+    }
+    assert query(empty_db, "SELECT revoked_at IS NOT NULL FROM user_sessions") == [(True,)]
+    audited = query(
+        empty_db,
+        "SELECT u.email, a.action FROM audit_logs a JOIN users u ON u.id::text = a.entity_id"
+        " WHERE a.action IN ('USER_DEACTIVATED_WITHOUT_SUPPLIER', 'USER_SUPPLIER_CLEARED') ORDER BY u.email",
+    )
+    assert audited == [
+        ("huerfano@proveedor.mx", "USER_DEACTIVATED_WITHOUT_SUPPLIER"),
+        ("interno@ultrasist.mx", "USER_SUPPLIER_CLEARED"),
+    ]
+    with pytest.raises(IntegrityError, match="ck_users_provider_supplier"):
+        execute(empty_db, "UPDATE users SET is_active = true WHERE email = 'huerfano@proveedor.mx'")
+
+
+def test_downgrade_del_usuario_proveedor(empty_db):
+    config = alembic_config(empty_db)
+    command.upgrade(config, PROVIDER_USER_SUPPLIER)
+    command.downgrade(config, INVOICE_CANCELLATION)
+    insert_user(empty_db, "sin-proveedor@proveedor.mx", audited=False)  # sin el CHECK se admite
+    command.upgrade(config, "head")
+    assert query(empty_db, "SELECT is_active FROM users") == [(False,)]
+    command.check(config)
+
+
+BUSINESS_ROLE_NAMES = "0014_business_role_names"
+
+
+def test_roles_con_los_nombres_del_negocio(empty_db):
+    config = alembic_config(empty_db)
+    command.upgrade(config, PROVIDER_USER_SUPPLIER)
+    insert_supplier(empty_db, NATIONAL_COLUMNS, NATIONAL_VALUES)
+    for email, role, supplier in (
+        ("proveedor@proveedor.mx", "PROVIDER", "(SELECT id FROM suppliers)"),
+        ("pmo@ultrasist.mx", "INTERNAL", "NULL"),
+        ("admin@ultrasist.mx", "ADMIN", "NULL"),
+    ):
+        execute(
+            empty_db,
+            "INSERT INTO users (name, email, password_hash, role, supplier_id, is_active, created_at)"
+            f" VALUES ('Usuario previo', '{email}', 'hash', '{role}', {supplier}, true, now())",
+        )
+    command.upgrade(config, BUSINESS_ROLE_NAMES)
+    assert dict(query(empty_db, "SELECT email, role FROM users")) == {
+        "proveedor@proveedor.mx": "Proveedor",
+        "pmo@ultrasist.mx": "PMO",
+        "admin@ultrasist.mx": "Administrador",
+    }
+    with pytest.raises(IntegrityError, match="role"):
+        execute(empty_db, "UPDATE users SET role = 'ADMIN' WHERE email = 'admin@ultrasist.mx'")
+    with pytest.raises(IntegrityError, match="ck_users_provider_supplier"):
+        execute(empty_db, "UPDATE users SET supplier_id = NULL WHERE email = 'proveedor@proveedor.mx'")
+    command.downgrade(config, PROVIDER_USER_SUPPLIER)
+    assert sorted(role for (role,) in query(empty_db, "SELECT role FROM users")) == ["ADMIN", "INTERNAL", "PROVIDER"]
+    command.upgrade(config, "head")
+    command.check(config)
+
+
+KEYCLOAK_IDENTITY = "0015_keycloak_identity"
+
+
+def test_identidad_en_keycloak_en_el_esquema(empty_db):
+    config = alembic_config(empty_db)
+    command.upgrade(config, BUSINESS_ROLE_NAMES)
+    execute(
+        empty_db,
+        "INSERT INTO users (name, email, password_hash, role, is_active, created_at)"
+        " VALUES ('Previo', 'previo@ultrasist.mx', 'hash', 'PMO', true, now())",
+    )
+    command.upgrade(config, KEYCLOAK_IDENTITY)
+    assert "login_attempts" not in tables(empty_db)
+    # Los usuarios previos conservan su hash hasta enlazarlos (scripts/link_keycloak_users.py).
+    assert query(empty_db, "SELECT password_hash, keycloak_sub FROM users") == [("hash", None)]
+    execute(empty_db, "UPDATE users SET keycloak_sub = 'sub-1', password_hash = NULL")
+    execute(
+        empty_db,
+        "INSERT INTO users (name, email, role, is_active, created_at, keycloak_sub)"
+        " VALUES ('Nuevo', 'nuevo@ultrasist.mx', 'PMO', true, now(), 'sub-2')",
+    )
+    with pytest.raises(IntegrityError, match="ix_users_keycloak_sub"):
+        execute(empty_db, "UPDATE users SET keycloak_sub = 'sub-1' WHERE email = 'nuevo@ultrasist.mx'")
+    columns = {
+        name
+        for (name,) in query(
+            empty_db, "SELECT column_name FROM information_schema.columns WHERE table_name = 'user_sessions'"
+        )
+    }
+    assert "id_token_hint" in columns
+    command.check(config)
+
+
+def test_downgrade_de_la_identidad_con_usuarios_sin_hash(empty_db):
+    config = alembic_config(empty_db)
+    command.upgrade(config, "head")
+    execute(
+        empty_db,
+        "INSERT INTO users (name, email, role, is_active, created_at, keycloak_sub)"
+        " VALUES ('Enlazado', 'enlazado@ultrasist.mx', 'PMO', true, now(), 'sub-1')",
+    )
+    with pytest.raises(NotImplementedError, match="Restaure un respaldo"):
+        command.downgrade(config, BUSINESS_ROLE_NAMES)
+    assert query(empty_db, "SELECT version_num FROM alembic_version") == [(KEYCLOAK_IDENTITY,)]
+    assert "login_attempts" not in tables(empty_db)
+
+
+def test_downgrade_de_la_identidad_sin_usuarios_enlazados(empty_db):
+    config = alembic_config(empty_db)
+    command.upgrade(config, "head")
+    execute(
+        empty_db,
+        "INSERT INTO users (name, email, password_hash, role, is_active, created_at)"
+        " VALUES ('Previo', 'previo@ultrasist.mx', 'hash', 'PMO', true, now())",
+    )
+    command.downgrade(config, BUSINESS_ROLE_NAMES)
+    assert "login_attempts" in tables(empty_db)
+    user_columns = {
+        name
+        for (name,) in query(empty_db, "SELECT column_name FROM information_schema.columns WHERE table_name = 'users'")
+    }
+    assert "keycloak_sub" not in user_columns
+    with pytest.raises(IntegrityError, match="password_hash"):
+        execute(empty_db, "UPDATE users SET password_hash = NULL")
+    command.upgrade(config, "head")
+    command.check(config)

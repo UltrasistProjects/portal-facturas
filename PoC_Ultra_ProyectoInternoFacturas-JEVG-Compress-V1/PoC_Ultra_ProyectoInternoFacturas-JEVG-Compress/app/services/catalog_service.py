@@ -23,6 +23,7 @@ from sqlalchemy.orm import Session
 from app.core.constants import CATALOG_CODE_FORMATS, CATALOG_LABELS, CatalogType
 from app.core.errors import BusinessRuleError, InvalidInputError, NotFoundError
 from app.models import CatalogEntry, ValidationSettings, now_utc
+from app.repositories.pagination import Page, paginate, search
 from app.services.audit_service import audit
 
 # Lectura segura del .xlsx compartida con la carga masiva de proveedores (HU-01): inspeccion del paquete ZIP
@@ -78,6 +79,27 @@ def entries(db: Session, catalog: CatalogType) -> list[CatalogEntry]:
     return list(db.scalars(select(CatalogEntry).where(CatalogEntry.catalog == catalog).order_by(CatalogEntry.code)))
 
 
+def page_entries(db: Session, catalog: CatalogType, q: str = "", page: int = 1) -> Page[CatalogEntry]:
+    """Claves de la pantalla del catalogo: busqueda por clave o descripcion y paginacion en SQL. La plantilla de
+    Excel sigue usando `entries` (todas las claves)."""
+    stmt = select(CatalogEntry).where(CatalogEntry.catalog == catalog).order_by(CatalogEntry.code, CatalogEntry.id)
+    return paginate(db, search(stmt, q, CatalogEntry.code, CatalogEntry.name), page)
+
+
+@dataclass(frozen=True)
+class CatalogCounts:
+    total: int
+    active: int
+
+
+def counts(db: Session, catalog: CatalogType) -> CatalogCounts:
+    """Claves del catalogo y cuantas estan activas, sobre todo el catalogo (no sobre la pagina)."""
+    total, active = db.execute(
+        select(func.count(), func.count().filter(CatalogEntry.is_active)).where(CatalogEntry.catalog == catalog)
+    ).one()
+    return CatalogCounts(total, active)
+
+
 def active_codes(db: Session, catalog: CatalogType) -> set[str]:
     stmt = select(CatalogEntry.code).where(CatalogEntry.catalog == catalog, CatalogEntry.is_active.is_(True))
     return set(db.scalars(stmt))
@@ -110,7 +132,8 @@ def summaries(db: Session) -> list[CatalogSummary]:
 
 
 def in_use(db: Session) -> dict[CatalogType, set[str]]:
-    """Claves que usan las Reglas de Validacion: no se pueden desactivar (D4)."""
+    """Claves que usan las Reglas de Validacion: no se pueden desactivar (D4). Una actividad economica si: el
+    proveedor la conserva y el formulario de edicion la sigue ofreciendo."""
     settings = db.get(ValidationSettings, 1)
     return {
         CatalogType.CURRENCY: set(),
@@ -118,6 +141,7 @@ def in_use(db: Session) -> dict[CatalogType, set[str]]:
         CatalogType.PAYMENT_FORM: {settings.payment_form},
         CatalogType.PAYMENT_METHOD: {settings.payment_method},
         CatalogType.TAX_REGIME: {settings.receiver_tax_regime},
+        CatalogType.INDUSTRY: set(),
     }
 
 

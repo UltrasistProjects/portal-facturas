@@ -493,7 +493,7 @@ def test_correo_en_uso(admin, owner):
         existing_supplier(email=email)
     else:
         with SessionLocal() as db:
-            db.add(User(name="Usuario existente", email=email, password_hash="x", role="INTERNAL"))
+            db.add(User(name="Usuario existente", email=email, password_hash="x", role="PMO"))
             db.commit()
     before = supplier_count()
     response = post_import(admin, workbook([national(**{"Correo electrónico": email.upper()})]))

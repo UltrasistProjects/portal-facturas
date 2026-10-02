@@ -98,7 +98,7 @@ def test_cfdi_ya_registrado_en_otra_factura(client):
         xml_doc = db.scalar(
             select(Document).where(Document.invoice_id == invoice.id, Document.document_type == "INVOICE_XML")
         )
-        assert stored.status == InvoiceStatus.REQUIRES_CORRECTION
+        assert stored.status == InvoiceStatus.DRAFT
         assert stored.uuid is None
         assert xml_doc.metadata_json["uuid"] == taken
 

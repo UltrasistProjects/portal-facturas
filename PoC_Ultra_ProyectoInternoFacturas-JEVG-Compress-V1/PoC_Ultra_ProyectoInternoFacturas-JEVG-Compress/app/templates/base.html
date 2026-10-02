@@ -16,11 +16,11 @@
     <nav>
       <a href="/" class="nav-item"><i class="bi bi-grid"></i> Dashboard</a>
       <a href="/invoices" class="nav-item"><i class="bi bi-receipt"></i> Facturas</a>
-      {% if user.role.value in ['INTERNAL','ADMIN'] %}
+      {% if user.role.value in ['PMO','Administrador'] %}
       <a href="/suppliers" class="nav-item"><i class="bi bi-buildings"></i> Proveedores</a>
       <a href="/contracts" class="nav-item"><i class="bi bi-file-earmark-text"></i> Contratos</a>
       {% endif %}
-      {% if user.role.value == 'ADMIN' %}
+      {% if user.role.value == 'Administrador' %}
       <div class="nav-label">Administracion</div>
       <a href="/admin/users" class="nav-item"><i class="bi bi-people"></i> Usuarios</a>
       <a href="/admin/rules" class="nav-item"><i class="bi bi-sliders"></i> Reglas de validación</a>
@@ -32,6 +32,7 @@
       {% endif %}
     </nav>
     <div class="sidebar-footer"><span class="role-pill">{{ user.role.value }}</span><strong>{{ user.name }}</strong><small>{{ user.email }}</small>
+      <a class="btn-link" href="/account/password">Cambiar contraseña</a>
       <form method="post" action="/logout"><input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}"><button class="btn-link">Cerrar sesion</button></form>
     </div>
   </aside>
@@ -41,6 +42,7 @@
 </div>
 {% else %}{% block anonymous %}{% endblock %}{% endif %}
 <script src="{{ url_for('static', path='/vendor/bootstrap.bundle.min.js') }}"></script>
+<script src="{{ url_for('static', path='/js/form_validation.js') }}"></script>
 <script src="{{ url_for('static', path='/js/app.js') }}"></script>
 {% block scripts %}{% endblock %}
 </body></html>

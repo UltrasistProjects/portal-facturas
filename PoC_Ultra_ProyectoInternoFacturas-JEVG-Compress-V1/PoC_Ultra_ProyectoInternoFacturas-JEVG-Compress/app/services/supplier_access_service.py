@@ -1,11 +1,13 @@
-"""Autorizacion de proveedores y credenciales de acceso al portal (HU-02 y HU-03).
+"""Autorizacion de proveedores y credenciales de acceso al portal (HU-02 y HU-03, add-keycloak-authentication).
 
-- `authorize()`: pasa proveedores Registrados a Autorizado en una sola transaccion con sus filas bloqueadas, crea el
-  usuario PROVIDER de cada uno con una contrasena temporal y, despues del commit, envia el correo de credenciales (D3).
-- `resend_credentials()`: contrasena nueva mientras el proveedor no haya iniciado sesion (D9).
+- `authorize()`: pasa proveedores Registrados a Autorizado con sus filas bloqueadas. Cada proveedor se procesa en un
+  punto de guardado: su usuario del portal y su cuenta en Keycloak (creada o enlazada, rol Proveedor y contrasena
+  temporal con UPDATE_PASSWORD). Si Keycloak falla, solo ese proveedor se revierte y sigue Registrado (D12). Despues
+  del commit se envia el correo de credenciales (D1-A).
+- `resend_credentials()`: contrasena temporal nueva en Keycloak mientras la cuenta conserve UPDATE_PASSWORD (D14).
 
-La contrasena temporal solo existe en claro en memoria, en el gestor de secretos (secret_vault) y en el correo: nunca
-en la base de datos, la auditoria, la bitacora de envios ni el log (RN-HU03-01, D6).
+La contrasena temporal solo existe en claro en memoria, en la llamada a Keycloak y en el correo: nunca en la base de
+datos, la auditoria, la bitacora de envios ni el log (RN-HU03-01). El portal no guarda contrasenas ni hashes.
 """
 
 import logging
@@ -19,12 +21,12 @@ from sqlalchemy.orm import Session
 
 from app.core.constants import DeliveryStatus, NotificationEvent, Role, SupplierStatus
 from app.core.errors import BusinessRuleError, InvalidInputError, NotFoundError
-from app.core.passwords import generate_password
-from app.core.security import hash_password
 from app.models import AuditLog, EmailDelivery, Supplier, User
-from app.services import notification_service, secret_vault
+from app.services import identity_service as identity
+from app.services import notification_service
 from app.services.audit_service import audit
 from app.services.invoice_service import violates
+from app.services.keycloak_admin import IdentityAdmin, IdentityProviderError, get_identity_admin
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +34,7 @@ MAX_BATCH = 100
 USER_NAME_MAX_LENGTH = 150
 ENTITY = "Supplier"
 BULK_ACTION = "SUPPLIER_BULK_AUTHORIZED"
+PROVISIONING_FAILED = "SUPPLIER_PROVISIONING_FAILED"
 USER_ORIGIN = "SUPPLIER_AUTHORIZATION"
 CREDENTIALS = NotificationEvent.SUPPLIER_CREDENTIALS
 
@@ -44,7 +47,10 @@ MSG_SUPPLIER_NOT_FOUND = "Proveedor no encontrado"
 MSG_NOT_AUTHORIZED = "Sólo se reenvían credenciales a proveedores autorizados."
 MSG_NO_USER = "El proveedor no tiene usuario del portal."
 MSG_USER_DISABLED = "El usuario del proveedor está deshabilitado."
-MSG_ALREADY_LOGGED_IN = "El proveedor ya inició sesión; no se generan credenciales nuevas."
+MSG_NOT_LINKED = (
+    "El usuario del proveedor no está enlazado al proveedor de identidad: ejecute scripts/link_keycloak_users.py."
+)
+MSG_PASSWORD_CHANGED = "El proveedor ya cambió su contraseña temporal; no se generan credenciales nuevas."
 
 
 def _email(supplier: Supplier) -> str:
@@ -52,9 +58,9 @@ def _email(supplier: Supplier) -> str:
 
 
 def provider_user(db: Session, supplier: Supplier, *, lock: bool = False) -> User | None:
-    """Usuario PROVIDER propio del proveedor: ligado a el y con su correo del catalogo."""
+    """Usuario Proveedor propio del proveedor: ligado a el y con su correo del catalogo."""
     stmt = select(User).where(
-        User.supplier_id == supplier.id, User.role == Role.PROVIDER, func.lower(User.email) == _email(supplier)
+        User.supplier_id == supplier.id, User.role == Role.PROVEEDOR, func.lower(User.email) == _email(supplier)
     )
     if lock:
         stmt = stmt.with_for_update()
@@ -62,7 +68,7 @@ def provider_user(db: Session, supplier: Supplier, *, lock: bool = False) -> Use
 
 
 def send_credentials(
-    db: Session, supplier: Supplier, username: str, password: str, portal_url: str, admin_id: int
+    db: Session, supplier: Supplier, username: str, password: str, portal_url: str, admin_id: int | None
 ) -> EmailDelivery:
     """Correo de credenciales (HU-03) al correo del proveedor, sin copias. Llamar despues del commit."""
     return notification_service.notify(
@@ -98,6 +104,7 @@ class AuthorizationResult:
     existing_access: list[int]
     skipped: list[int]
     conflicts: list[int]
+    provisioning_failed: list[int]
     deliveries: list[EmailDelivery]
 
 
@@ -113,23 +120,31 @@ def _selection(raw_ids: Iterable[str | int]) -> list[int]:
     return ids
 
 
-def _create_user(db: Session, supplier: Supplier, admin: User, vault: secret_vault.SecretVault) -> Credential:
-    password = generate_password()
+def _create_user(db: Session, supplier: Supplier, admin: User, idp: IdentityAdmin) -> Credential:
+    """Usuario del portal sin contrasena y su cuenta en Keycloak (D12, D13). Dentro del punto de guardado del
+    proveedor: si Keycloak falla, el usuario local desaparece con el."""
+    email = _email(supplier)
     user = User(
         name=supplier.business_name[:USER_NAME_MAX_LENGTH],
-        email=_email(supplier),
-        password_hash=hash_password(password),
-        role=Role.PROVIDER,
+        email=email,
+        role=Role.PROVEEDOR,
         supplier_id=supplier.id,
         is_active=True,
     )
     db.add(user)
     try:
-        db.flush()
-    except IntegrityError as exc:  # otra transaccion creo un usuario con el mismo correo
-        db.rollback()
+        db.flush()  # antes de tocar Keycloak: un correo tomado por otra transaccion no deja cuentas huerfanas
+    except IntegrityError as exc:
         if violates(exc, "ix_users_email"):
             raise BusinessRuleError(MSG_RACE) from exc
+        raise
+    account = identity.provision(db, idp, email=email, role=Role.PROVEEDOR)
+    user.keycloak_sub = account.sub
+    try:
+        db.flush()
+    except IntegrityError as exc:  # otra transaccion enlazo la misma cuenta de Keycloak
+        if violates(exc, "ix_users_keycloak_sub"):
+            raise identity.AccountConflict() from exc
         raise
     audit(
         db,
@@ -137,15 +152,20 @@ def _create_user(db: Session, supplier: Supplier, admin: User, vault: secret_vau
         "User",
         user.id,
         admin.id,
-        new={"role": Role.PROVIDER.value, "supplier_id": supplier.id, "origin": USER_ORIGIN},
+        new={
+            "role": Role.PROVEEDOR.value,
+            "supplier_id": supplier.id,
+            "origin": USER_ORIGIN,
+            "idp_account": account.origin,
+        },
     )
-    vault.store_temporary_password(supplier_id=supplier.id, username=user.email, password=password)
-    return Credential(supplier, user.email, password)
+    return Credential(supplier, email, account.password)
 
 
 def authorize(db: Session, raw_ids: Iterable[str | int], admin: User, portal_url: str) -> AuthorizationResult:
-    """Autoriza los proveedores Registrados de la seleccion (D3). Los demas se omiten; los que tienen su correo en uso
-    por otro usuario no se autorizan. Confirma la transaccion y despues envia las credenciales."""
+    """Autoriza los proveedores Registrados de la seleccion. Los demas se omiten; los que tienen su correo en uso por
+    otro usuario (del portal o de Keycloak) o cuyo aprovisionamiento en Keycloak falla no se autorizan. Confirma la
+    transaccion y despues envia las credenciales."""
     started = time.perf_counter()
     ids = _selection(raw_ids)
     suppliers = list(db.scalars(select(Supplier).where(Supplier.id.in_(ids)).order_by(Supplier.id).with_for_update()))
@@ -153,32 +173,55 @@ def authorize(db: Session, raw_ids: Iterable[str | int], admin: User, portal_url
         raise NotFoundError(MSG_NOT_FOUND)
     emails = {_email(supplier) for supplier in suppliers}
     users = {user.email.lower(): user for user in db.scalars(select(User).where(func.lower(User.email).in_(emails)))}
-    outcome: dict[str, list[int]] = {"authorized": [], "existing_access": [], "skipped": [], "conflicts": []}
+    outcome: dict[str, list[int]] = {
+        "authorized": [],
+        "existing_access": [],
+        "skipped": [],
+        "conflicts": [],
+        "provisioning_failed": [],
+    }
     credentials: list[Credential] = []
-    vault = secret_vault.get_vault()
+    idp = get_identity_admin()
     for supplier in suppliers:
         if supplier.status != SupplierStatus.REGISTERED:
             outcome["skipped"].append(supplier.id)
             continue
         existing = users.get(_email(supplier))
-        if existing is not None and not (existing.role == Role.PROVIDER and existing.supplier_id == supplier.id):
+        if existing is not None and not (existing.role == Role.PROVEEDOR and existing.supplier_id == supplier.id):
             outcome["conflicts"].append(supplier.id)
             continue
-        supplier.status = SupplierStatus.ACTIVE
-        audit(
-            db,
-            "SUPPLIER_STATUS_CHANGED",
-            ENTITY,
-            supplier.id,
-            admin.id,
-            {"status": SupplierStatus.REGISTERED.value},
-            {"status": SupplierStatus.ACTIVE.value},
-        )
-        outcome["authorized"].append(supplier.id)
-        if existing is not None:
-            outcome["existing_access"].append(supplier.id)
+        try:
+            with db.begin_nested():
+                supplier.status = SupplierStatus.ACTIVE
+                audit(
+                    db,
+                    "SUPPLIER_STATUS_CHANGED",
+                    ENTITY,
+                    supplier.id,
+                    admin.id,
+                    {"status": SupplierStatus.REGISTERED.value},
+                    {"status": SupplierStatus.ACTIVE.value},
+                )
+                credential = None if existing is not None else _create_user(db, supplier, admin, idp)
+        except identity.AccountConflict:
+            outcome["conflicts"].append(supplier.id)
             continue
-        credentials.append(_create_user(db, supplier, admin, vault))
+        except IdentityProviderError as exc:
+            audit(
+                db,
+                PROVISIONING_FAILED,
+                ENTITY,
+                supplier.id,
+                admin.id,
+                new={"operation": exc.operation, "error": exc.code},
+            )
+            outcome["provisioning_failed"].append(supplier.id)
+            continue
+        outcome["authorized"].append(supplier.id)
+        if credential is None:
+            outcome["existing_access"].append(supplier.id)
+        else:
+            credentials.append(credential)
     entry = audit(db, BULK_ACTION, ENTITY, None, admin.id, new=outcome)
     db.commit()
     deliveries = [send_credentials(db, c.supplier, c.username, c.password, portal_url, admin.id) for c in credentials]
@@ -192,6 +235,7 @@ def authorize(db: Session, raw_ids: Iterable[str | int], admin: User, portal_url
             "existing_access": len(outcome["existing_access"]),
             "skipped": len(outcome["skipped"]),
             "conflicts": len(outcome["conflicts"]),
+            "provisioning_failed": len(outcome["provisioning_failed"]),
             "credentials_sent": sent,
             "credentials_failed": len(deliveries) - sent,
             "duration_ms": round((time.perf_counter() - started) * 1000),
@@ -241,6 +285,7 @@ class AuthorizationSummary:
     authorized: list[SummaryRow]
     skipped: list[Supplier]
     conflicts: list[Supplier]
+    provisioning_failed: list[Supplier]
 
 
 def authorization_summary(db: Session, audit_id: int) -> AuthorizationSummary | None:
@@ -265,20 +310,28 @@ def authorization_summary(db: Session, audit_id: int) -> AuthorizationSummary | 
         delivery = credentials_status(db, supplier.id)
         state = "pending" if delivery is None else ("sent" if delivery.status == DeliveryStatus.SENT else "failed")
         rows.append(SummaryRow(supplier, state, delivery))
-    return AuthorizationSummary(rows, listed("skipped"), listed("conflicts"))
+    return AuthorizationSummary(rows, listed("skipped"), listed("conflicts"), listed("provisioning_failed"))
+
+
+def password_state(user: User | None) -> str | None:
+    """Estado de la contrasena del usuario del proveedor, leido de Keycloak (D14); None sin usuario."""
+    if user is None:
+        return None
+    return identity.password_state(get_identity_admin(), user.keycloak_sub)
 
 
 # --- Reenvio de credenciales (HU-03) ------------------------------------------------------------------------------
 
 
-def can_resend(supplier: Supplier, user: User | None) -> bool:
+def can_resend(supplier: Supplier, user: User | None, state: str | None) -> bool:
+    """Mientras la cuenta de Keycloak conserve la contrasena temporal (UPDATE_PASSWORD), haya entrado o no con ella."""
     return (
-        supplier.status == SupplierStatus.ACTIVE and user is not None and user.is_active and user.last_login_at is None
+        supplier.status == SupplierStatus.ACTIVE and user is not None and user.is_active and state == identity.TEMPORARY
     )
 
 
 def resend_credentials(db: Session, supplier_id: int, admin: User, portal_url: str) -> EmailDelivery:
-    """Contrasena temporal nueva (invalida la anterior) y correo de credenciales (D9)."""
+    """Contrasena temporal nueva en Keycloak (invalida la anterior) y correo de credenciales (D14)."""
     supplier = db.scalar(select(Supplier).where(Supplier.id == supplier_id).with_for_update())
     if supplier is None:
         raise NotFoundError(MSG_SUPPLIER_NOT_FOUND)
@@ -289,11 +342,15 @@ def resend_credentials(db: Session, supplier_id: int, admin: User, portal_url: s
         raise BusinessRuleError(MSG_NO_USER)
     if not user.is_active:
         raise BusinessRuleError(MSG_USER_DISABLED)
-    if user.last_login_at is not None:
-        raise BusinessRuleError(MSG_ALREADY_LOGGED_IN)
-    password = generate_password()
-    user.password_hash = hash_password(password)
-    secret_vault.get_vault().store_temporary_password(supplier_id=supplier.id, username=user.email, password=password)
+    if not user.keycloak_sub:
+        raise BusinessRuleError(MSG_NOT_LINKED)
+    idp = get_identity_admin()
+    account = idp.get_user(user.keycloak_sub)
+    if account is None:
+        raise BusinessRuleError(MSG_NOT_LINKED)
+    if not account.password_pending:
+        raise BusinessRuleError(MSG_PASSWORD_CHANGED)
+    password = identity.reset_temporary_password(idp, user.keycloak_sub)
     audit(db, "SUPPLIER_CREDENTIALS_RESENT", ENTITY, supplier.id, admin.id, new={"user_id": user.id})
     db.commit()
     return send_credentials(db, supplier, user.email, password, portal_url, admin.id)

@@ -1,0 +1,179 @@
+{
+  "fuente": "docs/source-of-truth/ERS_Portal_Proveedores_ULTRASIST_MVP.docx (v1.4, 30/09/2026) · INDICE_HUs.md · DEPENDENCIAS_HUs.md · EP-01 · EP-02",
+  "hus": [
+    {
+      "id": "HU-01", "nombre": "Carga masiva de proveedores", "rol": "Administrador", "rf": "RF-01", "rn": ["RN-HU01-01"],
+      "objetivo": "Yo como administrador requiero una opción para cargar de forma masiva los registros de los proveedores a través de un formato de Excel predefinido para tener cargado en el sistema el catálogo de los proveedores.",
+      "criterios": [
+        "El sistema deberá aceptar un archivo de Excel con un formato/plantilla predefinido.",
+        "El sistema deberá mapear los datos requeridos del archivo hacia los campos del catálogo de proveedores (RN-HU01-01).",
+        "Ante filas con errores, se pregunta si se agregan las filas válidas; 'No, corregir primero' no cambia el catálogo y lista los errores por fila (HU-01 §7).",
+        "Los proveedores cargados quedan en estatus 'Registrado', sin acceso al portal (HU-01 §7)."
+      ],
+      "dependencias": []
+    },
+    {
+      "id": "HU-02", "nombre": "Autorización masiva de proveedores", "rol": "Administrador", "rf": "RF-02", "rn": [],
+      "objetivo": "Yo como administrador requiere una opción para actualizar el estatus del proveedor a “Autorizado” de forma masiva para que el proveedor esté listo para operar.",
+      "criterios": [
+        "El sistema deberá permitir seleccionar múltiples proveedores y cambiar su estatus en una sola operación.",
+        "Al quedar “Autorizado”, el proveedor queda habilitado para acceder al portal y se dispara el envío de sus credenciales (RF-03)."
+      ],
+      "dependencias": ["HU-01"]
+    },
+    {
+      "id": "HU-03", "nombre": "Envío de credenciales al proveedor", "rol": "Administrador / Sistema", "rf": "RF-03", "rn": ["RN-HU03-01"],
+      "objetivo": "Yo como administrador requiero que se mande al correo del Proveedor que haya sido “Autorizado”, tanto el usuario y password temporal, para que el proveedor pueda logearse por primera vez al portal de proveedores de forma segura.",
+      "criterios": [
+        "El envío del correo con usuario y contraseña temporal deberá dispararse automáticamente al quedar el proveedor “Autorizado”.",
+        "La contraseña temporal deberá gestionarse en el proveedor de identidad (Keycloak) y no almacenarse, ni en claro ni como hash, dentro del sistema de proveedores (RN-HU03-01)."
+      ],
+      "dependencias": ["HU-02"]
+    },
+    {
+      "id": "HU-04", "nombre": "Definición de archivos requeridos por tipo de proveedor", "rol": "Administrador", "rf": "RF-04", "rn": [],
+      "objetivo": "Yo como administrador requiero definir los archivos mínimos que debe subir el proveedor cuando se trate un proveedor “Nacional” o “internacional” para poder enviar su factura.",
+      "criterios": [
+        "La configuración deberá diferenciar el conjunto de archivos mínimos para proveedores “Nacional” y para proveedores “Internacional”.",
+        "Los archivos mínimos definidos aquí condicionan el registro/envío de la factura (véase RF-07 y RF-14)."
+      ],
+      "dependencias": []
+    },
+    {
+      "id": "HU-05", "nombre": "Configuración de plantillas de estatus de factura", "rol": "Administrador", "rf": "RF-05", "rn": [],
+      "objetivo": "Yo como administrador requiero definir en la sección de configuración del sistema, los diferentes tipos de plantillas que se enviaran a los usuarios en los diferentes tipos de cambios de estatus de la factura “Autorizada”, ”Rechazada”, ”Observaciones” y “Cancelada”.",
+      "criterios": [
+        "Deberá existir una plantilla configurable por cada tipo de cambio de estatus indicado.",
+        "Las plantillas alimentan las notificaciones automáticas descritas en RF-09, RF-10 y RF-16.",
+        "Vista previa con datos de ejemplo sin guardar; validación de variables obligatorias; carga del texto predeterminado (HU-05 §7)."
+      ],
+      "dependencias": []
+    },
+    {
+      "id": "HU-06", "nombre": "Configuración de reglas de validación", "rol": "Administrador", "rf": "RF-11", "rn": [],
+      "objetivo": "Yo como administrador requiero configurar las Reglas de Validación, definiendo los datos de ULTRASIST (RFC, Razón Social, Dirección y Código Postal) contra los que se comparan las facturas, para que el sistema valide automáticamente la información de las facturas que envían los proveedores.",
+      "criterios": [
+        "El Administrador deberá poder dar de alta, modificar y baja los campos y los valores de referencia de ULTRASIST usados en la validación.",
+        "Las reglas configuradas deberán ser las que consume la validación de facturas nacionales (RF-08) y, en la medida de lo posible, la validación de facturas extranjeras (RF-15)."
+      ],
+      "dependencias": []
+    },
+    {
+      "id": "HU-07", "nombre": "Administración de catálogos", "rol": "Administrador", "rf": "RF-12", "rn": [],
+      "objetivo": "Yo como administrador requiero administrar y cargar los catálogos que utiliza el portal para mantener actualizada la información de referencia de la operación.",
+      "criterios": [
+        "El sistema deberá permitir crear, consultar, actualizar y cargar los catálogos definidos para la operación.",
+        "El catálogo de proveedores se gestiona en RF-01; este requisito cubre los demás catálogos."
+      ],
+      "dependencias": []
+    },
+    {
+      "id": "HU-08", "nombre": "Configuración de correos de notificación", "rol": "Administrador", "rf": "RF-13", "rn": [],
+      "objetivo": "Yo como administrador requiero configurar los correos y destinatarios de las notificaciones, como el buzón de “Recepción de Facturas”, para que cada aviso del sistema llegue a la persona o área correcta.",
+      "criterios": [
+        "El Administrador deberá poder definir el/los destinatario(s) de cada notificación desde la sección de parámetros.",
+        "El destinatario “Recepción de Facturas” usado en RF-09 y RF-10 deberá tomarse de esta configuración."
+      ],
+      "dependencias": []
+    },
+    {
+      "id": "HU-10", "nombre": "Cambio de contraseña en primer inicio de sesión", "rol": "Proveedor", "rf": "RF-06", "rn": [],
+      "objetivo": "Yo como proveedor requiero logearme por primera vez y que el sistema me solicite cambiar mi correo [contraseña, errata documentada en EP-01] de forma automática y que dicho password sea de al menos 8 caracteres y al menos una letra, un número y un carácter especial.",
+      "criterios": [
+        "La nueva contraseña deberá tener al menos 8 caracteres e incluir al menos una letra, un número y un carácter especial.",
+        "El sistema no deberá permitir continuar la operación hasta que la contraseña haya sido cambiada.",
+        "Después del cambio, la contraseña temporal deja de funcionar (EP-01, criterios clave)."
+      ],
+      "dependencias": ["HU-03"]
+    },
+    {
+      "id": "HU-12", "nombre": "Registro de factura", "rol": "Proveedor", "rf": "RF-07", "rn": ["RN-HU12-01"],
+      "objetivo": "Yo como proveedor requiero registra cada una de mis facturas y cargar los archivos mínimos necesarios que fueron definidos desde la configuración del sistema para que pueda ser validada.",
+      "criterios": [
+        "El sistema deberá exigir los archivos mínimos configurados según el tipo de proveedor.",
+        "Al quedar cargada, la factura deberá tomar el estatus “Cargada” (RN-HU12-01).",
+        "El formulario sólo ofrece los contratos del propio proveedor (EP-01 DT-05)."
+      ],
+      "dependencias": ["HU-04", "HU-10"]
+    },
+    {
+      "id": "HU-13", "nombre": "Envío de factura por proveedor nacional", "rol": "Proveedor Nacional", "rf": "RF-08", "rn": ["RN-HU13-01", "RN-HU13-02"],
+      "objetivo": "Yo como proveedor “Nacional” requiero que una vez cargue mi factura junto con los archivos mínimos necesarios, yo pueda enviar mi factura al área de validación (PMO), previo la validación de los datos del formato XML coincidan con los datos que están definidos en la sección de “Reglas de Validación”.",
+      "criterios": [
+        "Antes de permitir el envío, el sistema deberá validar que los datos del XML coincidan con los parámetros de la sección “Reglas de Validación” (RF-11).",
+        "El sistema deberá validar que la factura no haya sido cargada previamente, buscando por el número de folio contenido en el XML (RN-HU13-01).",
+        "Una vez superadas las validaciones, el sistema deberá cambiar el estatus de la factura a “Enviada” (RN-HU13-02)."
+      ],
+      "dependencias": ["HU-12", "HU-06"]
+    },
+    {
+      "id": "HU-14", "nombre": "Cancelación de factura", "rol": "Proveedor", "rf": "RF-09", "rn": [],
+      "objetivo": "Yo como proveedor requiero poder cancelar mi factura y en este caso el sistema de deberá obligar a cargar como archivo adicional el “Acuse de Cancelación” y deberá enviar por correo a “Recepción de Facturas” un correo en donde se indique el “número de factura” y “nombre del proveedor” ha sido cancelado que por favor acepte la “Cancelación” antes de la fecha siguiente = Fecha Actual + 72 horas (3 días).",
+      "criterios": [
+        "Al solicitar la cancelación, el sistema deberá obligar a cargar como archivo adicional el “Acuse de Cancelación”.",
+        "El sistema deberá enviar un correo a “Recepción de Facturas” indicando el “número de factura” y el “nombre del proveedor”.",
+        "El correo deberá solicitar aceptar la “Cancelación” antes de la fecha: Fecha Actual + 72 horas (3 días)."
+      ],
+      "dependencias": ["HU-12", "HU-15", "HU-08"]
+    },
+    {
+      "id": "HU-15", "nombre": "Registro de factura por proveedor internacional", "rol": "Proveedor Internacional", "rf": "RF-14", "rn": [],
+      "objetivo": "Yo como proveedor “Internacional” requiero registrar mi factura cargando el Invoice en PDF y los documentos soporte definidos en la configuración del sistema, y que el sistema evite duplicados por nombre de archivo, para que mi factura pueda ser validada.",
+      "criterios": [
+        "El sistema deberá exigir los archivos mínimos configurados para el proveedor “Internacional”.",
+        "El sistema deberá impedir la carga de un Invoice duplicado, detectándolo por el nombre de archivo.",
+        "Al quedar cargada, la factura deberá tomar el estatus “Cargada” (consistente con RF-07)."
+      ],
+      "dependencias": ["HU-04", "HU-10"]
+    },
+    {
+      "id": "HU-16", "nombre": "Envío de factura por proveedor internacional", "rol": "Proveedor Internacional", "rf": "RF-15", "rn": [],
+      "objetivo": "Yo como proveedor “Internacional” requiero enviar mi Invoice al área de validación (PMO), previa validación —en la medida de lo posible— de mis datos, de los datos de ULTRASIST y de la dirección, para que mi factura sea revisada.",
+      "criterios": [
+        "Antes del envío, el sistema deberá validar, en la medida de lo posible, los datos del Invoice (datos del proveedor, datos de ULTRASIST y dirección) contra las Reglas de Validación aplicables (RF-11).",
+        "Una vez enviada, la factura deberá tomar el estatus “Enviada” (consistente con RF-08)."
+      ],
+      "dependencias": ["HU-15", "HU-06"]
+    },
+    {
+      "id": "HU-17", "nombre": "Consulta de estatus de factura", "rol": "Proveedor", "rf": "RF-16", "rn": [],
+      "objetivo": "Yo como proveedor requiero consultar el estatus de cada una de mis facturas y, en su caso, las observaciones o el motivo de rechazo, para dar seguimiento a su proceso de validación y pago.",
+      "criterios": [
+        "El proveedor deberá poder listar sus facturas y ver el estatus actual de cada una (Cargada, Enviada, Autorizada, Rechazada, Observaciones, Cancelada).",
+        "El proveedor deberá poder consultar el motivo/observaciones cuando la factura esté “Rechazada” o con “Observaciones”.",
+        "Un proveedor que pide una factura de otro proveedor recibe HTTP 404 (EP-01, criterios clave)."
+      ],
+      "dependencias": ["HU-20"]
+    },
+    {
+      "id": "HU-18", "nombre": "Consulta de facturas por PMO", "rol": "PMO", "rf": "RF-17", "rn": [],
+      "objetivo": "Yo como PMO requiero consultar el listado de las facturas registradas por los proveedores, con su estatus y datos principales, para identificar y seleccionar las que debo revisar.",
+      "criterios": [
+        "El PMO deberá poder listar las facturas con su estatus y datos principales (proveedor, folio/identificador, monto, tipo Nacional/Internacional).",
+        "El listado deberá permitir seleccionar una factura para su revisión (RF-18).",
+        "La bandeja abre en 'Enviada', la más antigua primero, y permite filtrar por origen (EP-02, criterios clave)."
+      ],
+      "dependencias": ["HU-13", "HU-16"]
+    },
+    {
+      "id": "HU-19", "nombre": "Visualización de detalle de factura por PMO", "rol": "PMO", "rf": "RF-18", "rn": [],
+      "objetivo": "Yo como PMO requiero visualizar el contenido de la factura y sus documentos soporte, junto con el resultado de las validaciones automáticas, para realizar la validación manual antes de cambiar su estatus.",
+      "criterios": [
+        "El PMO deberá poder visualizar la factura (PDF/XML/Invoice) y los documentos soporte cargados.",
+        "El PMO deberá poder revisar los datos y el resultado de las validaciones automáticas previas.",
+        "Desde esta pantalla, el PMO ejecuta el cambio de estatus (RF-10)."
+      ],
+      "dependencias": ["HU-18"]
+    },
+    {
+      "id": "HU-20", "nombre": "Cambio de estatus de factura", "rol": "PMO", "rf": "RF-10", "rn": ["RN-HU20-01", "RN-HU20-02", "RN-HU20-03"],
+      "objetivo": "Yo como PMO requiero poder cambiar a través de 3 botones cambiar el estatus de la factura a “Autorizada”, “Rechazada” y “Observaciones”.",
+      "criterios": [
+        "Al “Rechazar” o marcar “Observaciones”, el sistema deberá desplegar un campo “Observaciones” para que el PMO registre las notas correspondientes (RN-HU20-01).",
+        "Al cambiar a “Autorizada”, el sistema deberá enviar un correo a “Recepción de Facturas” indicando que la factura número X del proveedor Y por el monto Z ha sido autorizada para su pago; el destinatario se toma de la configuración de RF-13 (RN-HU20-02).",
+        "Al cambiar a “Rechazada” u “Observaciones”, el sistema deberá enviar un correo al proveedor (campo “correo” de la entidad proveedores) indicando la causa capturada en “Observaciones” (RN-HU20-03)."
+      ],
+      "dependencias": ["HU-19"]
+    }
+  ]
+}

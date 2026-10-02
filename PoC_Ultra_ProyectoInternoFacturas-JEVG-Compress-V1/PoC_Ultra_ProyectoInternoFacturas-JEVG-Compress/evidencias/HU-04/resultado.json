@@ -1,0 +1,148 @@
+{
+  "id": "HU-04",
+  "run": "RMUQ7SGCJ",
+  "inicio": "2026-10-02T00:18:23.854Z",
+  "fin": "2026-10-02T00:18:30.865Z",
+  "estado": "PASS",
+  "bloqueo": null,
+  "notas": [],
+  "prueba": {
+    "titulo": "HU-04 · Definición de archivos requeridos por tipo de proveedor",
+    "archivo": "05-HU-04-archivos-minimos.spec.ts"
+  },
+  "escenarios": [
+    {
+      "nombre": "Configuración diferenciada para proveedores Nacional e Internacional",
+      "estado": "PASS",
+      "pasos": [
+        {
+          "paso": "Abrir Administración › Archivos mínimos",
+          "esperado": "La tabla muestra cada tipo de documento con un nivel (Obligatorio / Opcional / No aplica) para Nacional y otro para Internacional; los niveles fijos (CFDI e Invoice) aparecen con candado.",
+          "obtenido": "Columnas: TIPO DE DOCUMENTO | FORMATOS | NACIONAL | INTERNACIONAL. XML del CFDI: Nacional \"Obligatorio\" fijo / Internacional \"No aplica\"; Invoice (PDF): Nacional \"No aplica\" / Internacional \"Obligatorio\". 8 niveles fijos con candado.",
+          "estado": "PASS",
+          "evidencias": [
+            {
+              "archivo": "HU-04/01-configuracion-por-origen.png",
+              "descripcion": "Archivos mínimos por origen: columnas Nacional e Internacional y niveles fijos con candado.",
+              "tipo": "aplicacion"
+            }
+          ]
+        },
+        {
+          "paso": "Pulsar \"Guardar configuración\" sin cambiar nada",
+          "esperado": "El sistema responde \"Sin cambios\".",
+          "obtenido": "Aviso: \"Sin cambios\".",
+          "estado": "PASS",
+          "evidencias": [
+            {
+              "archivo": "HU-04/02-guardar-sin-cambios.png",
+              "descripcion": "Aviso \"Sin cambios\" al guardar la configuración sin modificaciones.",
+              "tipo": "aplicacion"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "nombre": "Alta de un tipo de documento soporte obligatorio sólo para el proveedor Internacional",
+      "estado": "PASS",
+      "pasos": [
+        {
+          "paso": "Crear el tipo soporte \"Constancia QA RMUQ7SGCJ\" (PDF; Nacional: No aplica; Internacional: Obligatorio)",
+          "esperado": "Se crea el tipo (\"Tipo de documento creado\") y aparece en la configuración con esos niveles.",
+          "obtenido": "Aviso \"Tipo de documento creado\"; fila \"Constancia QA RMUQ7SGCJ\" con Nacional = No aplica e Internacional = Obligatorio.",
+          "estado": "PASS",
+          "evidencias": [
+            {
+              "archivo": "HU-04/03-formulario-tipo-soporte.png",
+              "descripcion": "Formulario \"Nuevo tipo de documento soporte\" capturado.",
+              "tipo": "aplicacion"
+            },
+            {
+              "archivo": "HU-04/04-tipo-soporte-creado.png",
+              "descripcion": "Tipo \"Constancia QA RMUQ7SGCJ\" en la configuración: Nacional \"No aplica\", Internacional \"Obligatorio\".",
+              "tipo": "aplicacion"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "nombre": "La configuración condiciona la carga documental según el origen del proveedor",
+      "estado": "PASS",
+      "pasos": [
+        {
+          "paso": "El proveedor internacional abre la carga documental de su factura INV-2026-0042",
+          "esperado": "El checklist incluye \"Constancia QA RMUQ7SGCJ\" como Obligatorio y Pendiente, se ofrece Invoice (PDF) y no se ofrecen el XML ni el PDF del CFDI.",
+          "obtenido": "Checklist: \"Falta 1 archivo obligatorio\"; tipos ofrecidos: Invoice, Orden de compra, Vo.Bo. del líder de proyecto, Constancia QA RMUQ7SGCJ, Contrato, Anexo del contrato, Documentación adicional.",
+          "estado": "PASS",
+          "evidencias": [
+            {
+              "archivo": "HU-04/05-internacional-tipo-obligatorio.png",
+              "descripcion": "Carga documental del proveedor internacional: \"Constancia QA RMUQ7SGCJ\" obligatorio y pendiente.",
+              "tipo": "aplicacion"
+            }
+          ]
+        },
+        {
+          "paso": "El proveedor internacional intenta \"Enviar a validación\" INV-2026-0042 sin cargar el nuevo archivo obligatorio",
+          "esperado": "El envío no procede por el archivo obligatorio faltante y la factura no queda \"Enviada\".",
+          "obtenido": "Respuesta del portal: \"409 No fue posible completar la operacion Faltan archivos obligatorios. Cárguelos antes de enviar Referencia: c8724aeb1ab84d2b8b0dd3d9ca9ef8d1 Ir al acceso\"; estatus de INV-2026-0042: \"Borrador\".",
+          "estado": "PASS",
+          "evidencias": [
+            {
+              "archivo": "HU-04/06-envio-bloqueado-por-obligatorio.png",
+              "descripcion": "Intento de envío sin el archivo obligatorio: el envío no procede.",
+              "tipo": "aplicacion"
+            }
+          ]
+        },
+        {
+          "paso": "El proveedor nacional abre la carga documental de su factura D-SIN-VOBO",
+          "esperado": "Se ofrecen el XML y el PDF del CFDI; \"Constancia QA RMUQ7SGCJ\" no se ofrece porque no aplica al Nacional.",
+          "obtenido": "Checklist: \"Falta 1 archivo obligatorio\"; tipos ofrecidos: XML del CFDI, PDF del CFDI, Orden de compra, Vo.Bo. del líder de proyecto, Contrato, Anexo del contrato, Complemento de pago, Complemento de pago, Documentación adicional.",
+          "estado": "PASS",
+          "evidencias": [
+            {
+              "archivo": "HU-04/07-nacional-sin-tipo.png",
+              "descripcion": "Carga documental del proveedor nacional: se ofrecen XML/PDF del CFDI y no \"Constancia QA RMUQ7SGCJ\".",
+              "tipo": "aplicacion"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "nombre": "Desactivar el tipo soporte: deja de exigirse",
+      "estado": "PASS",
+      "pasos": [
+        {
+          "paso": "Desactivar \"Constancia QA RMUQ7SGCJ\"",
+          "esperado": "El tipo pasa a \"Tipos inactivos\" (\"Estado del tipo de documento actualizado\").",
+          "obtenido": "Aviso \"Estado del tipo de documento actualizado\"; \"Constancia QA RMUQ7SGCJ\" listado en Tipos inactivos.",
+          "estado": "PASS",
+          "evidencias": [
+            {
+              "archivo": "HU-04/08-tipo-inactivo.png",
+              "descripcion": "\"Constancia QA RMUQ7SGCJ\" en \"Tipos inactivos\".",
+              "tipo": "aplicacion"
+            }
+          ]
+        },
+        {
+          "paso": "El proveedor internacional vuelve a la carga documental de INV-2026-0042 y reemplaza su Orden de compra",
+          "esperado": "El tipo desactivado ya no aparece, los obligatorios están completos y la factura vuelve a \"Cargada\" (\"Factura cargada. Ya puede enviarla a validación.\").",
+          "obtenido": "Checklist: \"Archivos obligatorios completos Factura cargada. Ya puede enviarla a validación.\"; \"Constancia QA RMUQ7SGCJ\" ya no se lista.",
+          "estado": "PASS",
+          "evidencias": [
+            {
+              "archivo": "HU-04/09-internacional-sin-tipo.png",
+              "descripcion": "Tras desactivar el tipo, el checklist está completo y la factura vuelve a \"Cargada\".",
+              "tipo": "aplicacion"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

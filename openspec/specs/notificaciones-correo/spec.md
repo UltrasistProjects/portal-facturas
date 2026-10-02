@@ -4,14 +4,14 @@
 Destinatarios y envío de las notificaciones por correo (HU-08, RF-13): acceso exclusivo del Administrador, buzón "Recepción de Facturas", copias por evento, validación de las listas, guardado con control de edición concurrente, destinatarios de cada evento, servicio de envío, bitácora de envíos, correo de prueba, datos del transporte en solo lectura y auditoría.
 ## Requirements
 ### Requirement: Configuración exclusiva del Administrador
-Las rutas `GET /admin/notifications`, `POST /admin/notifications` y `POST /admin/notifications/test` SHALL estar disponibles únicamente para el rol `ADMIN`. Las peticiones `POST` MUST exigir un token CSRF válido. El menú Administración SHALL mostrar la opción "Notificaciones" sólo al rol `ADMIN`. La página MUST NOT usar scripts ni estilos en línea.
+Las rutas `GET /admin/notifications`, `POST /admin/notifications` y `POST /admin/notifications/test` SHALL estar disponibles únicamente para el rol `Administrador`. Las peticiones `POST` MUST exigir un token CSRF válido. El menú Administración SHALL mostrar la opción "Notificaciones" sólo al rol `Administrador`. La página MUST NOT usar scripts ni estilos en línea.
 
 #### Scenario: PMO sin acceso
-- **WHEN** un usuario con rol `INTERNAL` solicita la pantalla, envía un guardado o pide un correo de prueba
+- **WHEN** un usuario con rol `PMO` solicita la pantalla, envía un guardado o pide un correo de prueba
 - **THEN** la respuesta es HTTP 403, la configuración no cambia y no se envía ningún correo
 
 #### Scenario: Proveedor sin acceso
-- **WHEN** un usuario con rol `PROVIDER` solicita la pantalla, envía un guardado o pide un correo de prueba
+- **WHEN** un usuario con rol `Proveedor` solicita la pantalla, envía un guardado o pide un correo de prueba
 - **THEN** la respuesta es HTTP 403, la configuración no cambia y no se envía ningún correo
 
 #### Scenario: Guardado sin token CSRF
@@ -19,8 +19,8 @@ Las rutas `GET /admin/notifications`, `POST /admin/notifications` y `POST /admin
 - **THEN** la respuesta es HTTP 403 y la configuración no cambia
 
 #### Scenario: Opción en el menú
-- **WHEN** un Administrador y un usuario `INTERNAL` abren el tablero
-- **THEN** el menú del Administrador incluye "Notificaciones" y el del usuario `INTERNAL` no
+- **WHEN** un Administrador y un usuario `PMO` abren el tablero
+- **THEN** el menú del Administrador incluye "Notificaciones" y el del usuario `PMO` no
 
 ### Requirement: Buzón "Recepción de Facturas"
 El sistema SHALL mantener el buzón "Recepción de Facturas" (`INVOICE_RECEPTION`) con una lista de 1 a 10 direcciones de correo. Desde la instalación SHALL contener `recepcionfacturas@ultrasist.com.mx`. El Administrador SHALL poder reemplazar la lista desde `/admin/notifications`. La interfaz MUST NOT permitir crear ni eliminar buzones.
@@ -106,14 +106,24 @@ La configuración SHALL leerse de la base de datos en cada envío, sin caché.
 ### Requirement: Envío de notificaciones
 El sistema SHALL ofrecer un servicio de envío para las HU que notifican. El servicio recibe el evento, los valores de las variables de su plantilla, el correo del proveedor si el evento lo requiere, la entidad relacionada y el usuario que origina el envío. El servicio:
 - SHALL resolver los destinatarios del evento y componer el correo con la plantilla vigente del evento;
-- SHALL enviar un mensaje de texto plano UTF-8 con `From` (`MAIL_FROM`), `To`, `Cc` si hay copias, `Subject`, `Date`, `Message-ID` y `Auto-Submitted: auto-generated`;
+- SHALL enviar un mensaje `multipart/alternative` UTF-8 con `From` (`MAIL_FROM`), `To`, `Cc` si hay copias, `Subject`, `Date`, `Message-ID` y `Auto-Submitted: auto-generated`, que contiene el cuerpo compuesto en texto plano y su versión HTML;
 - SHALL registrar el envío en la bitácora y confirmar ese registro;
 - ante un error del servidor de correo, o si rechaza a algún destinatario, SHALL registrar el envío como fallido y devolverlo sin propagar la excepción;
 - SHALL llamarse después de confirmar la transacción de negocio, de modo que un correo fallido no la revierte.
 
+La versión HTML SHALL derivarse del cuerpo compuesto, sin plantillas HTML editables: una tarjeta centrada con el logo de ULTRASIST, el asunto como título y el cuerpo en párrafos, con los estilos en línea. El logo SHALL viajar dentro del mensaje como parte relacionada referenciada por `cid:`. Cada valor del cuerpo MUST escaparse; las direcciones `http://` y `https://` SHALL mostrarse como enlaces y ningún otro esquema; un párrafo de dos o más líneas `Etiqueta: valor` SHALL mostrarse como bloque de datos.
+
 #### Scenario: Envío al buzón con el transporte de archivo
 - **WHEN** con `MAIL_BACKEND=file` se envía el correo de Autorizada de la factura "A-1024" del proveedor "Servicios Digitales del Norte SA de CV" por `$116,000.00 MXN`
-- **THEN** el buzón de salida contiene un archivo `.eml` con `To: recepcionfacturas@ultrasist.com.mx`, el asunto "Factura A-1024 autorizada para pago", `Content-Type: text/plain; charset="utf-8"` y el cuerpo compuesto, y la bitácora registra el envío como `SENT`
+- **THEN** el buzón de salida contiene un archivo `.eml` `multipart/alternative` con `To: recepcionfacturas@ultrasist.com.mx`, el asunto "Factura A-1024 autorizada para pago" y una parte `text/plain; charset="utf-8"` con el cuerpo compuesto, y la bitácora registra el envío como `SENT`
+
+#### Scenario: Versión HTML con el logo
+- **WHEN** se envía el correo de Autorizada de la factura "A-1024"
+- **THEN** el mensaje tiene una parte `multipart/related` con el HTML y el logo PNG `inline`, el HTML referencia el logo por su `Content-ID`, muestra el asunto como título y muestra "Folio interno" y "FAC-2026-00042" en un bloque de datos
+
+#### Scenario: Valores escapados en la versión HTML
+- **WHEN** se envía un correo de Rechazada con las observaciones `<b>Urgente</b>`
+- **THEN** la parte de texto plano contiene `<b>Urgente</b>` tal cual y el HTML contiene `&lt;b&gt;Urgente&lt;/b&gt;` y ninguna etiqueta `<b>`
 
 #### Scenario: Servidor de correo caído
 - **WHEN** el transporte SMTP no puede conectarse al servidor y se envía un correo de Rechazada
@@ -132,15 +142,15 @@ Cada intento de envío SHALL quedar registrado con:
 - la entidad relacionada y su identificador, si los hay;
 - el usuario que lo originó y la fecha.
 
-La bitácora MUST NOT guardar el asunto ni el cuerpo del correo. `/admin/notifications` SHALL mostrar los últimos 20 envíos, del más reciente al más antiguo, con fecha, evento ("Prueba" para el correo de prueba), destinatarios, resultado y error.
+La bitácora MUST NOT guardar el asunto ni el cuerpo del correo. `/admin/notifications` SHALL mostrar todos los envíos, paginados de 25 en 25 (spec `listados-paginados`), del más reciente al más antiguo, con fecha, evento ("Prueba" para el correo de prueba), destinatarios, resultado y error.
 
 #### Scenario: Envío registrado sin contenido
 - **WHEN** se envía el correo de Rechazada de una factura
 - **THEN** existe un registro en la bitácora con el evento `INVOICE_REJECTED`, la entidad "Invoice" y su id, y ninguna columna contiene el asunto ni el cuerpo
 
-#### Scenario: Últimos envíos en la pantalla
-- **WHEN** hay 25 envíos registrados y el Administrador abre `/admin/notifications`
-- **THEN** la sección de últimos envíos muestra los 20 más recientes, empezando por el último
+#### Scenario: Envíos en la pantalla
+- **WHEN** hay 30 envíos registrados y el Administrador abre `/admin/notifications`
+- **THEN** la bitácora muestra los 25 más recientes, empezando por el último, y en la página 2 los 5 restantes
 
 ### Requirement: Correo de prueba
 El Administrador SHALL poder enviar un correo de prueba a una dirección que indica, desde `POST /admin/notifications/test`. La dirección SHALL validarse como las de las listas. El correo SHALL tener el asunto "Correo de prueba del Portal de Proveedores ULTRASIST" y un cuerpo fijo con el nombre del Administrador y la fecha y hora en la zona de negocio. El envío SHALL registrarse en la bitácora sin evento. La pantalla SHALL indicar si el correo se envió o si falló.

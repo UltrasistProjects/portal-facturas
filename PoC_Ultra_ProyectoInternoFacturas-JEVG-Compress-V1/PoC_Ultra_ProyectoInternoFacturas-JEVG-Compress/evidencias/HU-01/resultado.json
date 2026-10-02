@@ -1,0 +1,147 @@
+{
+  "id": "HU-01",
+  "run": "RMUQ7SGCJ",
+  "inicio": "2026-10-02T00:18:06.952Z",
+  "fin": "2026-10-02T00:18:11.446Z",
+  "estado": "PASS",
+  "bloqueo": null,
+  "notas": [],
+  "prueba": {
+    "titulo": "HU-01 · Carga masiva de proveedores",
+    "archivo": "01-HU-01-carga-masiva-proveedores.spec.ts"
+  },
+  "escenarios": [
+    {
+      "nombre": "Acceso al módulo y descarga de la plantilla predefinida",
+      "estado": "PASS",
+      "pasos": [
+        {
+          "paso": "Abrir Proveedores › Carga masiva",
+          "esperado": "Se muestra la página \"Carga masiva de proveedores\" con el formulario de carga (.xlsx) y \"Descargar plantilla\".",
+          "obtenido": "Página \"Carga masiva de proveedores\" con el campo de archivo (accept=.xlsx) y el botón \"Cargar proveedores\".",
+          "estado": "PASS",
+          "evidencias": [
+            {
+              "archivo": "HU-01/01-listado-proveedores-inicial.png",
+              "descripcion": "Listado de proveedores antes de la carga, con el botón \"Carga masiva\".",
+              "tipo": "aplicacion"
+            },
+            {
+              "archivo": "HU-01/02-pagina-carga-masiva.png",
+              "descripcion": "Página de carga masiva: instrucciones, campo de archivo .xlsx y \"Descargar plantilla\".",
+              "tipo": "aplicacion"
+            }
+          ]
+        },
+        {
+          "paso": "Descargar la plantilla de Excel",
+          "esperado": "Se descarga plantilla_carga_proveedores_v1.xlsx con la hoja \"Proveedores\" (10 columnas del catálogo) e \"Instrucciones\".",
+          "obtenido": "Descargado \"plantilla_carga_proveedores_v1.xlsx\": hojas Proveedores, Instrucciones; encabezados: Origen | Tipo de persona | Razón social | RFC | Identificador fiscal extranjero | País | Correo electrónico | Teléfono | Convenio de confidencialidad | Notas; sin filas de datos.",
+          "estado": "PASS",
+          "evidencias": []
+        }
+      ]
+    },
+    {
+      "nombre": "Archivo con filas con errores: \"No, corregir primero\"",
+      "estado": "PASS",
+      "pasos": [
+        {
+          "paso": "Cargar la plantilla llena con 1 fila válida y 3 filas con errores (RFC inválido, sin identificador fiscal, correo inválido)",
+          "esperado": "Se abre la ventana \"Algunas filas contienen errores o no se han podido leer correctamente. ¿Desea agregar las filas válidas?\".",
+          "obtenido": "Ventana mostrada: \"Algunas filas contienen errores o no se han podido leer correctamente. ¿Desea agregar las filas válidas?\"; botón con foco: \"No, corregir primero (Recomendado)\".",
+          "estado": "PASS",
+          "evidencias": [
+            {
+              "archivo": "HU-01/03-modal-filas-con-errores.png",
+              "descripcion": "Ventana de confirmación con \"No, corregir primero (Recomendado)\" preseleccionado.",
+              "tipo": "aplicacion"
+            }
+          ]
+        },
+        {
+          "paso": "Elegir \"No, corregir primero (Recomendado)\"",
+          "esperado": "Se cierra la ventana, se listan los errores por fila y columna, y el catálogo no cambia.",
+          "obtenido": "Errores listados (3): Fila 3 · RFC: tiene un formato inválido / Fila 4 · Identificador fiscal extranjero: es obligatorio para proveedores internacionales / Fila 5 · Correo electrónico: no es un correo válido. La búsqueda del RFC QAD260101GCJ no devuelve proveedores.",
+          "estado": "PASS",
+          "evidencias": [
+            {
+              "archivo": "HU-01/04-errores-por-fila.png",
+              "descripcion": "Lista de errores \"Fila N · Columna: mensaje\" tras elegir corregir primero.",
+              "tipo": "aplicacion"
+            },
+            {
+              "archivo": "HU-01/05-catalogo-sin-cambios.png",
+              "descripcion": "Búsqueda del RFC de la fila válida (QAD260101GCJ): sin resultados, el catálogo no cambió.",
+              "tipo": "aplicacion"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "nombre": "Archivo con filas con errores: \"Agrega las filas válidas y omite el resto\"",
+      "estado": "PASS",
+      "pasos": [
+        {
+          "paso": "Volver a cargar el mismo archivo y elegir \"Agrega las filas válidas y omite el resto\"",
+          "esperado": "Se registra sólo la fila válida y el resumen lista las filas no registradas con sus errores.",
+          "obtenido": "Resumen: \"4 filas leídas · 1 proveedor registrado · 0 omitidos · 3 con errores\"; sección \"Filas no registradas por errores\" con 3 errores.",
+          "estado": "PASS",
+          "evidencias": [
+            {
+              "archivo": "HU-01/06-resumen-carga-parcial.png",
+              "descripcion": "Resumen de la carga parcial: 1 proveedor registrado y las filas no registradas por errores.",
+              "tipo": "aplicacion"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "nombre": "Archivo válido: registro y mapeo de los datos al catálogo (RN-HU01-01)",
+      "estado": "PASS",
+      "pasos": [
+        {
+          "paso": "Cargar la plantilla con 3 proveedores válidos (2 nacionales y 1 internacional)",
+          "esperado": "Se registran los 3 proveedores y se muestra el resumen \"3 proveedores registrados\".",
+          "obtenido": "Resumen: \"3 filas leídas · 3 proveedores registrados · 0 omitidos\".",
+          "estado": "PASS",
+          "evidencias": [
+            {
+              "archivo": "HU-01/07-resumen-carga-exitosa.png",
+              "descripcion": "Resultado de la carga del archivo válido: 3 proveedores registrados, sin errores.",
+              "tipo": "aplicacion"
+            }
+          ]
+        },
+        {
+          "paso": "Consultar el catálogo filtrado por estatus \"Registrado\"",
+          "esperado": "Los 3 proveedores aparecen con estatus \"Registrado\" (sin acceso al portal), con su RFC o identificador fiscal y tipo de persona.",
+          "obtenido": "Encontrados 3 proveedores en \"Registrado\": QA Alfa Servicios RMUQ7SGCJ SA de CV (QAA260101GCJ); QA Bravo Persona RMUQ7SGCJ (QABR260101GCJ); QA Charlie Consulting RMUQ7SGCJ LLC (QA-RMUQ7SGCJ).",
+          "estado": "PASS",
+          "evidencias": [
+            {
+              "archivo": "HU-01/08-catalogo-registrados.png",
+              "descripcion": "Catálogo filtrado (búsqueda \"RMUQ7SGCJ\", estatus Registrado) con los proveedores cargados.",
+              "tipo": "aplicacion"
+            }
+          ]
+        },
+        {
+          "paso": "Abrir el expediente del proveedor internacional",
+          "esperado": "El expediente muestra el origen Internacional, el identificador fiscal extranjero, el correo y el estatus \"Registrado\" (mapeo de columnas).",
+          "obtenido": "Expediente: \"US QA-RMUQ7SGCJ · Internacional · Persona Moral\", estatus \"Registrado\", correo charlie.rmuq7sgcj@proveedores-qa.example.",
+          "estado": "PASS",
+          "evidencias": [
+            {
+              "archivo": "HU-01/09-expediente-internacional.png",
+              "descripcion": "Expediente del proveedor internacional cargado: identificador, origen, tipo, correo y estatus.",
+              "tipo": "aplicacion"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

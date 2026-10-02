@@ -5,7 +5,7 @@ from zoneinfo import ZoneInfo
 
 import pytest
 from sqlalchemy import func, select, text
-from sqlalchemy.exc import IntegrityError, StatementError
+from sqlalchemy.exc import DataError, IntegrityError, StatementError
 
 from app.core.constants import SupplierOrigin, SupplierType
 from app.core.database import SessionLocal
@@ -146,6 +146,8 @@ def test_numero_unico_por_proveedor(db):
     "sql",
     [
         "UPDATE invoices SET status = 'APROBADA'",
+        # Estatus retirado por el modelo del ERS (HU-12/13).
+        "UPDATE invoices SET status = 'PREVALIDATED'",
         "UPDATE invoices SET total = -1.00",
         "UPDATE invoices SET validation_score = 101",
         "UPDATE contracts SET end_date = '2025-01-01'",
@@ -164,6 +166,48 @@ def test_numero_unico_por_proveedor(db):
 def test_check_rechaza_valores_invalidos_por_sql_directo(db, sql):
     with pytest.raises(IntegrityError, match="violates check constraint"):
         db.execute(text(sql))
+
+
+def test_estatus_de_clickbalance_retirado(db):
+    # HU-20: la columna quedo en VARCHAR(19) y los estatus de ClickBalance ya no caben (ni estan en el CHECK).
+    with pytest.raises(DataError, match="value too long"):
+        db.execute(text("UPDATE invoices SET status = 'READY_FOR_CLICKBALANCE'"))
+
+
+CANCELLED_AT = "TIMESTAMPTZ '2026-09-25 16:30+00'"
+
+
+@pytest.mark.parametrize(
+    "values",
+    [
+        # Cancelada sin sus datos, o sin alguno de ellos.
+        "status = 'CANCELLED'",
+        f"status = 'CANCELLED', cancelled_at = {CANCELLED_AT}, cancelled_by = uploaded_by",
+        f"status = 'CANCELLED', cancelled_by = uploaded_by, cancellation_deadline = {CANCELLED_AT}",
+        # Fecha limite que no es posterior a la cancelacion.
+        f"status = 'CANCELLED', cancelled_at = {CANCELLED_AT}, cancelled_by = uploaded_by,"
+        f" cancellation_deadline = {CANCELLED_AT}",
+        # Datos de la cancelacion en una factura no cancelada.
+        f"cancelled_at = {CANCELLED_AT}",
+        "cancelled_by = uploaded_by",
+    ],
+)
+def test_datos_de_la_cancelacion_coherentes(db, values):
+    with pytest.raises(IntegrityError, match='violates check constraint "ck_invoices_cancellation"'):
+        db.execute(text(f"UPDATE invoices SET {values}"))
+
+
+def test_cancelada_con_sus_datos(db):
+    invoice = new_invoice(db)
+    db.flush()
+    db.execute(
+        text(
+            f"UPDATE invoices SET status = 'CANCELLED', cancelled_at = {CANCELLED_AT}, cancelled_by = uploaded_by,"
+            f" cancellation_deadline = {CANCELLED_AT} + interval '72 hours' WHERE id = :id"
+        ),
+        {"id": invoice.id},
+    )
+    assert db.scalar(text("SELECT status FROM invoices WHERE id = :id"), {"id": invoice.id}) == "CANCELLED"
 
 
 def test_enmienda_con_monto_no_positivo_rechazada(db):
@@ -349,6 +393,9 @@ def insert_document_type(db, name: str, formats: str = "{PDF}") -> None:
         "UPDATE invoice_document_types SET international_requirement = 'OPTIONAL' WHERE code = 'INVOICE_PDF'",
         "UPDATE invoice_document_types SET national_requirement = 'OPTIONAL' WHERE code = 'FOREIGN_INVOICE'",
         "UPDATE invoice_document_types SET international_requirement = 'OPTIONAL' WHERE code = 'FOREIGN_INVOICE'",
+        # HU-14: el acuse de cancelacion no se exige en la carga documental.
+        "UPDATE invoice_document_types SET national_requirement = 'REQUIRED' WHERE code = 'CANCELLATION_ACK'",
+        "UPDATE invoice_document_types SET international_requirement = 'OPTIONAL' WHERE code = 'CANCELLATION_ACK'",
     ],
 )
 def test_nivel_fijo_cambiado_por_sql(db, sql):
@@ -523,3 +570,24 @@ def test_clave_repetida_en_un_catalogo(db):
                 " VALUES ('CURRENCY', 'MXN', 'Otro peso', true, now(), now())"
             )
         )
+
+
+@pytest.mark.parametrize(
+    "sql",
+    [
+        # Proveedor activo sin proveedor.
+        "UPDATE users SET supplier_id = NULL WHERE email = 'proveedor1@poc.local'",
+        # Interno con proveedor.
+        "UPDATE users SET supplier_id = (SELECT supplier_id FROM users WHERE email = 'proveedor1@poc.local')"
+        " WHERE email = 'pmo@poc.local'",
+    ],
+)
+def test_rol_y_proveedor_del_usuario(db, sql):
+    with pytest.raises(IntegrityError, match='violates check constraint "ck_users_provider_supplier"'):
+        db.execute(text(sql))
+
+
+def test_proveedor_deshabilitado_sin_proveedor_se_admite(db):
+    # Asi deja la migracion 0013 a los usuarios Proveedor previos sin proveedor.
+    db.execute(text("UPDATE users SET is_active = false, supplier_id = NULL WHERE email = 'proveedor1@poc.local'"))
+    assert db.scalar(text("SELECT supplier_id FROM users WHERE email = 'proveedor1@poc.local'")) is None

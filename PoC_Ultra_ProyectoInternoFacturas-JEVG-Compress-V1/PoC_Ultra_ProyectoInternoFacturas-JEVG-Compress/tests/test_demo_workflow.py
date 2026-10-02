@@ -50,6 +50,27 @@ def test_seed_contiene_caso_pass_fail_y_audit():
         assert db.scalar(select(AuditLog.id).limit(1)) is not None
 
 
+def test_seed_con_el_modelo_de_estatus_del_ers():
+    expected = {
+        "BORRADOR-001": "DRAFT",
+        "A-CORRECTA": "UPLOADED",
+        "B-EXCEDE": "UPLOADED",
+        "E-SEMANTICO": "UPLOADED",
+        "D-SIN-VOBO": "DRAFT",
+        "REVISION-001": "UNDER_REVIEW",
+        "ACEPTADA-001": "ACCEPTED",
+        "C-RFC-ERROR": "REJECTED",
+        # HU-20: los escenarios de ClickBalance se reemplazaron por una devuelta y una segunda por decidir.
+        "OBSERVACIONES-001": "REQUIRES_CORRECTION",
+        "ENVIADA-002": "UNDER_REVIEW",
+    }
+    for number, status in expected.items():
+        invoice = invoice_by_number(number)
+        assert invoice.status == status, number
+        # Solo las facturas enviadas o posteriores tienen fecha de envio.
+        assert (invoice.submitted_at is not None) == (status not in {"DRAFT", "UPLOADED"}), number
+
+
 def test_ai_mock_semantico_sin_red():
     analyzer = LocalMockAnalyzer()
     result = analyzer.semantic_compare("Microsoft Power Platform", "08 Servicios desarrollo Power Automate")

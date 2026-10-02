@@ -16,6 +16,7 @@ from typing import Protocol
 from uuid import uuid4
 
 from app.core.config import settings
+from app.services import mail_layout
 
 # Errores de entrega que se registran como envio fallido en lugar de propagarse (D5). ssl.SSLError y los de red
 # (ConnectionRefusedError, TimeoutError, socket.gaierror) derivan de OSError.
@@ -24,7 +25,9 @@ FALLBACK_DOMAIN = "portal.local"
 
 
 def build_message(sender: str, to: Sequence[str], cc: Sequence[str], subject: str, body: str) -> EmailMessage:
-    """Mensaje de texto plano UTF-8 (D7). EmailMessage rechaza saltos de linea en las cabeceras."""
+    """Mensaje multipart/alternative UTF-8: el texto plano y su version HTML (mail_layout), con el logo como parte
+    relacionada del HTML. Un cliente sin HTML muestra el texto plano. EmailMessage rechaza saltos de linea en las
+    cabeceras."""
     message = EmailMessage()
     message["From"] = sender
     message["To"] = ", ".join(to)
@@ -36,6 +39,12 @@ def build_message(sender: str, to: Sequence[str], cc: Sequence[str], subject: st
     message["Message-ID"] = make_msgid(domain=domain)
     message["Auto-Submitted"] = "auto-generated"
     message.set_content(body, charset="utf-8")
+    logo_cid = make_msgid(domain=domain)
+    message.add_alternative(
+        mail_layout.render_html(subject, body, f"cid:{logo_cid[1:-1]}"), subtype="html", charset="utf-8"
+    )
+    html_part = message.get_payload()[1]
+    html_part.add_related(mail_layout.logo(), maintype="image", subtype="png", cid=logo_cid)
     return message
 
 

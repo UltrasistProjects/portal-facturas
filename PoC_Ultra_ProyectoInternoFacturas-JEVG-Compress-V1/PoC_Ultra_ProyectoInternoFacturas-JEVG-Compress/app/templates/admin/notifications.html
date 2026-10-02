@@ -24,8 +24,8 @@
 <dl class="data-list transport-list"><dt>Transporte</dt><dd>{{ transport.label }}</dd>{% for label, value in transport.details %}<dt>{{ label }}</dt><dd>{{ value }}</dd>{% endfor %}<dt>Remitente</dt><dd>{{ transport.sender }}</dd></dl></section>
 </div>
 
-<section class="panel"><div class="panel-header"><div><h2>Últimos envíos</h2><p>Los 20 intentos más recientes. No se guarda el texto de los correos.</p></div></div>
+<section class="panel"><div class="panel-header"><div><h2>Bitácora de envíos</h2><p>Todos los intentos, del más reciente al más antiguo. No se guarda el texto de los correos.</p></div></div>
 {% if deliveries %}<div class="table-responsive"><table class="table enterprise-table"><thead><tr><th>Fecha</th><th>Evento</th><th>Destinatarios</th><th>Resultado</th></tr></thead><tbody>
 {% for d in deliveries %}<tr><td>{{ format_datetime(d.created_at) }}</td><td>{{ delivery_label(d) }}</td><td class="delivery-recipients">{{ d.to_addresses|join(', ') }}{% if d.cc_addresses %}<small>Cc: {{ d.cc_addresses|join(', ') }}</small>{% endif %}</td><td><span class="status status-delivery-{{ d.status.value|lower }}">{{ 'Enviado' if d.status.value == 'SENT' else 'Fallido' }}</span>{% if d.error %}<small class="delivery-error">{{ d.error }}</small>{% endif %}</td></tr>
-{% endfor %}</tbody></table></div>{% else %}<p class="empty-state">Aún no se ha enviado ningún correo.</p>{% endif %}</section>
+{% endfor %}</tbody></table></div>{% include "components/pagination.html" %}{% else %}<p class="empty-state">Aún no se ha enviado ningún correo.</p>{% endif %}</section>
 {% endblock %}

@@ -44,6 +44,13 @@ os.environ.update(
         # Ninguna prueba envia correos reales: el transporte de archivo escribe en el directorio temporal.
         "MAIL_BACKEND": "file",
         "MAIL_OUTBOX_DIR": str(TEST_ROOT / "outbox"),
+        # Keycloak simulado (tests/idp.py): el host no existe y ninguna prueba sale a la red.
+        "KEYCLOAK_SERVER_URL": "http://keycloak.test",
+        "KEYCLOAK_REALM": "ultrasist-portal",
+        "KEYCLOAK_CLIENT_ID": "portal-facturas-web",
+        "KEYCLOAK_CLIENT_SECRET": secrets.token_urlsafe(48),
+        "KEYCLOAK_ADMIN_CLIENT_ID": "portal-facturas-admin",
+        "KEYCLOAK_ADMIN_CLIENT_SECRET": secrets.token_urlsafe(48),
     }
 )
 OUTBOX = TEST_ROOT / "outbox"
@@ -64,6 +71,7 @@ TEST_PASSWORDS = {
     "pmo@poc.local": "Test#Pmo2026",
     "proveedor1@poc.local": "Test#Proveedor2026",
     "proveedor2@poc.local": "Test#Proveedor2026",
+    "proveedor3@poc.local": "Test#Proveedor2026",
 }
 
 
@@ -107,8 +115,22 @@ def head_revision() -> str:
     return ScriptDirectory.from_config(alembic_config()).get_current_head()
 
 
+@pytest.fixture(scope="session")
+def keycloak():
+    """Keycloak simulado de toda la sesion: cliente de administracion del portal y transporte OIDC de Authlib."""
+    from app.services import keycloak_admin, oidc
+    from tests.idp import FakeKeycloak
+
+    fake = FakeKeycloak()
+    previous = keycloak_admin.set_identity_admin(fake)
+    oidc.use_transport(fake.transport)
+    yield fake
+    oidc.use_transport(None)
+    keycloak_admin.set_identity_admin(previous)
+
+
 @pytest.fixture(scope="session", autouse=True)
-def test_database():
+def test_database(keycloak):
     before = _workspace_snapshot()
     from alembic import command
 
@@ -129,18 +151,11 @@ def test_database():
 
 
 @pytest.fixture(autouse=True)
-def reset_login_attempts():
-    """Todas las peticiones de TestClient vienen de la IP "testclient": sin limpiar, los fallos de login de unas
-    pruebas acercarian a otras al limite por IP."""
+def reset_keycloak(keycloak):
+    """Fallos simulados y registro de llamadas de una prueba no pasan a la siguiente."""
+    keycloak.reset()
     yield
-    from sqlalchemy import delete
-
-    from app.core.database import SessionLocal
-    from app.models import LoginAttempt
-
-    with SessionLocal() as db:
-        db.execute(delete(LoginAttempt))
-        db.commit()
+    keycloak.reset()
 
 
 @pytest.fixture()
@@ -160,11 +175,53 @@ def csrf(client, path: str = "/login") -> str:
     return match.group(1)
 
 
-def login(client, email="admin@poc.local", password=None):
-    password = TEST_PASSWORDS[email] if password is None else password
-    return client.post(
-        "/login", data={"email": email, "password": password, "csrf_token": csrf(client)}, follow_redirects=False
+def identity_account(email: str, role) -> str:
+    """Cuenta del Keycloak simulado para un usuario que crea la prueba (idempotente); devuelve su sub, que va en
+    User.keycloak_sub para que la prueba pueda iniciar sesion con login()."""
+    from app.services.keycloak_admin import get_identity_admin
+
+    keycloak = get_identity_admin()
+    existing = keycloak.accounts.get(next((k for k, a in keycloak.accounts.items() if a.email == email.lower()), ""))
+    account = existing or keycloak.add_account(email)
+    account.roles = {role.value}
+    return account.id
+
+
+def login(client, email="admin@poc.local", callback_params: dict | None = None, **claims):
+    """Inicio de sesion completo contra el Keycloak simulado: /login redirige a Keycloak, la cuenta de `email` se
+    autentica y /auth/callback recibe el codigo. `claims` altera el ID token (None quita un claim; `roles` reemplaza
+    los realm roles). Parte de una sesion nueva, como quien entra con otra cuenta; devuelve la respuesta del
+    callback."""
+    from app.services.keycloak_admin import get_identity_admin
+    from tests.idp import query
+
+    keycloak = get_identity_admin()
+    client.cookies.clear()
+    response = client.get("/login", follow_redirects=False)
+    location = response.headers.get("location", "")
+    if not location.startswith(keycloak.authorization_endpoint):
+        return response
+    params = query(location)
+    code = keycloak.authorize(email, params, **claims)
+    return client.get(
+        "/auth/callback",
+        params={"code": code, "state": params["state"], **(callback_params or {})},
+        follow_redirects=False,
     )
+
+
+# Perfil del proveedor que exigen el alta individual y la edicion para una persona moral.
+SUPPLIER_PROFILE_FORM = {
+    "phone": "55 5555 0000",
+    "classification": "EXTERNAL",
+    "main_activity": "54",
+    "incorporation_date": "2026-01-01",
+    "website": "www.serviciosnuevos.example",
+    "legal_rep_name": "Ana Martinez Ruiz",
+    "legal_rep_phone": "55 1234 5678",
+    "contact_name": "Luis Gomez Ortiz",
+    "contact_phone": "(55) 8765-4321",
+}
 
 
 def invoice_by_number(invoice_number: str):
@@ -237,7 +294,7 @@ def registered_suppliers():
 
     from app.core.constants import SupplierStatus, SupplierType
     from app.core.database import SessionLocal
-    from app.models import AuditLog, LoginAttempt, Supplier, User, UserSession
+    from app.models import AuditLog, Supplier, User, UserSession
 
     created: list[int] = []
 
@@ -268,18 +325,17 @@ def registered_suppliers():
         user_ids = [u.id for u in users]
         db.execute(delete(UserSession).where(UserSession.user_id.in_(user_ids)))
         db.execute(delete(AuditLog).where(AuditLog.user_id.in_(user_ids)))
-        db.execute(delete(LoginAttempt).where(LoginAttempt.email.in_([u.email for u in users])))
         db.execute(delete(User).where(User.id.in_(user_ids)))
         db.execute(delete(Supplier).where(Supplier.id.in_(created)))
         db.commit()
 
 
-def validation_rules_migration():
-    """Modulo de la migracion 0007: sus constantes son la siembra de las Reglas de Validacion y los catalogos."""
+def migration_module(revision: str):
+    """Modulo de una migracion: sus constantes son la siembra de datos de referencia."""
     import importlib.util
 
-    path = ROOT / "alembic" / "versions" / "0007_validation_rules_catalogs.py"
-    spec = importlib.util.spec_from_file_location("migration_0007", path)
+    path = ROOT / "alembic" / "versions" / f"{revision}.py"
+    spec = importlib.util.spec_from_file_location(f"migration_{revision}", path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -287,18 +343,20 @@ def validation_rules_migration():
 
 @pytest.fixture()
 def restore_validation_rules():
-    """Devuelve las Reglas de Validacion (HU-06) y los catalogos (HU-07) a la instalacion inicial: la base de la
-    sesion es compartida y el motor de otras pruebas espera la configuracion sembrada."""
+    """Devuelve las Reglas de Validacion (HU-06) y los catalogos (HU-07), incluidas las actividades economicas, a la
+    instalacion inicial: la base de la sesion es compartida y el motor de otras pruebas espera la configuracion
+    sembrada."""
     yield
     from sqlalchemy import delete, update
 
     from app.core.database import SessionLocal
     from app.models import CatalogEntry, ValidationSettings
 
-    seed = validation_rules_migration()
+    seed = migration_module("0007_validation_rules_catalogs")
+    entries = {**seed.ENTRIES, **migration_module("0009_supplier_profile").ENTRIES}
     with SessionLocal() as db:
         db.execute(update(ValidationSettings).values(**{k: v for k, v in seed.SETTINGS.items() if k != "id"}))
-        for catalog, rows in seed.ENTRIES.items():
+        for catalog, rows in entries.items():
             codes = [code for code, _ in rows]
             db.execute(delete(CatalogEntry).where(CatalogEntry.catalog == catalog, CatalogEntry.code.not_in(codes)))
             for code, name in rows:

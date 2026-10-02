@@ -1,0 +1,13 @@
+{
+  "name": "portal-facturas-pruebas-hu",
+  "private": true,
+  "description": "Validación funcional de las HUs del Portal de Proveedores ULTRASIST con Playwright (evidencia en ../../evidencias).",
+  "scripts": {
+    "test": "playwright test",
+    "reporte-pdf": "node generar-reporte-pdf.mjs",
+    "verificar-pdf": "../../.venv/bin/python verificar-pdf.py"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0"
+  }
+}

@@ -2,53 +2,66 @@
 
 from decimal import Decimal
 
-from sqlalchemy import Select, false, func, or_, select
+from sqlalchemy import Select, false, func, select
 from sqlalchemy.orm import Session, contains_eager
 
-from app.core.constants import InvoiceStatus, Role
-from app.models import Invoice, Supplier
-from app.repositories.pagination import Page, paginate
+from app.core.constants import InvoiceStatus, Role, RuleStatus, SupplierOrigin
+from app.models import Invoice, Supplier, ValidationResult
+from app.repositories.pagination import PER_PAGE, Page, paginate, search
 
-INVOICES_PER_PAGE = 25
+INVOICES_PER_PAGE = PER_PAGE
 
 
 def _scoped(stmt: Select, user) -> Select:
-    if user.role == Role.PROVIDER:
+    if user.role == Role.PROVEEDOR:
         return stmt.where(Invoice.supplier_id == user.supplier_id)
     return stmt
 
 
-def escape_like(value: str) -> str:
-    """% y _ se buscan como caracteres literales."""
-    return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+def inbox_status(user, status: str | None) -> str:
+    """Estatus efectivo del listado: sin `status`, el PMO y el Administrador abren su bandeja de "Enviadas" (HU-18);
+    el proveedor ve todo. Un `status` vacio siempre significa "Todos los estados"."""
+    if status is None:
+        return "" if user.role == Role.PROVEEDOR else InvoiceStatus.UNDER_REVIEW.value
+    return status
 
 
 def search_invoices(
-    db: Session, user, q: str = "", status: str = "", page: int = 1, per_page: int = INVOICES_PER_PAGE
+    db: Session,
+    user,
+    q: str = "",
+    status: str = "",
+    page: int = 1,
+    per_page: int = INVOICES_PER_PAGE,
+    origin: str = "",
 ) -> Page[Invoice]:
     # contains_eager: el proveedor llega en la misma consulta (sin N+1) y el JOIN permite buscar por razon social.
     stmt = select(Invoice).join(Invoice.supplier).options(contains_eager(Invoice.supplier))
     stmt = _scoped(stmt, user)
-    if q.strip():
-        pattern = f"%{escape_like(q.strip())}%"
-        stmt = stmt.where(
-            or_(
-                *(
-                    column.ilike(pattern, escape="\\")
-                    for column in (
-                        Invoice.internal_folio,
-                        Invoice.invoice_number,
-                        Invoice.project_name,
-                        Supplier.business_name,
-                    )
-                )
-            )
-        )
+    stmt = search(stmt, q, Invoice.internal_folio, Invoice.invoice_number, Invoice.project_name, Supplier.business_name)
     if status:
         valid = status in {state.value for state in InvoiceStatus}
         stmt = stmt.where(Invoice.status == status) if valid else stmt.where(false())
-    stmt = stmt.order_by(Invoice.created_at.desc(), Invoice.id.desc())
+    if origin in {value.value for value in SupplierOrigin}:
+        stmt = stmt.where(Supplier.origin == origin)
+    if user.role != Role.PROVEEDOR and status == InvoiceStatus.UNDER_REVIEW:
+        # Bandeja del PMO: lo que mas ha esperado primero, tambien en las paginas siguientes (HU-18, D1).
+        stmt = stmt.order_by(Invoice.submitted_at.asc(), Invoice.id.asc())
+    else:
+        stmt = stmt.order_by(Invoice.created_at.desc(), Invoice.id.desc())
     return paginate(db, stmt, page, per_page)
+
+
+def warning_counts(db: Session, invoice_ids: list[int]) -> dict[int, int]:
+    """Advertencias (WARNING) de la ultima validacion de cada factura de la pagina, en una sola consulta."""
+    if not invoice_ids:
+        return {}
+    stmt = (
+        select(ValidationResult.invoice_id, func.count())
+        .where(ValidationResult.invoice_id.in_(invoice_ids), ValidationResult.status == RuleStatus.WARNING)
+        .group_by(ValidationResult.invoice_id)
+    )
+    return {invoice_id: count for invoice_id, count in db.execute(stmt)}
 
 
 def status_counts(db: Session, user) -> dict[InvoiceStatus, int]:
@@ -63,6 +76,6 @@ def total_amount(db: Session, user) -> Decimal:
 
 def get_visible_invoice(db: Session, invoice_id: int, user) -> Invoice | None:
     invoice = db.get(Invoice, invoice_id)
-    if invoice and user.role == Role.PROVIDER and invoice.supplier_id != user.supplier_id:
+    if invoice and user.role == Role.PROVEEDOR and invoice.supplier_id != user.supplier_id:
         return None
     return invoice

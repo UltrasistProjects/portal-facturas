@@ -86,12 +86,17 @@ La base de datos SHALL rechazar:
 - `authorized_amount <= 0` en contratos y `new_amount <= 0` en enmiendas;
 - `end_date < start_date` en contratos;
 - `validation_score` fuera de 0..100;
-- `confidence` fuera de 0..1.
+- `confidence` fuera de 0..1;
+- una factura `CANCELLED` sin `cancelled_at`, `cancelled_by` o `cancellation_deadline`, con `cancellation_deadline` no posterior a `cancelled_at`, o una factura en otro estatus con alguno de esos datos.
 
-`suppliers.status` SHALL ser una enumeración tipada (`REGISTERED`, `ACTIVE`, `INACTIVE`), `suppliers.origin` SHALL ser una enumeración tipada (`NATIONAL`, `INTERNATIONAL`), `invoice_document_types.national_requirement` e `invoice_document_types.international_requirement` SHALL ser enumeraciones tipadas (`REQUIRED`, `OPTIONAL`, `NOT_APPLICABLE`), `notification_templates.event`, `notification_copies.event` y `email_deliveries.event` SHALL ser enumeraciones tipadas (`INVOICE_AUTHORIZED`, `INVOICE_REJECTED`, `INVOICE_OBSERVATIONS`, `INVOICE_CANCELLED`, `SUPPLIER_CREDENTIALS`), `notification_mailboxes.code` SHALL ser una enumeración tipada (`INVOICE_RECEPTION`), `email_deliveries.status` SHALL ser una enumeración tipada (`SENT`, `FAILED`), `catalog_entries.catalog` SHALL ser una enumeración tipada (`CURRENCY`, `CFDI_USE`, `PAYMENT_FORM`, `PAYMENT_METHOD`, `TAX_REGIME`) y `contracts.status` SHALL ser una enumeración tipada (`ACTIVE`, `INACTIVE`).
+`invoices.status` SHALL ser una enumeración tipada (`DRAFT`, `UPLOADED`, `UNDER_REVIEW`, `ACCEPTED`, `REJECTED`, `REQUIRES_CORRECTION`, `CANCELLED`), `suppliers.status` SHALL ser una enumeración tipada (`REGISTERED`, `ACTIVE`, `INACTIVE`), `suppliers.origin` SHALL ser una enumeración tipada (`NATIONAL`, `INTERNATIONAL`), `invoice_document_types.national_requirement` e `invoice_document_types.international_requirement` SHALL ser enumeraciones tipadas (`REQUIRED`, `OPTIONAL`, `NOT_APPLICABLE`), `notification_templates.event`, `notification_copies.event` y `email_deliveries.event` SHALL ser enumeraciones tipadas (`INVOICE_AUTHORIZED`, `INVOICE_REJECTED`, `INVOICE_OBSERVATIONS`, `INVOICE_CANCELLED`, `SUPPLIER_CREDENTIALS`), `notification_mailboxes.code` SHALL ser una enumeración tipada (`INVOICE_RECEPTION`), `email_deliveries.status` SHALL ser una enumeración tipada (`SENT`, `FAILED`), `catalog_entries.catalog` SHALL ser una enumeración tipada (`CURRENCY`, `CFDI_USE`, `PAYMENT_FORM`, `PAYMENT_METHOD`, `TAX_REGIME`, `INDUSTRY`) y `contracts.status` SHALL ser una enumeración tipada (`ACTIVE`, `INACTIVE`).
 
 #### Scenario: Estado inválido por SQL directo
 - **WHEN** se ejecuta `UPDATE invoices SET status = 'APROBADA'`
+- **THEN** la base de datos rechaza la operación
+
+#### Scenario: Estatus de factura retirado
+- **WHEN** se ejecuta `UPDATE invoices SET status = 'PREVALIDATED'` o `UPDATE invoices SET status = 'READY_FOR_CLICKBALANCE'`
 - **THEN** la base de datos rechaza la operación
 
 #### Scenario: Estatus de proveedor fuera de catálogo
@@ -124,6 +129,10 @@ La base de datos SHALL rechazar:
 
 #### Scenario: Tipo de catálogo fuera de catálogo
 - **WHEN** se ejecuta `UPDATE catalog_entries SET catalog = 'COUNTRY'`
+- **THEN** la base de datos rechaza la operación
+
+#### Scenario: Cancelada sin fecha límite
+- **WHEN** se ejecuta `UPDATE invoices SET status = 'CANCELLED'` sobre una factura sin datos de cancelación
 - **THEN** la base de datos rechaza la operación
 
 ### Requirement: Índices para las consultas frecuentes
@@ -179,7 +188,7 @@ La base de datos SHALL imponer sobre `invoice_document_types`:
 - unicidad de `code` y de `lower(name)`;
 - `formats` con al menos un elemento, todos dentro de (`PDF`, `PNG`, `JPEG`, `XML`, `TXT`);
 - que un tipo del sistema (`is_system`) esté siempre activo;
-- los niveles fijos: `INVOICE_XML` e `INVOICE_PDF` con `national_requirement = 'REQUIRED'` e `international_requirement = 'NOT_APPLICABLE'`; `FOREIGN_INVOICE` con `national_requirement = 'NOT_APPLICABLE'` e `international_requirement = 'REQUIRED'`.
+- los niveles fijos: `INVOICE_XML` e `INVOICE_PDF` con `national_requirement = 'REQUIRED'` e `international_requirement = 'NOT_APPLICABLE'`; `FOREIGN_INVOICE` con `national_requirement = 'NOT_APPLICABLE'` e `international_requirement = 'REQUIRED'`; `CANCELLATION_ACK` con ambos niveles en `NOT_APPLICABLE`.
 
 #### Scenario: Nivel fijo cambiado por SQL
 - **WHEN** se ejecuta `UPDATE invoice_document_types SET national_requirement = 'OPTIONAL' WHERE code = 'INVOICE_XML'`
@@ -195,6 +204,10 @@ La base de datos SHALL imponer sobre `invoice_document_types`:
 
 #### Scenario: Formatos inválidos
 - **WHEN** se inserta un tipo con `formats` vacío o con `formats = '{DOCX}'`
+- **THEN** la base de datos rechaza la operación
+
+#### Scenario: Acuse exigido por SQL
+- **WHEN** se ejecuta `UPDATE invoice_document_types SET national_requirement = 'REQUIRED' WHERE code = 'CANCELLATION_ACK'`
 - **THEN** la base de datos rechaza la operación
 
 ### Requirement: Una plantilla por evento de notificación
@@ -245,5 +258,35 @@ La base de datos SHALL imponer:
 
 #### Scenario: Clave repetida en un catálogo
 - **WHEN** se inserta en `catalog_entries` la clave `MXN` en el catálogo `CURRENCY`
+- **THEN** la base de datos rechaza la operación
+
+### Requirement: Rol del usuario y su proveedor
+La base de datos SHALL rechazar, con `CHECK ck_users_provider_supplier`, un usuario `Proveedor` activo sin `supplier_id` y un usuario `PMO` o `Administrador` con `supplier_id`. Un usuario `Proveedor` deshabilitado sin proveedor SHALL admitirse: es el estado en que la migración deja los registros previos.
+
+La migración `0013_provider_user_supplier` SHALL, antes de crear el `CHECK`:
+- deshabilitar cada usuario `Proveedor` activo sin proveedor, revocar sus sesiones y auditar `USER_DEACTIVATED_WITHOUT_SUPPLIER`;
+- quitar el proveedor a cada usuario `PMO` o `Administrador` que lo tenga, auditando `USER_SUPPLIER_CLEARED` con el id anterior.
+
+El downgrade SHALL retirar el `CHECK` sin revertir los datos.
+
+#### Scenario: Proveedor activo sin proveedor por SQL
+- **WHEN** se ejecuta `UPDATE users SET supplier_id = NULL` sobre un usuario Proveedor activo
+- **THEN** la base de datos rechaza la operación
+
+#### Scenario: Migración de un usuario huérfano
+- **WHEN** existe el usuario Proveedor activo `jobhdev@gmail.com` sin proveedor y se aplica `0013_provider_user_supplier`
+- **THEN** el usuario queda deshabilitado, sin sesiones vigentes y con la auditoría `USER_DEACTIVATED_WITHOUT_SUPPLIER`
+
+### Requirement: Nombres de los roles
+Los roles del sistema SHALL ser exactamente `Administrador`, `Proveedor` y `PMO`, y `users.role` SHALL guardar esos nombres; la base de datos SHALL rechazar cualquier otro con el `CHECK role`. Ni el código ni la interfaz MUST usar nombres en inglés ni los nombres por defecto de la enumeración.
+
+La migración `0014_business_role_names` SHALL renombrar `ADMIN` a `Administrador`, `PROVIDER` a `Proveedor` e `INTERNAL` a `PMO`, ampliar la columna a `VARCHAR(13)` y rehacer los `CHECK role` y `ck_users_provider_supplier` con los nombres nuevos. Los registros de auditoría previos MUST NOT modificarse. El downgrade SHALL restaurar los nombres, la longitud y los `CHECK` anteriores.
+
+#### Scenario: Usuarios previos con los nombres anteriores
+- **WHEN** se aplica la migración sobre usuarios `ADMIN`, `PROVIDER` e `INTERNAL`
+- **THEN** quedan como `Administrador`, `Proveedor` y `PMO`, y conservan su proveedor
+
+#### Scenario: Rol con nombre anterior
+- **WHEN** se actualiza un usuario con rol `ADMIN` después de la migración
 - **THEN** la base de datos rechaza la operación
 

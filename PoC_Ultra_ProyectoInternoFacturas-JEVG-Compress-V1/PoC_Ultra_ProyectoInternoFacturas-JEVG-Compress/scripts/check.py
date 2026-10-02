@@ -65,6 +65,11 @@ def main() -> int:
             **os.environ,
             "SECRET_KEY": os.environ.get("SECRET_KEY") or secrets.token_urlsafe(64),
             "LOG_DIR": str(Path(tmp) / "logs"),
+            # alembic check importa la configuracion completa pero no llama a Keycloak: valores de relleno si faltan.
+            "KEYCLOAK_SERVER_URL": os.environ.get("KEYCLOAK_SERVER_URL") or "http://127.0.0.1:58080",
+            "KEYCLOAK_REALM": os.environ.get("KEYCLOAK_REALM") or "ultrasist-portal",
+            "KEYCLOAK_CLIENT_SECRET": os.environ.get("KEYCLOAK_CLIENT_SECRET") or secrets.token_urlsafe(48),
+            "KEYCLOAK_ADMIN_CLIENT_SECRET": os.environ.get("KEYCLOAK_ADMIN_CLIENT_SECRET") or secrets.token_urlsafe(48),
         }
         failures = []
         for name, command in steps(args.skip_audit):

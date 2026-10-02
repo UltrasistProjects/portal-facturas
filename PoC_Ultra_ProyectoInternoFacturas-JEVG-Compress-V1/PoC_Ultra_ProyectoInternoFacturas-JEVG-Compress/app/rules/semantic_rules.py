@@ -3,6 +3,19 @@ from decimal import ROUND_HALF_UP, Decimal
 from app.schemas import ValidationOutcome
 
 
+def semantic_not_evaluated() -> list[ValidationOutcome]:
+    """El Invoice del proveedor internacional no tiene conceptos estructurados que comparar con el contrato."""
+    return [
+        ValidationOutcome(
+            rule_code="SEM-001",
+            category="SEM",
+            status="NOT_EVALUATED",
+            severity="WARNING",
+            message="Sin conceptos que comparar: el Invoice no es un CFDI",
+        )
+    ]
+
+
 def semantic_outcomes(result: dict) -> list[ValidationOutcome]:
     return [
         ValidationOutcome(

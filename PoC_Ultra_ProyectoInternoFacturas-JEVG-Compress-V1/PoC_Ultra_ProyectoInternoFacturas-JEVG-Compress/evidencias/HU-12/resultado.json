@@ -1,0 +1,118 @@
+{
+  "id": "HU-12",
+  "run": "RMUQ7SGCJ",
+  "inicio": "2026-10-02T00:18:54.943Z",
+  "fin": "2026-10-02T00:18:58.324Z",
+  "estado": "PASS",
+  "bloqueo": null,
+  "notas": [],
+  "prueba": {
+    "titulo": "HU-12 · Registro de factura",
+    "archivo": "10-HU-12-registro-factura.spec.ts"
+  },
+  "escenarios": [
+    {
+      "nombre": "Formulario de registro: sólo los contratos del propio proveedor",
+      "estado": "PASS",
+      "pasos": [
+        {
+          "paso": "Desde el tablero, pulsar \"Nueva factura\"",
+          "esperado": "Se abre \"Registrar factura\" (paso 1 de 3) con el proveedor del usuario y sólo sus contratos activos; el proyecto se toma del contrato.",
+          "obtenido": "Proveedor: \"Tecnologia Integral del Centro SA de CV · TIC210101ABC\"; contratos ofrecidos: Automatizacion Operativa 2026 · $100,000.00 MXN; el HTML no contiene contratos de otros proveedores.",
+          "estado": "PASS",
+          "evidencias": [
+            {
+              "archivo": "HU-12/01-formulario-registro.png",
+              "descripcion": "Formulario \"Registrar factura\" con el proveedor y su único contrato activo.",
+              "tipo": "aplicacion"
+            }
+          ]
+        },
+        {
+          "paso": "Capturar el periodo con formato inválido (\"2026-08\") y continuar",
+          "esperado": "El formulario no se envía y muestra junto al campo \"Use el formato MM/AAAA, por ejemplo 08/2026.\"",
+          "obtenido": "Mensaje junto al campo: \"Use el formato MM/AAAA, por ejemplo 08/2026.\"; la página sigue en /invoices/new.",
+          "estado": "PASS",
+          "evidencias": [
+            {
+              "archivo": "HU-12/02-periodo-invalido.png",
+              "descripcion": "Validación junto al campo: periodo con formato inválido.",
+              "tipo": "aplicacion"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "nombre": "Registro y carga de los archivos mínimos del proveedor Nacional (RN-HU12-01)",
+      "estado": "PASS",
+      "pasos": [
+        {
+          "paso": "Registrar la factura QA-RMUQ7SGCJ-N1 con periodo 08/2026",
+          "esperado": "Se crea la factura y se abre la carga documental (paso 2 de 3) con los 4 obligatorios del Nacional pendientes; la factura queda en \"Borrador\".",
+          "obtenido": "Factura #39 creada; checklist \"Faltan 4 archivos obligatorios\"; estatus en el detalle \"Borrador\".",
+          "estado": "PASS",
+          "evidencias": [
+            {
+              "archivo": "HU-12/03-carga-documental-inicial.png",
+              "descripcion": "Carga documental: checklist con los 4 archivos obligatorios del proveedor Nacional pendientes.",
+              "tipo": "aplicacion"
+            }
+          ]
+        },
+        {
+          "paso": "Intentar cargar un archivo .txt como \"XML del CFDI\"",
+          "esperado": "Se rechaza el formato (el tipo sólo admite XML) y el checklist no cambia.",
+          "obtenido": "Rechazado: \"Formato no admitido para XML del CFDI. Formatos admitidos: XML\"; checklist sigue en \"Faltan 4 archivos obligatorios\".",
+          "estado": "PASS",
+          "evidencias": [
+            {
+              "archivo": "HU-12/04-formato-no-admitido.png",
+              "descripcion": "Carga rechazada: el XML del CFDI no admite un archivo .txt.",
+              "tipo": "aplicacion"
+            }
+          ]
+        },
+        {
+          "paso": "Cargar XML del CFDI, PDF del CFDI y Orden de compra",
+          "esperado": "El checklist indica \"Falta 1 archivo obligatorio\" (Vo.Bo.), no se ofrece \"Enviar a validación\" y la factura sigue en \"Borrador\".",
+          "obtenido": "Checklist \"Falta 1 archivo obligatorio\"; no se ofrece \"Enviar a validación\"; estatus \"Borrador\".",
+          "estado": "PASS",
+          "evidencias": [
+            {
+              "archivo": "HU-12/05-falta-un-obligatorio.png",
+              "descripcion": "Tras cargar XML, PDF y Orden de compra: \"Falta 1 archivo obligatorio\" (Vo.Bo.).",
+              "tipo": "aplicacion"
+            }
+          ]
+        },
+        {
+          "paso": "Cargar el Vo.Bo. del líder de proyecto",
+          "esperado": "Checklist \"Archivos obligatorios completos\" con el aviso \"Factura cargada. Ya puede enviarla a validación.\" y el botón \"Enviar a validación\" disponible.",
+          "obtenido": "Checklist: \"Archivos obligatorios completos Factura cargada. Ya puede enviarla a validación.\".",
+          "estado": "PASS",
+          "evidencias": [
+            {
+              "archivo": "HU-12/06-obligatorios-completos.png",
+              "descripcion": "Obligatorios completos: \"Factura cargada. Ya puede enviarla a validación.\"",
+              "tipo": "aplicacion"
+            }
+          ]
+        },
+        {
+          "paso": "Abrir el detalle de la factura",
+          "esperado": "La factura tiene el estatus \"Cargada\" (RN-HU12-01) y lista sus 4 documentos.",
+          "obtenido": "Estatus \"Cargada\"; documentos: XML del CFDI, PDF del CFDI, Orden de compra, Vo.Bo. del líder de proyecto.",
+          "estado": "PASS",
+          "evidencias": [
+            {
+              "archivo": "HU-12/07-detalle-cargada.png",
+              "descripcion": "Detalle de QA-RMUQ7SGCJ-N1: estatus \"Cargada\".",
+              "tipo": "aplicacion"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

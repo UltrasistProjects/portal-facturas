@@ -65,6 +65,9 @@ def test_listado_de_proveedor_usa_indice_compuesto():
     with engine.connect() as connection:
         # Con pocas filas el planificador preferiria recorrer la tabla, o un bitmap scan seguido de un Sort, segun
         # las estadisticas del momento. Sin ellos se evalua el plan que tendria con volumen: acceso ordenado por indice.
+        # Estadisticas al dia: si el autovacuum las tomo a mitad de la suite, sobrestiman a un proveedor y el
+        # planificador prefiere ix_invoices_created_at con filtro.
+        connection.execute(text("ANALYZE invoices"))
         connection.execute(text("SET LOCAL enable_seqscan = off"))
         connection.execute(text("SET LOCAL enable_bitmapscan = off"))
         plan = connection.execute(

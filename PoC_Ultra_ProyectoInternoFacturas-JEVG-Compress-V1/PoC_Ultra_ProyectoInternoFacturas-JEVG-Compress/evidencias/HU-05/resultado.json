@@ -1,0 +1,169 @@
+{
+  "id": "HU-05",
+  "run": "RMUQ7SGCJ",
+  "inicio": "2026-10-02T00:18:31.095Z",
+  "fin": "2026-10-02T00:18:36.174Z",
+  "estado": "PASS",
+  "bloqueo": null,
+  "notas": [],
+  "prueba": {
+    "titulo": "HU-05 · Configuración de plantillas de estatus de factura",
+    "archivo": "06-HU-05-plantillas-correo.spec.ts"
+  },
+  "escenarios": [
+    {
+      "nombre": "Una plantilla configurable por cada cambio de estatus de la factura",
+      "estado": "PASS",
+      "pasos": [
+        {
+          "paso": "Abrir Administración › Plantillas de correo",
+          "esperado": "El listado muestra una plantilla para \"Autorizada\", \"Rechazada\", \"Observaciones\" y \"Cancelada\", con su destinatario, asunto y botón \"Editar\".",
+          "obtenido": "Plantillas: Autorizada → Recepción de Facturas; Rechazada → Proveedor (correo del catálogo); Observaciones → Proveedor (correo del catálogo); Cancelada → Recepción de Facturas.",
+          "estado": "PASS",
+          "evidencias": [
+            {
+              "archivo": "HU-05/01-listado-plantillas.png",
+              "descripcion": "Listado de plantillas de correo por evento de estatus, con destinatario y asunto.",
+              "tipo": "aplicacion"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "nombre": "Edición y vista previa con datos de ejemplo (sin guardar)",
+      "estado": "PASS",
+      "pasos": [
+        {
+          "paso": "Editar la plantilla \"Rechazada\"",
+          "esperado": "El formulario muestra asunto, cuerpo, el destinatario en solo lectura y la tabla de variables con las obligatorias marcadas.",
+          "obtenido": "Destinatario: \"Destinatario: Proveedor (correo del catálogo)\"; asunto vigente \"Factura {{numero_factura}} rechazada\"; variables obligatorias: {{numero_factura}}, {{observaciones}}.",
+          "estado": "PASS",
+          "evidencias": [
+            {
+              "archivo": "HU-05/02-editor-rechazada.png",
+              "descripcion": "Editor de la plantilla \"Rechazada\": asunto, cuerpo y variables (obligatorias marcadas).",
+              "tipo": "aplicacion"
+            }
+          ]
+        },
+        {
+          "paso": "Pulsar \"Vista previa\"",
+          "esperado": "Se muestra el correo compuesto con los datos de ejemplo; la plantilla no se guarda.",
+          "obtenido": "Vista previa con asunto \"Factura A-1024 rechazada\" y el aviso \"La plantilla no se ha guardado\".",
+          "estado": "PASS",
+          "evidencias": [
+            {
+              "archivo": "HU-05/03-vista-previa.png",
+              "descripcion": "Vista previa del correo \"Rechazada\" compuesta con datos de ejemplo.",
+              "tipo": "aplicacion"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "nombre": "Validación de la plantilla: variables obligatorias y desconocidas",
+      "estado": "PASS",
+      "pasos": [
+        {
+          "paso": "Quitar {{observaciones}} del cuerpo, agregar {{variable_inexistente}} y pulsar \"Guardar\"",
+          "esperado": "El guardado se rechaza y se listan juntos los errores (variable desconocida y variable obligatoria ausente).",
+          "obtenido": "Errores: Cuerpo: la variable {{variable_inexistente}} no existe en esta plantilla. Variables disponibles: {{numero_factura}}, {{folio_interno}}, {{proveedor}}, {{monto}}, {{estatus}}, {{fecha_estatus}}, {{observaciones}} / Cuerpo: debe incluir la variable obligatoria {{observaciones}}.",
+          "estado": "PASS",
+          "evidencias": [
+            {
+              "archivo": "HU-05/04-errores-validacion.png",
+              "descripcion": "Errores de validación de la plantilla mostrados juntos.",
+              "tipo": "aplicacion"
+            }
+          ]
+        },
+        {
+          "paso": "Volver a abrir la plantilla",
+          "esperado": "La plantilla vigente no cambió (sigue con su asunto y cuerpo anteriores).",
+          "obtenido": "Asunto vigente sin cambios: \"Factura {{numero_factura}} rechazada\"; el cuerpo conserva {{observaciones}}.",
+          "estado": "PASS",
+          "evidencias": []
+        }
+      ]
+    },
+    {
+      "nombre": "Guardar una modificación y restaurar el texto predeterminado",
+      "estado": "PASS",
+      "pasos": [
+        {
+          "paso": "Cambiar el asunto a \"Factura {{numero_factura}} rechazada (QA RMUQ7SGCJ)\" y guardar",
+          "esperado": "Se guarda la plantilla (\"Plantilla actualizada: Rechazada.\") y el listado muestra el nuevo asunto y quién la modificó.",
+          "obtenido": "Aviso \"Plantilla actualizada: Rechazada.\"; fila Rechazada: Rechazada Proveedor (correo del catálogo) Factura {{numero_factura}} rechazada (QA RMUQ7SGCJ) 01/10/2026 18:18 Administrador Demo Editar.",
+          "estado": "PASS",
+          "evidencias": [
+            {
+              "archivo": "HU-05/05-plantilla-guardada.png",
+              "descripcion": "Listado tras guardar: asunto modificado y última modificación del Administrador.",
+              "tipo": "aplicacion"
+            }
+          ]
+        },
+        {
+          "paso": "Editar otra vez, pulsar \"Cargar texto predeterminado\" y guardar",
+          "esperado": "El formulario se llena con el texto predeterminado (aviso \"Se cargó el texto predeterminado…\") y al guardar el listado vuelve a mostrar el asunto original.",
+          "obtenido": "Aviso \"Plantilla actualizada: Rechazada.\"; asunto restaurado: \"Factura {{numero_factura}} rechazada\".",
+          "estado": "PASS",
+          "evidencias": [
+            {
+              "archivo": "HU-05/06-texto-predeterminado-cargado.png",
+              "descripcion": "Texto predeterminado cargado en el formulario (aún sin guardar).",
+              "tipo": "aplicacion"
+            },
+            {
+              "archivo": "HU-05/07-plantilla-restaurada.png",
+              "descripcion": "Listado con la plantilla \"Rechazada\" de nuevo con su asunto predeterminado.",
+              "tipo": "aplicacion"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "nombre": "La plantilla guardada es la que usa la notificación (evento Cancelada)",
+      "estado": "PASS",
+      "pasos": [
+        {
+          "paso": "Agregar \"[QA RMUQ7SGCJ]\" al asunto de la plantilla \"Cancelada\" y guardar",
+          "esperado": "La plantilla \"Cancelada\" queda guardada con el asunto modificado.",
+          "obtenido": "Asunto guardado: \"Cancelación de la factura {{numero_factura}} de {{proveedor}} [QA RMUQ7SGCJ]\".",
+          "estado": "PASS",
+          "evidencias": []
+        },
+        {
+          "paso": "El proveedor registra QA-RMUQ7SGCJ-H05 y la cancela con su acuse (dispara el correo \"Cancelada\")",
+          "esperado": "La factura queda \"Cancelada\" y se notifica a Recepción de Facturas.",
+          "obtenido": "\"Factura cancelada. Se notificó a Recepción de Facturas.\".",
+          "estado": "PASS",
+          "evidencias": []
+        },
+        {
+          "paso": "Abrir el correo \"Cancelada\" generado",
+          "esperado": "El asunto del correo enviado incluye \"[QA RMUQ7SGCJ]\": se compuso con la plantilla guardada.",
+          "obtenido": "Asunto del correo: \"Cancelación de la factura QA-RMUQ7SGCJ-H05 de Tecnologia Integral del Centro SA de CV [QA RMUQ7SGCJ]\".",
+          "estado": "PASS",
+          "evidencias": [
+            {
+              "archivo": "HU-05/08-correo-con-plantilla-guardada.png",
+              "descripcion": "Correo \"Cancelada\" compuesto con la plantilla recién guardada (asunto con la marca QA).",
+              "tipo": "correo"
+            }
+          ]
+        },
+        {
+          "paso": "Restaurar el texto predeterminado de la plantilla \"Cancelada\"",
+          "esperado": "La plantilla vuelve a su asunto predeterminado.",
+          "obtenido": "Asunto restaurado: \"Cancelación de la factura {{numero_factura}} de {{proveedor}}\".",
+          "estado": "PASS",
+          "evidencias": []
+        }
+      ]
+    }
+  ]
+}

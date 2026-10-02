@@ -26,29 +26,30 @@ def test_excepcion_no_manejada_no_expone_traza(monkeypatch, caplog):
 
 def test_submit_en_borrador_responde_409_sin_cambiar_estado(client):
     invoice = invoice_by_number("BORRADOR-001")
-    login(client)
+    login(client, "proveedor1@poc.local")
     token = csrf(client, f"/invoices/{invoice.id}")
     response = client.post(f"/invoices/{invoice.id}/submit", data={"csrf_token": token}, follow_redirects=False)
     assert response.status_code == 409
-    assert "Transicion no permitida" in response.text
+    assert "Faltan archivos obligatorios" in response.text
     assert invoice_by_number("BORRADOR-001").status == InvoiceStatus.DRAFT
 
 
-def test_clickbalance_desde_revision_responde_409(client):
-    invoice = invoice_by_number("REVISION-001")
+def test_decision_sobre_factura_ya_revisada_responde_409(client):
+    invoice = invoice_by_number("ACEPTADA-001")
     login(client, "pmo@poc.local")
     token = csrf(client, f"/invoices/{invoice.id}")
-    response = client.post(f"/invoices/{invoice.id}/clickbalance", data={"csrf_token": token}, follow_redirects=False)
-    assert response.status_code == 409
-    assert invoice_by_number("REVISION-001").status == InvoiceStatus.UNDER_REVIEW
+    data = {"decision": "REJECTED", "comments": "Tarde", "csrf_token": token}
+    response = client.post(f"/invoices/{invoice.id}/review", data=data, follow_redirects=False)
+    assert response.status_code == 409 and "La factura ya fue revisada" in response.text
+    assert invoice_by_number("ACEPTADA-001").status == InvoiceStatus.ACCEPTED
 
 
 def test_error_de_negocio_en_json(client):
-    invoice = invoice_by_number("BORRADOR-001")
-    login(client)
+    invoice = invoice_by_number("REVISION-001")
+    login(client, "proveedor1@poc.local")
     token = csrf(client, f"/invoices/{invoice.id}")
     response = client.post(
         f"/invoices/{invoice.id}/submit", data={"csrf_token": token}, headers={"Accept": "application/json"}
     )
     assert response.status_code == 409
-    assert response.json() == {"detail": "Transicion no permitida: DRAFT -> UNDER_REVIEW"}
+    assert response.json() == {"detail": "La factura no puede enviarse en su estatus actual"}

@@ -1,5 +1,6 @@
 """Plantillas de correo de estatus de factura (HU-05, spec plantillas-notificacion)."""
 
+import html
 import re
 from datetime import datetime, timezone
 from decimal import Decimal
@@ -9,7 +10,9 @@ from sqlalchemy import delete, func, select, text, update
 
 from app.core.constants import NotificationEvent
 from app.core.database import SessionLocal
+from app.core.middleware import CONTENT_SECURITY_POLICY, content_security_policy_with_styles
 from app.models import AuditLog, NotificationTemplate, User
+from app.services import mail_layout
 from app.services import notification_templates as nt
 from tests.conftest import csrf, login
 
@@ -69,6 +72,12 @@ def preview(client, event: NotificationEvent, **fields):
 def preview_block(html: str) -> str | None:
     match = re.search(r'<div class="template-preview-body">(.*?)</div>', html, re.DOTALL)
     return match.group(1) if match else None
+
+
+def preview_email(page: str) -> str | None:
+    """HTML del correo de la vista previa, ya sin el escape del atributo srcdoc."""
+    match = re.search(r'<iframe class="email-preview"[^>]* srcdoc="([^"]*)"', page)
+    return html.unescape(match.group(1)) if match else None
 
 
 def default_body(event: NotificationEvent) -> str:
@@ -295,6 +304,36 @@ def test_vista_previa_escapada(client):
     assert response.status_code == 200
     assert "&lt;b&gt;Urgente&lt;/b&gt;" in preview_block(response.text)
     assert "<b>Urgente</b>" not in response.text
+    email = preview_email(response.text)
+    assert "&lt;b&gt;Urgente&lt;/b&gt;" in email and "<b>" not in email
+
+
+def test_vista_previa_como_el_correo(client):
+    login(client)
+    response = preview(client, CREDENTIALS)
+    assert response.status_code == 200
+    assert '<iframe class="email-preview" title="Vista previa del correo" sandbox="allow-same-origin"' in response.text
+    email = preview_email(response.text)
+    body = html.unescape(preview_block(response.text))
+    assert email == mail_layout.render_preview("Acceso al Portal de Proveedores ULTRASIST", body)
+    assert f'src="{mail_layout.logo_data_uri()}"' in email
+    assert ">Contraseña temporal</div>" in email and ">Ejemplo#Temporal2026</div>" in email
+    # La pagina admite exactamente los atributos style del correo; la CSP del resto no cambia.
+    policy = response.headers["content-security-policy"]
+    assert policy == content_security_policy_with_styles(mail_layout.style_hashes(email))
+    assert policy.startswith(f"{CONTENT_SECURITY_POLICY}; style-src 'self' 'unsafe-hashes' 'sha256-")
+    assert "'unsafe-inline'" not in policy
+    assert client.get(f"{URL}/{CREDENTIALS}").headers["content-security-policy"] == CONTENT_SECURITY_POLICY
+
+
+def test_hashes_de_los_estilos_del_correo():
+    document = '<p style="color:red">a</p><p style="color:red">b</p><td style="font:12px &#39;A&#39;">c</td>'
+    # sha256 en base64 de "color:red" y de "font:12px 'A'" (el valor ya sin entidades)
+    assert mail_layout.style_hashes(document) == [
+        "'sha256-8f935d27GvUutRyY9yWScUMiFUk4WTdZURISiYfPOeQ='",
+        "'sha256-HBlOXrEvV5o1r9ZLA3tWTkYU+SgPh66oZrPcfpTz7Eg='",
+    ]
+    assert mail_layout.style_hashes("<p>sin estilos</p>") == []
 
 
 def test_vista_previa_de_un_borrador_invalido(client):

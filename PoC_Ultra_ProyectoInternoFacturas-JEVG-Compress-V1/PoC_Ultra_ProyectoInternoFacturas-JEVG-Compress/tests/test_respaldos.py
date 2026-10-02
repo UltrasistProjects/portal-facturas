@@ -20,6 +20,7 @@ from scripts import pgtools
 from scripts.backup import MANIFEST, create_backup
 from scripts.restore_backup import restore_backup
 from tests.conftest import ROOT, head_revision
+from tests.idp import FakeKeycloak, FakeKeycloakServer
 
 SESSION_DB = engine.url
 
@@ -212,8 +213,15 @@ def run(env, script, *args, check=True):
     )
 
 
+@pytest.fixture(scope="module")
+def keycloak_server():
+    """El seed del subproceso crea las cuentas demo en un Keycloak simulado local (127.0.0.1), no en el de la sesion."""
+    with FakeKeycloakServer(FakeKeycloak()) as server:
+        yield server
+
+
 @pytest.fixture()
-def workspace(tmp_path):
+def workspace(tmp_path, keycloak_server):
     ws = tmp_path / "ws"
     with pgtools.temporary_database("portal_test_reset_") as database:
         env = {
@@ -223,12 +231,14 @@ def workspace(tmp_path):
             "STORAGE_PATH": str(ws / "storage"),
             "BACKUP_DIR": str(tmp_path / "backups"),
             "LOG_DIR": str(tmp_path / "logs"),
+            "KEYCLOAK_SERVER_URL": keycloak_server.url,
+            "DEMO_PASSWORD": "Demo#Prueba2026x",
         }
         run(env, "init_db.py")
         execute(
             database,
             "INSERT INTO users (name, email, password_hash, role, is_active, created_at) "
-            "VALUES ('Ana', 'ana@ultrasist.com.mx', 'x', 'INTERNAL', true, now())",
+            "VALUES ('Ana', 'ana@ultrasist.com.mx', 'x', 'PMO', true, now())",
         )
         yield ws, env, tmp_path / "backups", database
 
@@ -252,7 +262,7 @@ def test_reset_confirmado_respalda_y_reconstruye(workspace):
     assert "Respaldo previo" in result.stdout
     assert len(list(backups.iterdir())) == 1
     assert not ana_exists(database)
-    assert scalar(database, "SELECT count(*) FROM invoices") == 10
+    assert scalar(database, "SELECT count(*) FROM invoices") == 12  # 11 nacionales y 1 internacional (HU-15)
     assert scalar(database, "SELECT version_num FROM alembic_version") == head_revision()
 
 

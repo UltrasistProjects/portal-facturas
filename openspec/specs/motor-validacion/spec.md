@@ -13,7 +13,7 @@ Los parámetros de negocio que usa el motor de validación SHALL tener una sola 
 Las monedas aceptadas SHALL ser las claves activas del catálogo de monedas (HU-07). El motor SHALL leer esta configuración en cada prevalidación, sin caché. Los pesos del score SHALL seguir definidos en `BUSINESS_RULES`, que MUST NOT contener otros parámetros. La vista `/admin/rules` SHALL mostrar exactamente los valores que usa el motor, incluidos los pesos del score por severidad. El archivo `app/rules/business_rules.json` MUST NOT existir.
 
 #### Scenario: Vista de reglas coincide con el motor
-- **WHEN** un ADMIN abre `/admin/rules`
+- **WHEN** un Administrador abre `/admin/rules`
 - **THEN** ve el RFC, la razón social, el código postal, el régimen, el método y la forma de pago, los usos de CFDI y los pesos `CRITICAL`, `ERROR`, `WARNING` e `INFO`, con los mismos valores que usa el motor
 
 #### Scenario: Cambio de un parámetro
@@ -36,11 +36,19 @@ La zona horaria de negocio SHALL configurarse con `BUSINESS_TIMEZONE` (por defec
 - **THEN** DAT-001 resulta `WARNING`
 
 ### Requirement: Detección de UUID duplicado coherente con la unicidad en BD
-Antes de asignar el UUID del CFDI a una factura, el motor SHALL verificar si ya pertenece a otra factura. Si es duplicado, SHALL registrar FIN-004 como `FAIL` de severidad `CRITICAL`, conservar el UUID detectado en los metadatos del documento XML y dejar `invoices.uuid` sin asignar, completando la validación sin error. Si la restricción de unicidad detecta una carrera, la petición SHALL responder HTTP 409 sin persistir resultados parciales.
+Antes de asignar el UUID del CFDI a una factura, el motor SHALL verificar si ya pertenece a otra factura, en cualquier estatus y de cualquier proveedor. Si es duplicado, SHALL registrar FIN-004 como `FAIL` de severidad `CRITICAL`, conservar el UUID detectado en los metadatos del documento XML y dejar `invoices.uuid` sin asignar, completando la validación sin error. El resultado SHALL impedir el envío. Su mensaje y sus valores SHALL NOT incluir el folio, el número, el proveedor ni ningún otro dato de la otra factura. Si la restricción de unicidad detecta una carrera, la petición SHALL responder HTTP 409 sin persistir resultados parciales.
 
 #### Scenario: CFDI ya registrado en otra factura
-- **WHEN** se valida una factura cuyo XML tiene un UUID que ya tiene otra factura
-- **THEN** la validación termina, FIN-004 es `FAIL`/`CRITICAL`, la factura queda en `REQUIRES_CORRECTION`, `invoices.uuid` de esta factura es `NULL` y el UUID detectado figura en `metadata_json` del documento XML
+- **WHEN** el proveedor envía una factura cuyo XML tiene un UUID que ya tiene otra factura
+- **THEN** la validación termina, FIN-004 es `FAIL`/`CRITICAL`, el envío no procede, la factura conserva su estatus, `invoices.uuid` de esta factura es `NULL` y el UUID detectado figura en `metadata_json` del documento XML
+
+#### Scenario: Duplicado de otro proveedor
+- **WHEN** el UUID del XML pertenece a una factura de otro proveedor y el proveedor envía su factura
+- **THEN** la respuesta no contiene el folio interno, el número de factura ni la razón social de la otra factura
+
+#### Scenario: Duplicado de una factura rechazada
+- **WHEN** el UUID del XML pertenece a una factura "Rechazada" del mismo proveedor
+- **THEN** FIN-004 es `FAIL`/`CRITICAL` y el envío no procede
 
 #### Scenario: Validaciones concurrentes del mismo CFDI
 - **WHEN** dos facturas con el mismo UUID se validan simultáneamente y ambas superan la comprobación previa
@@ -51,37 +59,37 @@ Antes de asignar el UUID del CFDI a una factura, el motor SHALL verificar si ya 
 - **THEN** FIN-004 resulta `PASS`
 
 ### Requirement: Reglas documentales según los archivos mínimos configurados
-En cada prevalidación, el motor SHALL leer la configuración vigente de archivos mínimos para el origen del proveedor de la factura. Un tipo está presente cuando la factura tiene un documento vigente (`is_current`) de ese tipo. Las reglas documentales SHALL evaluarse así:
+En cada validación, el motor SHALL leer la configuración vigente de archivos mínimos para el origen del proveedor de la factura. Un tipo está presente cuando la factura tiene un documento vigente (`is_current`) de ese tipo. Las reglas documentales SHALL evaluarse así:
 - DOC-001 (XML del CFDI, `CRITICAL`), DOC-002 (PDF del CFDI, `ERROR`), DOC-003 (Orden de compra, `ERROR`), DOC-004 (Vo.Bo. del líder de proyecto, `ERROR`) y DOC-008 (Invoice (PDF), `CRITICAL`) resultan `PASS` o `FAIL` cuando su tipo es Obligatorio para ese origen, y `NOT_APPLICABLE` en otro caso;
 - DOC-009 (`ERROR`) genera un resultado por cada otro tipo activo que sea Obligatorio para ese origen, con la clave del tipo en `source_document`;
 - los mensajes usan el nombre del tipo: "<nombre> presente" o "Falta <nombre>"; en `NOT_APPLICABLE`, "No requerido para proveedores nacionales" o "No requerido para proveedores internacionales";
 - DOC-005, DOC-006 y DOC-007 no cambian.
 
-Un `FAIL` de cualquiera de estas reglas SHALL dejar la factura en `REQUIRES_CORRECTION`. Una factura que ya salió de los estados editables SHALL conservar sus resultados aunque la configuración cambie después. Una factura editable SHALL evaluarse con la configuración vigente al volver a prevalidarse.
+Un `FAIL` de cualquiera de estas reglas SHALL impedir el envío. Una factura que ya salió de los estados editables SHALL conservar sus resultados aunque la configuración cambie después. Una factura editable SHALL evaluarse con la configuración vigente al verificarse o enviarse.
 
 #### Scenario: Proveedor nacional sin Vo.Bo.
-- **WHEN** con la configuración inicial se prevalida una factura de un proveedor nacional con XML del CFDI, PDF del CFDI y orden de compra, sin Vo.Bo.
-- **THEN** DOC-001, DOC-002 y DOC-003 resultan `PASS`, DOC-004 resulta `FAIL` con severidad `ERROR` y el mensaje "Falta Vo.Bo. del líder de proyecto", DOC-008 resulta `NOT_APPLICABLE` y la factura queda en `REQUIRES_CORRECTION`
+- **WHEN** con la configuración inicial se valida una factura de un proveedor nacional con XML del CFDI, PDF del CFDI y orden de compra, sin Vo.Bo.
+- **THEN** DOC-001, DOC-002 y DOC-003 resultan `PASS`, DOC-004 resulta `FAIL` con severidad `ERROR` y el mensaje "Falta Vo.Bo. del líder de proyecto", DOC-008 resulta `NOT_APPLICABLE` y la factura conserva su estatus
 
 #### Scenario: Proveedor internacional sin Invoice
-- **WHEN** se prevalida una factura de un proveedor internacional que no tiene Invoice (PDF)
+- **WHEN** se valida una factura de un proveedor internacional que no tiene Invoice (PDF)
 - **THEN** DOC-008 resulta `FAIL` con severidad `CRITICAL` y el mensaje "Falta Invoice (PDF)", y DOC-001 y DOC-002 resultan `NOT_APPLICABLE` con el mensaje "No requerido para proveedores internacionales"
 
 #### Scenario: Orden de compra opcional
-- **WHEN** "Orden de compra" es Opcional para el origen del proveedor y se prevalida una factura sin orden de compra
+- **WHEN** "Orden de compra" es Opcional para el origen del proveedor y se valida una factura sin orden de compra
 - **THEN** DOC-003 resulta `NOT_APPLICABLE` y no descuenta puntos del score
 
 #### Scenario: Tipo soporte obligatorio
-- **WHEN** "Reporte de horas" es Obligatorio para Internacional y se prevalida una factura internacional sin ese documento
+- **WHEN** "Reporte de horas" es Obligatorio para Internacional y se valida una factura internacional sin ese documento
 - **THEN** existe un resultado DOC-009 `FAIL` con `source_document = SOPORTE_<id>` y el mensaje "Falta Reporte de horas"
 
-#### Scenario: Factura ya prevalidada
-- **WHEN** una factura está en `PREVALIDATED` sin contrato cargado y el Administrador hace obligatorio "Contrato" para su origen
-- **THEN** la factura sigue en `PREVALIDATED` con los mismos resultados y puede enviarse a revisión
+#### Scenario: Factura ya enviada
+- **WHEN** una factura está "Enviada" sin contrato cargado y el Administrador hace obligatorio "Contrato" para su origen
+- **THEN** la factura sigue "Enviada" con los mismos resultados
 
-#### Scenario: Factura editable prevalidada de nuevo
-- **WHEN** una factura en `REQUIRES_CORRECTION` sin contrato cargado se vuelve a prevalidar después de que "Contrato" se hizo obligatorio para su origen
-- **THEN** existe un resultado DOC-009 `FAIL` con el mensaje "Falta Contrato"
+#### Scenario: Factura en Observaciones enviada de nuevo
+- **WHEN** una factura en "Observaciones" sin contrato cargado se envía después de que "Contrato" se hizo obligatorio para su origen
+- **THEN** existe un resultado DOC-009 `FAIL` con el mensaje "Falta Contrato", el envío no procede y la factura sigue en "Observaciones"
 
 ### Requirement: Comparaciones del receptor y del CFDI según las Reglas de Validación
 Las reglas XML SHALL comparar el CFDI con la configuración vigente así:
@@ -101,13 +109,40 @@ Cuando su comparación está desactivada, XML-002, XML-003, XML-004, XML-005, XM
 
 #### Scenario: Código postal distinto
 - **WHEN** el Código Postal configurado es `03930` y el XML trae `DomicilioFiscalReceptor="06600"`
-- **THEN** XML-010 es `FAIL` con severidad `ERROR`, valor esperado `03930` y detectado `06600`, y la factura queda en "Requiere corrección"
+- **THEN** XML-010 es `FAIL` con severidad `ERROR`, valor esperado `03930` y detectado `06600`, y el envío no procede
 
 #### Scenario: Comparación desactivada
 - **WHEN** la comparación de la Razón Social está desactivada y el XML trae otra razón social
 - **THEN** XML-009 es `NOT_APPLICABLE` con "Comparación desactivada en Reglas de Validación" y el score no la considera
 
 #### Scenario: Factura demo correcta
-- **WHEN** se prevalida la factura demo con `cfdi_demo_correcto.xml` y la configuración inicial
+- **WHEN** se valida la factura demo con `cfdi_demo_correcto.xml` y la configuración inicial
 - **THEN** XML-009 y XML-010 son `PASS`
+
+### Requirement: La validación no cambia el estatus de la factura
+`run_validation` SHALL guardar los resultados, el score, el UUID, la fecha y los importes del XML, y auditar `VALIDATION_STARTED` y `VALIDATION_COMPLETED`, sin cambiar el estatus de la factura. Decidir si una factura pasa a "Enviada" SHALL corresponder al envío: cualquier resultado `FAIL` lo impide. El evento de log `validation.completed` SHALL incluir `duration_ms`, `score`, `blockers` y `failures` (número de resultados `FAIL`).
+
+#### Scenario: Validación con fallas
+- **WHEN** se ejecuta `run_validation` sobre una factura "Cargada" cuyo XML falla XML-002
+- **THEN** los resultados quedan guardados, la factura sigue "Cargada" y `validation.completed` registra `failures` mayor que cero
+
+### Requirement: Reglas nacionales que no aplican a la factura internacional
+Al validar una factura de un proveedor de origen Internacional, el motor SHALL reportar como `NOT_APPLICABLE`, con el mensaje "No aplica a proveedores internacionales" y conservando la severidad de cada regla:
+- las reglas del CFDI, XML-001 a XML-010, sin intentar leer un XML;
+- FIN-004 (UUID duplicado);
+- SUP-003 y SUP-004 (expediente del Anexo A), mientras no se defina el expediente del proveedor internacional.
+
+SEM-001 SHALL resultar `NOT_EVALUATED` con "Sin conceptos que comparar: el Invoice no es un CFDI". Las demás reglas (DOC, SUP-001, SUP-002, CON, DAT y FIN-001, FIN-002, FIN-003, FIN-005 y FIN-006) SHALL evaluarse igual que para el proveedor nacional, con los importes y la moneda capturados. La validación de facturas de proveedores nacionales MUST NOT cambiar.
+
+#### Scenario: Factura internacional completa
+- **WHEN** se valida una factura internacional con Invoice, orden de compra y Vo.Bo., importes que cuadran y dentro del monto de su contrato vigente
+- **THEN** XML-001 a XML-010, FIN-004, SUP-003 y SUP-004 resultan `NOT_APPLICABLE`, ninguna regla resulta `FAIL` y la factura puede enviarse
+
+#### Scenario: Monto excedido
+- **WHEN** el subtotal capturado de una factura internacional excede el monto autorizado de su contrato
+- **THEN** FIN-001 resulta `FAIL` con severidad `CRITICAL` y el envío no procede
+
+#### Scenario: Factura nacional sin cambios
+- **WHEN** se valida la factura demo A-CORRECTA
+- **THEN** sus resultados son los mismos que antes de este cambio y no incluyen reglas INT ni FIN-007
 

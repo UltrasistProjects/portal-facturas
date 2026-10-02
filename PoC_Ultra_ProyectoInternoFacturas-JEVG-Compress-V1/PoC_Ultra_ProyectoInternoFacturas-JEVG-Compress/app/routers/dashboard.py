@@ -1,3 +1,5 @@
+from dataclasses import dataclass
+
 from fastapi import APIRouter, Depends, Request
 from sqlalchemy.orm import Session
 
@@ -9,20 +11,41 @@ from app.routers.common import templates
 
 router = APIRouter()
 RECENT_INVOICES = 10
+# Avisos que llegan por ?notice= tras una redireccion (el portal no tiene mensajes flash); otro valor se ignora.
+NOTICES = {"password_changed": "Contraseña actualizada"}
+
+
+@dataclass(frozen=True)
+class KPI:
+    status: InvoiceStatus
+    label: str
+    note: str
+    tone: str
+    count: int
+
+
+# Indicadores de seguimiento por estatus (HU-17, EP-01 DT-01): cada uno abre el listado filtrado.
+STATUS_KPIS = [
+    (InvoiceStatus.UNDER_REVIEW, "Enviadas", "En validación del PMO", ""),
+    (InvoiceStatus.REQUIRES_CORRECTION, "Observaciones", "Por corregir y reenviar", "warning"),
+    (InvoiceStatus.ACCEPTED, "Autorizadas", "Para su pago", "success"),
+    (InvoiceStatus.REJECTED, "Rechazadas", "Decisión definitiva", "danger"),
+    (InvoiceStatus.CANCELLED, "Canceladas", "Con acuse de cancelación", "muted"),
+]
 
 
 @router.get("/")
-def dashboard(request: Request, db: Session = Depends(get_db), user=Depends(get_current_user)):
+def dashboard(request: Request, notice: str = "", db: Session = Depends(get_db), user=Depends(get_current_user)):
     # KPIs agregados en SQL (COUNT ... GROUP BY y SUM exacta): no se cargan todas las facturas en memoria.
     counts = status_counts(db, user)
-    kpis = {
+    kpis = [KPI(status, label, note, tone, counts.get(status, 0)) for status, label, note, tone in STATUS_KPIS]
+    recent = search_invoices(db, user, per_page=RECENT_INVOICES).items
+    context = {
+        "user": user,
+        "invoices": recent,
         "total": sum(counts.values()),
         "amount": total_amount(db, user),
-        "review": counts.get(InvoiceStatus.UNDER_REVIEW, 0),
-        "correction": counts.get(InvoiceStatus.REQUIRES_CORRECTION, 0),
-        "accepted": counts.get(InvoiceStatus.ACCEPTED, 0),
-        "rejected": counts.get(InvoiceStatus.REJECTED, 0),
-        "prevalidated": counts.get(InvoiceStatus.PREVALIDATED, 0),
+        "kpis": kpis,
+        "notice": NOTICES.get(notice),
     }
-    recent = search_invoices(db, user, per_page=RECENT_INVOICES).items
-    return templates.TemplateResponse(request, "dashboard.html", {"user": user, "invoices": recent, "kpis": kpis})
+    return templates.TemplateResponse(request, "dashboard.html", context)

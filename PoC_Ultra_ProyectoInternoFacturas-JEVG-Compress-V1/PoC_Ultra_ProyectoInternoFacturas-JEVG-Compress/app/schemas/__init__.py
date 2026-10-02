@@ -1,17 +1,57 @@
-from datetime import date
+import re
+from datetime import date, datetime, timezone
 from decimal import Decimal
+from urllib.parse import urlsplit
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, ValidationError, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    EmailStr,
+    Field,
+    ValidationError,
+    ValidationInfo,
+    field_validator,
+    model_validator,
+)
 
-from app.core.constants import FORMAT_EXTENSIONS, DocumentRequirement, Role, SupplierType
-from app.core.passwords import validate_password
+from app.core.constants import (
+    FOREIGN_TAX_ID_FORMAT,
+    FOREIGN_TAX_ID_FORMAT_MESSAGE,
+    FORMAT_EXTENSIONS,
+    PHONE_FORMAT,
+    PHONE_FORMAT_MESSAGE,
+    DocumentRequirement,
+    Role,
+    SupplierClassification,
+    SupplierOrigin,
+    SupplierType,
+)
+from app.core.countries import COUNTRIES
+from app.core.timeutils import to_business
 
+MIN_INCORPORATION_DATE = date(1900, 1, 1)
 FIELD_LABELS = {
     "name": "Nombre",
     "email": "Correo",
     "password": "Contrasena",
     "business_name": "Razon social",
+    "origin": "Origen",
     "rfc": "RFC",
+    "foreign_tax_id": "Identificador fiscal extranjero",
+    "country": "Pais",
+    "supplier_type": "Tipo de persona",
+    "phone": "Telefono",
+    "bank_information": "Informacion bancaria",
+    "confidentiality_agreement": "Confidencialidad",
+    "economic_proposal": "Alta por cotizacion o licitacion",
+    "classification": "Clasificacion",
+    "main_activity": "Actividad principal",
+    "incorporation_date": "Fecha de constitucion",
+    "website": "Pagina web",
+    "legal_rep_name": "Nombre del representante legal",
+    "legal_rep_phone": "Telefono del representante legal",
+    "contact_name": "Nombre del contacto",
+    "contact_phone": "Telefono del contacto",
     "invoice_number": "Numero de factura",
     "service_period": "Periodo de servicio (MM/AAAA)",
     "project_name": "Proyecto",
@@ -19,6 +59,10 @@ FIELD_LABELS = {
     "authorized_technology": "Tecnologia autorizada",
     "authorized_amount": "Monto autorizado",
     "currency": "Moneda",
+    "invoice_date": "Fecha de la factura",
+    "subtotal": "Subtotal",
+    "tax": "Impuestos",
+    "total": "Total",
     "end_date": "Vigencia",
     "new_amount": "Monto nuevo",
     "reason": "Motivo",
@@ -30,11 +74,23 @@ ERROR_MESSAGES = {
     "string_pattern_mismatch": "tiene un formato invalido",
     "greater_than": "debe ser mayor que cero",
     "decimal_max_places": "admite a lo sumo 2 decimales",
+    "decimal_max_digits": "es demasiado grande",
+    "decimal_parsing": "no es un importe valido",
+    "finite_number": "no es un importe valido",
+    "greater_than_equal": "no puede ser negativo",
+    "date_parsing": "no es una fecha valida",
+    "date_from_datetime_parsing": "no es una fecha valida",
+    "enum": "no es una opcion valida",
 }
 
 
 def validation_message(exc: ValidationError) -> str:
     """Mensaje en espanol para mostrar en el formulario."""
+    return " ".join(validation_messages(exc))
+
+
+def validation_messages(exc: ValidationError) -> list[str]:
+    """Un mensaje "<Campo>: <detalle>" por error, para listarlos juntos."""
     messages = []
     for error in exc.errors():
         field = str(error["loc"][0]) if error["loc"] else "end_date"
@@ -46,14 +102,15 @@ def validation_message(exc: ValidationError) -> str:
         else:
             detail = ERROR_MESSAGES.get(error["type"], "es invalido")
         messages.append(f"{label}: {detail}")
-    return " ".join(messages)
+    return messages
 
 
 class UserCreate(BaseModel):
-    # Sin str_strip_whitespace a nivel de modelo: los espacios de la contrasena son significativos.
+    """Alta en /admin/users. Sin contrasena: el usuario se crea en Keycloak con una temporal
+    (add-keycloak-authentication, D15)."""
+
     name: str = Field(min_length=2, max_length=150)
     email: EmailStr
-    password: str
     role: Role
     supplier_id: int | None = None
 
@@ -67,23 +124,126 @@ class UserCreate(BaseModel):
     def normalized_email(cls, value):
         return value.strip().lower() if isinstance(value, str) else value
 
-    @field_validator("password")
-    @classmethod
-    def password_policy(cls, value: str) -> str:
-        return validate_password(value)
 
+class SupplierProfile(BaseModel):
+    """Datos del proveedor que capturan el alta individual y la edicion. La base de datos los admite vacios (proveedores
+    previos y carga masiva); aqui se exigen los obligatorios. Los campos vacios del formulario no se envian: faltan, y
+    una casilla sin marcar es falso. `supplier_type` va primero porque decide si aplica la fecha de constitucion; la
+    edicion lo toma del proveedor. En persona fisica el representante legal puede ser la misma persona."""
 
-class SupplierCreate(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
-    business_name: str = Field(min_length=2, max_length=250)
-    rfc: str = Field(min_length=12, max_length=13)
     supplier_type: SupplierType
+    business_name: str = Field(min_length=2, max_length=250)
+    phone: str
+    classification: SupplierClassification
+    main_activity: str = Field(max_length=10)
+    incorporation_date: date | None = Field(None, validate_default=True)
+    website: str | None = None
+    legal_rep_name: str = Field(min_length=2, max_length=150)
+    legal_rep_phone: str
+    contact_name: str = Field(min_length=2, max_length=150)
+    contact_phone: str
+    # Opcional al registrar; el pago, que ocurre fuera del portal, la requiere.
+    bank_information: str | None = Field(None, max_length=255)
+    confidentiality_agreement: bool = False
+    # Alta por cotizacion o licitacion: exige la propuesta economica en el expediente.
+    economic_proposal: bool = False
+
+    @field_validator("incorporation_date")
+    @classmethod
+    def legal_entity_date(cls, value: date | None, info: ValidationInfo) -> date | None:
+        """Obligatoria para persona moral; no aplica a persona fisica, que no la guarda."""
+        supplier_type = info.data.get("supplier_type")
+        if supplier_type == SupplierType.PERSONA_FISICA:
+            return None
+        if value is None and supplier_type == SupplierType.PERSONA_MORAL:
+            raise ValueError("es obligatorio para persona moral")
+        if value and not MIN_INCORPORATION_DATE <= value <= date.today():
+            raise ValueError("debe estar entre 1900 y hoy")
+        return value
+
+    @field_validator("website")
+    @classmethod
+    def http_url(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        url = value if "://" in value else f"https://{value}"
+        try:
+            parts = urlsplit(url)
+            valid = parts.scheme.lower() in ("http", "https") and "." in (parts.hostname or "")
+            parts.port  # ValueError si el puerto no es numerico o esta fuera de rango
+        except ValueError:
+            valid = False
+        if not valid or len(url) > 255 or any(char.isspace() for char in url):
+            raise ValueError("no es una direccion web valida (http o https, hasta 255 caracteres)")
+        return url
+
+    @field_validator("phone", "legal_rep_phone", "contact_phone")
+    @classmethod
+    def phone_format(cls, value: str) -> str:
+        if not re.fullmatch(PHONE_FORMAT, value):
+            raise ValueError(PHONE_FORMAT_MESSAGE)
+        return value
+
+
+class SupplierUpdate(SupplierProfile):
+    """Edicion del Administrador. La identidad fiscal (origen, RFC, identificador extranjero, pais y tipo de persona)
+    y el correo, que es el usuario del portal (HU-03), no se editan."""
+
+
+class SupplierCreate(SupplierProfile):
+    """Alta individual. El origen decide la identidad fiscal, con las reglas de la carga masiva (HU-01): el nacional
+    se identifica por RFC y su pais es MX; el internacional, por pais distinto de MX e identificador fiscal
+    extranjero, sin RFC. `origin` va antes que los campos que valida."""
+
+    origin: SupplierOrigin = SupplierOrigin.NATIONAL
+    rfc: str | None = Field(None, min_length=12, max_length=13, validate_default=True)
+    foreign_tax_id: str | None = Field(None, validate_default=True)
+    country: str | None = Field(None, validate_default=True)
     email: EmailStr
 
     @field_validator("rfc")
     @classmethod
-    def upper_rfc(cls, value: str) -> str:
-        return value.upper()
+    def national_rfc(cls, value: str | None, info: ValidationInfo) -> str | None:
+        origin = info.data.get("origin")
+        if origin == SupplierOrigin.NATIONAL and value is None:
+            raise ValueError("es obligatorio para proveedores nacionales")
+        if origin == SupplierOrigin.INTERNATIONAL and value is not None:
+            raise ValueError("debe quedar vacio para proveedores internacionales")
+        return value.upper() if value else value
+
+    @field_validator("foreign_tax_id")
+    @classmethod
+    def international_tax_id(cls, value: str | None, info: ValidationInfo) -> str | None:
+        origin = info.data.get("origin")
+        if origin == SupplierOrigin.NATIONAL and value is not None:
+            raise ValueError("debe quedar vacio para proveedores nacionales")
+        if origin == SupplierOrigin.INTERNATIONAL:
+            if value is None:
+                raise ValueError("es obligatorio para proveedores internacionales")
+            # Espacios internos colapsados, como en la carga masiva: la unicidad compara el valor guardado.
+            value = " ".join(value.split()).upper()
+            if not re.fullmatch(FOREIGN_TAX_ID_FORMAT, value):
+                raise ValueError(FOREIGN_TAX_ID_FORMAT_MESSAGE)
+        return value
+
+    @field_validator("country")
+    @classmethod
+    def origin_country(cls, value: str | None, info: ValidationInfo) -> str | None:
+        origin = info.data.get("origin")
+        value = value.upper() if value else value
+        if origin == SupplierOrigin.NATIONAL:
+            if value not in (None, "MX"):
+                raise ValueError("debe quedar vacio o ser MX para proveedores nacionales")
+            return "MX"
+        if origin == SupplierOrigin.INTERNATIONAL:
+            if value is None:
+                raise ValueError("es obligatorio para proveedores internacionales")
+            if value == "MX":
+                raise ValueError("un proveedor internacional no puede tener pais MX")
+            if value not in COUNTRIES:
+                raise ValueError("use el codigo ISO de dos letras (p. ej. US)")
+        return value
 
     @field_validator("email", mode="before")
     @classmethod
@@ -131,6 +291,64 @@ class InvoiceCreate(BaseModel):
     total: Decimal = Decimal("0")
     currency: str = "MXN"
     model_config = ConfigDict(str_strip_whitespace=True)
+
+
+# Tolerancia de FIN-002 entre subtotal + impuestos y total.
+AMOUNT_TOLERANCE = Decimal("0.02")
+
+
+def _amount_text(value):
+    """Importe capturado en un formulario: admite el separador de miles "," y el simbolo "$"."""
+    if isinstance(value, str):
+        value = value.replace("$", "").replace(",", "").strip()
+        if not value:
+            raise ValueError("es obligatorio")
+    return value
+
+
+class ForeignInvoiceData(BaseModel):
+    """Datos del Invoice de un proveedor internacional (HU-15): sin XML, el proveedor los captura. Se guardan en las
+    columnas de la factura que el XML llena para el proveedor nacional."""
+
+    invoice_date: date
+    subtotal: Decimal = Field(gt=0, max_digits=16, decimal_places=2)
+    tax: Decimal = Field(ge=0, max_digits=16, decimal_places=2)
+    total: Decimal = Field(gt=0, max_digits=16, decimal_places=2)
+    currency: str = Field(pattern=r"^[A-Z]{3}$")
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    @field_validator("invoice_date", mode="before")
+    @classmethod
+    def date_required(cls, value):
+        if value is None or (isinstance(value, str) and not value.strip()):
+            raise ValueError("es obligatoria")
+        return value
+
+    @field_validator("invoice_date")
+    @classmethod
+    def not_future(cls, value: date) -> date:
+        if value > to_business(datetime.now(timezone.utc)).date():
+            raise ValueError("no puede ser posterior a hoy")
+        return value
+
+    @field_validator("subtotal", "tax", "total", mode="before")
+    @classmethod
+    def amount_text(cls, value):
+        return _amount_text(value)
+
+    @field_validator("total")
+    @classmethod
+    def total_matches(cls, value: Decimal, info: ValidationInfo) -> Decimal:
+        subtotal, tax = info.data.get("subtotal"), info.data.get("tax")
+        # Solo si subtotal e impuestos son validos: su propio error ya se reporta.
+        if subtotal is not None and tax is not None and abs(subtotal + tax - value) > AMOUNT_TOLERANCE:
+            raise ValueError("debe ser igual al subtotal más impuestos")
+        return value
+
+    @field_validator("currency", mode="before")
+    @classmethod
+    def currency_upper(cls, value):
+        return value.strip().upper() if isinstance(value, str) else value
 
 
 INVALID_REQUIREMENT = "Nivel de exigencia inválido"

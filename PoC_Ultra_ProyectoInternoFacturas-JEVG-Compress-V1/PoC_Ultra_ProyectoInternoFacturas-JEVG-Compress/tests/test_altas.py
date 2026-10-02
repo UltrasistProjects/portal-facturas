@@ -1,17 +1,17 @@
-import pytest
+import re
+
 from sqlalchemy import delete, func, select
 
 from app.core.constants import SupplierStatus
 from app.core.database import SessionLocal
-from app.core.demo import DEMO_ACCOUNTS
-from app.core.passwords import generate_password, password_problems
-from app.core.security import verify_password
+from app.core.passwords import generate_password
 from app.models import Contract, EmailDelivery, Invoice, Supplier, User
-from tests.conftest import csrf, login, supplier_by_email
+from app.services.keycloak_admin import UPDATE_PASSWORD
+from tests.conftest import SUPPLIER_PROFILE_FORM, csrf, login, supplier_by_email
 
 
-def create_user(client, email="nuevo@ultrasist.com.mx", password="Portal#2026x", **extra):
-    data = {"name": "Usuario Nuevo", "email": email, "password": password, "role": "INTERNAL", **extra}
+def create_user(client, email="nuevo@ultrasist.com.mx", **extra):
+    data = {"name": "Usuario Nuevo", "email": email, "role": "PMO", **extra}
     return client.post("/admin/users", data={**data, "csrf_token": csrf(client, "/admin/users")})
 
 
@@ -20,51 +20,26 @@ def user_exists(email: str) -> bool:
         return db.scalar(select(User.id).where(User.email == email)) is not None
 
 
-@pytest.mark.parametrize(
-    ("password", "reason"),
-    [
-        ("Ab1!", "al menos 8"),
-        ("Password123", "caracter especial"),
-        ("Password1!", "demasiado comun"),
-        ("sinnumeros#", "numero"),
-        ("12345678#", "letra"),
-    ],
-)
-def test_contrasena_invalida_rechazada(client, password, reason):
+def test_alta_crea_el_usuario_en_keycloak_sin_contrasena_local(client, keycloak):
     login(client)
-    response = create_user(client, email="debil@ultrasist.com.mx", password=password)
-    assert response.status_code == 400
-    assert reason in response.text
-    assert not user_exists("debil@ultrasist.com.mx")
-
-
-def test_contrasena_excesiva_rechazada_sin_calcular_hash(client, monkeypatch):
-    import app.routers.admin as admin
-
-    def never(_password):
-        raise AssertionError("no debe calcular el hash")
-
-    monkeypatch.setattr(admin, "hash_password", never)
-    login(client)
-    response = create_user(client, email="larga@ultrasist.com.mx", password="Ab1#" + "x" * 125)
-    assert response.status_code == 400
-    assert "128" in response.text
-
-
-def test_contrasena_valida_crea_usuario(client):
-    login(client)
-    response = create_user(client, email="valida@ultrasist.com.mx", password="Portal#2026x")
-    assert response.status_code == 200  # sigue la redireccion al listado
+    response = create_user(client, email="valida@ultrasist.com.mx")
+    assert response.status_code == 200 and response.headers["cache-control"] == "no-store"
     with SessionLocal() as db:
         created = db.scalar(select(User).where(User.email == "valida@ultrasist.com.mx"))
-    assert verify_password("Portal#2026x", created.password_hash)
+    # RN-HU03-01: el portal no guarda la contrasena ni su hash; la cuenta vive en Keycloak, enlazada por sub.
+    assert created.password_hash is None and created.keycloak_sub
+    account = keycloak.account("valida@ultrasist.com.mx")
+    assert (account.id, account.roles, account.required_actions) == (created.keycloak_sub, {"PMO"}, [UPDATE_PASSWORD])
+    # La temporal se muestra una sola vez, en esta respuesta (D15).
+    assert f"<code>{account.password}</code>" in response.text
+    assert account.password not in client.get("/admin/users?q=valida").text
 
 
-def test_contrasenas_demo_y_generadas_cumplen_la_politica():
-    for account in DEMO_ACCOUNTS:
-        assert password_problems(account.password) == [], account.email
-    for _ in range(50):
-        assert password_problems(generate_password()) == []
+def test_contrasenas_temporales_cumplen_la_politica():
+    for _ in range(1000):
+        password = generate_password()
+        assert len(password) == 20
+        assert re.search(r"[A-Za-z]", password) and re.search(r"\d", password) and re.search(r"[^A-Za-z0-9]", password)
 
 
 def test_correo_invalido_en_alta_de_usuario(client):
@@ -88,6 +63,7 @@ def create_supplier(client, **overrides):
         "rfc": "SNU260101AB1",
         "supplier_type": "PERSONA_MORAL",
         "email": "contacto@serviciosnuevos.mx",
+        **SUPPLIER_PROFILE_FORM,
         **overrides,
     }
     return client.post("/suppliers", data={**data, "csrf_token": csrf(client, "/suppliers")})

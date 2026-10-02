@@ -18,6 +18,7 @@ from app.core.config import settings
 from app.core.constants import DeliveryStatus, NotificationEvent
 from app.core.database import SessionLocal
 from app.models import AuditLog, EmailDelivery, NotificationCopy, NotificationMailbox, User
+from app.services import mail_layout
 from app.services import notification_service as ns
 from tests.conftest import OUTBOX, RECEPTION_SEED, csrf, login
 
@@ -358,11 +359,62 @@ def test_envio_al_buzon_con_el_transporte_de_archivo():
     assert message["Subject"] == "Factura A-1024 autorizada para pago"
     assert message["Auto-Submitted"] == "auto-generated"
     assert message["Message-ID"] == delivery.message_id and message["Date"]
-    assert message.get_content_type() == "text/plain" and message.get_content_charset() == "utf-8"
-    body = message.get_content()
+    assert message.get_content_type() == "multipart/alternative"
+    plain = message.get_body(("plain",))
+    assert plain.get_content_charset() == "utf-8"
+    body = plain.get_content()
     assert "La factura número A-1024 del proveedor Servicios Digitales del Norte SA de CV" in body
     assert "$116,000.00 MXN" in body
     assert oct(next(OUTBOX.glob("*.eml")).stat().st_mode & 0o777) == "0o600"
+
+
+def test_version_html_con_el_logo():
+    notify(AUTHORIZED)
+    [message] = outbox_messages()
+    parts = [part.get_content_type() for part in message.walk()]
+    assert parts == ["multipart/alternative", "text/plain", "multipart/related", "text/html", "image/png"]
+    page = message.get_body(("html",))
+    assert page.get_content_charset() == "utf-8"
+    content = page.get_content()
+    [logo] = [part for part in message.walk() if part.get_content_type() == "image/png"]
+    assert f'src="cid:{logo["Content-ID"][1:-1]}"' in content and logo.get_content_disposition() == "inline"
+    assert logo.get_content() == mail_layout.LOGO_PATH.read_bytes()
+    assert ">Factura A-1024 autorizada para pago</h1>" in content
+    assert "La factura número A-1024 del proveedor Servicios Digitales del Norte SA de CV" in content
+    assert ">Folio interno</div>" in content and ">FAC-2026-00042</div>" in content
+
+
+def test_version_html_escapa_los_valores():
+    observaciones = '<b>Urgente</b> <img src="x" onerror="alert(1)">'
+    notify(REJECTED, supplier_email="contacto@proveedor.mx", observaciones=observaciones)
+    [message] = outbox_messages()
+    assert observaciones in message.get_body(("plain",)).get_content()
+    content = message.get_body(("html",)).get_content()
+    assert "&lt;b&gt;Urgente&lt;/b&gt; &lt;img src=&#34;x&#34; onerror=&#34;alert(1)&#34;&gt;" in content
+    assert "<b>" not in content and '<img src="x"' not in content
+
+
+def test_version_html_enlaces_y_datos():
+    body = (
+        "Ingrese a https://portal.ultrasist.mx/login?a=1&b=2. Ignore javascript:alert(1).\n\n"
+        "Nota: sin datos.\n\n"
+        "Portal: http://127.0.0.1:8000/login\nUsuario: contacto@proveedor.mx"
+    )
+    first, note, fields = mail_layout.blocks(body)
+    assert first.lines == [
+        [
+            mail_layout.Segment("Ingrese a "),
+            mail_layout.Segment(
+                "https://portal.ultrasist.mx/login?a=1&b=2", "https://portal.ultrasist.mx/login?a=1&b=2"
+            ),
+            mail_layout.Segment(". Ignore javascript:alert(1)."),
+        ]
+    ]
+    assert note.fields is None and note.lines == [[mail_layout.Segment("Nota: sin datos.")]]
+    assert [field.label for field in fields.fields] == ["Portal", "Usuario"]
+    content = mail_layout.render_html("Asunto", body, "cid:logo@portal.local")
+    assert '<a href="https://portal.ultrasist.mx/login?a=1&amp;b=2"' in content
+    assert 'href="javascript' not in content
 
 
 def test_copias_en_el_mensaje():
@@ -431,10 +483,11 @@ def test_envio_registrado_sin_contenido():
         assert all(text not in value for value in columns), text
 
 
-def test_ultimos_envios_en_la_pantalla(client):
+def test_envios_en_la_pantalla(client):
+    # Bitacora completa y paginada de 25 en 25, del mas reciente al mas antiguo (listados-paginados).
     start = datetime(2026, 9, 1, tzinfo=timezone.utc)
     with SessionLocal() as db:
-        for number in range(25):
+        for number in range(30):
             db.add(
                 EmailDelivery(
                     event=AUTHORIZED,
@@ -449,7 +502,9 @@ def test_ultimos_envios_en_la_pantalla(client):
         db.commit()
     login(client)
     shown = re.findall(r"envio(\d\d)@ultrasist\.com\.mx", client.get(URL).text)
-    assert shown == [f"{number:02d}" for number in range(24, 4, -1)]
+    assert shown == [f"{number:02d}" for number in range(29, 4, -1)]
+    older = re.findall(r"envio(\d\d)@ultrasist\.com\.mx", client.get(URL, params={"page": 2}).text)
+    assert older == ["04", "03", "02", "01", "00"]
 
 
 # --- Correo de prueba ---------------------------------------------------------------------------------------------
@@ -465,7 +520,7 @@ def test_prueba_exitosa(client):
     [message] = outbox_messages()
     assert message["To"] == "admin@ultrasist.com.mx"
     assert message["Subject"] == "Correo de prueba del Portal de Proveedores ULTRASIST"
-    assert admin().name in message.get_content()
+    assert admin().name in message.get_body(("plain",)).get_content()
 
 
 def test_prueba_fallida(client, smtp_settings):

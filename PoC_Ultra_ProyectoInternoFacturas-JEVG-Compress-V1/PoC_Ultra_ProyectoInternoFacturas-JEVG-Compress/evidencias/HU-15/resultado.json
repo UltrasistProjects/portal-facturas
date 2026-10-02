@@ -1,0 +1,116 @@
+{
+  "id": "HU-15",
+  "run": "RMUQ7SGCJ",
+  "inicio": "2026-10-02T00:19:04.602Z",
+  "fin": "2026-10-02T00:19:08.389Z",
+  "estado": "PASS",
+  "bloqueo": null,
+  "notas": [],
+  "prueba": {
+    "titulo": "HU-15 · Registro de factura por proveedor internacional",
+    "archivo": "12-HU-15-registro-factura-internacional.spec.ts"
+  },
+  "escenarios": [
+    {
+      "nombre": "Formulario del Invoice: datos e importes del proveedor internacional",
+      "estado": "PASS",
+      "pasos": [
+        {
+          "paso": "Abrir \"Nueva factura\"",
+          "esperado": "El formulario pide, además de los datos generales, la sección \"Datos del Invoice\" (fecha, moneda, subtotal, impuestos y total) y sólo ofrece el contrato del proveedor.",
+          "obtenido": "Contrato ofrecido: Analitica Global 2026 · $20,000.00 USD; campos del Invoice: fecha, moneda, subtotal, impuestos y total.",
+          "estado": "PASS",
+          "evidencias": [
+            {
+              "archivo": "HU-15/01-formulario-invoice.png",
+              "descripcion": "Formulario de registro del proveedor internacional con \"Datos del Invoice\".",
+              "tipo": "aplicacion"
+            }
+          ]
+        },
+        {
+          "paso": "Capturar importes inconsistentes (subtotal 1,000.00 + impuestos 0.00 ≠ total 1,500.00) y continuar",
+          "esperado": "Se rechaza el registro con un mensaje sobre el total y no se crea la factura.",
+          "obtenido": "Mensaje: \"Total: debe ser igual al subtotal más impuestos\"; se permanece en \"Registrar factura\".",
+          "estado": "PASS",
+          "evidencias": [
+            {
+              "archivo": "HU-15/02-importes-inconsistentes.png",
+              "descripcion": "Registro rechazado: el total no es igual al subtotal más impuestos.",
+              "tipo": "aplicacion"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "nombre": "Registro y carga del Invoice en PDF y de los documentos soporte configurados",
+      "estado": "PASS",
+      "pasos": [
+        {
+          "paso": "Registrar QA-RMUQ7SGCJ-I1 con importes consistentes (1,000.00 USD)",
+          "esperado": "Se abre la carga documental: se ofrecen Invoice (PDF) y los soportes, no el XML ni el PDF del CFDI; faltan 3 obligatorios (Invoice, Orden de compra y Vo.Bo.).",
+          "obtenido": "Factura #42; tipos ofrecidos: Invoice, Orden de compra, Vo.Bo. del líder de proyecto, Contrato, Anexo del contrato, Documentación adicional; checklist \"Faltan 3 archivos obligatorios\".",
+          "estado": "PASS",
+          "evidencias": [
+            {
+              "archivo": "HU-15/03-carga-documental-invoice.png",
+              "descripcion": "Carga documental del proveedor internacional: Invoice (PDF) y soportes; 3 obligatorios pendientes.",
+              "tipo": "aplicacion"
+            }
+          ]
+        },
+        {
+          "paso": "Cargar el Invoice \"INV-QA-RMUQ7SGCJ.pdf\", la Orden de compra y el Vo.Bo.",
+          "esperado": "Obligatorios completos (\"Factura cargada. Ya puede enviarla a validación.\") y la factura queda \"Cargada\".",
+          "obtenido": "Checklist \"Archivos obligatorios completos Factura cargada. Ya puede enviarla a validación.\"; estatus \"Cargada\".",
+          "estado": "PASS",
+          "evidencias": [
+            {
+              "archivo": "HU-15/04-invoice-cargado.png",
+              "descripcion": "Invoice y soportes cargados: obligatorios completos.",
+              "tipo": "aplicacion"
+            },
+            {
+              "archivo": "HU-15/05-detalle-cargada.png",
+              "descripcion": "Detalle de QA-RMUQ7SGCJ-I1 en \"Cargada\" con los \"Datos del Invoice\".",
+              "tipo": "aplicacion"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "nombre": "Invoice duplicado por nombre de archivo",
+      "estado": "PASS",
+      "pasos": [
+        {
+          "paso": "Registrar QA-RMUQ7SGCJ-I2 e intentar cargar un Invoice con el mismo nombre de archivo (\"INV-QA-RMUQ7SGCJ.pdf\")",
+          "esperado": "La carga se rechaza (Invoice duplicado, indicando el folio de la otra factura) y el Invoice sigue pendiente.",
+          "obtenido": "Rechazado: \"Ya existe una factura con un Invoice llamado «INV-QA-RMUQ7SGCJ.pdf»: FAC-2026-00042\"; Invoice sigue \"Pendiente\".",
+          "estado": "PASS",
+          "evidencias": [
+            {
+              "archivo": "HU-15/06-invoice-duplicado.png",
+              "descripcion": "Carga rechazada: ya existe una factura con un Invoice con ese nombre de archivo.",
+              "tipo": "aplicacion"
+            }
+          ]
+        },
+        {
+          "paso": "Cargar en QA-RMUQ7SGCJ-I2 un Invoice con otro nombre (\"INV-QA-RMUQ7SGCJ-B.pdf\")",
+          "esperado": "La carga se acepta: el control de duplicados es por nombre de archivo.",
+          "obtenido": "Aceptado; checklist \"Faltan 2 archivos obligatorios\".",
+          "estado": "PASS",
+          "evidencias": [
+            {
+              "archivo": "HU-15/07-invoice-otro-nombre.png",
+              "descripcion": "Un Invoice con otro nombre de archivo sí se acepta.",
+              "tipo": "aplicacion"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

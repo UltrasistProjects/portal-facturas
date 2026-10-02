@@ -22,14 +22,14 @@ Cada plantilla SHALL tener asunto, cuerpo, número de versión, fecha de la últ
 - **THEN** la respuesta es HTTP 404
 
 ### Requirement: Configuración exclusiva del Administrador
-Las rutas `GET /admin/notification-templates`, `GET /admin/notification-templates/{codigo}`, `POST /admin/notification-templates/{codigo}/preview` y `POST /admin/notification-templates/{codigo}` SHALL estar disponibles únicamente para el rol `ADMIN`. Las peticiones `POST` MUST exigir un token CSRF válido. El menú Administración SHALL mostrar la opción "Plantillas de correo" sólo al rol `ADMIN`.
+Las rutas `GET /admin/notification-templates`, `GET /admin/notification-templates/{codigo}`, `POST /admin/notification-templates/{codigo}/preview` y `POST /admin/notification-templates/{codigo}` SHALL estar disponibles únicamente para el rol `Administrador`. Las peticiones `POST` MUST exigir un token CSRF válido. El menú Administración SHALL mostrar la opción "Plantillas de correo" sólo al rol `Administrador`.
 
 #### Scenario: PMO sin acceso
-- **WHEN** un usuario con rol `INTERNAL` solicita el listado, la edición o la vista previa, o envía un guardado
+- **WHEN** un usuario con rol `PMO` solicita el listado, la edición o la vista previa, o envía un guardado
 - **THEN** la respuesta es HTTP 403 y ninguna plantilla cambia
 
 #### Scenario: Proveedor sin acceso
-- **WHEN** un usuario con rol `PROVIDER` solicita el listado, la edición o la vista previa, o envía un guardado
+- **WHEN** un usuario con rol `Proveedor` solicita el listado, la edición o la vista previa, o envía un guardado
 - **THEN** la respuesta es HTTP 403 y ninguna plantilla cambia
 
 #### Scenario: Guardado sin token CSRF
@@ -37,8 +37,8 @@ Las rutas `GET /admin/notification-templates`, `GET /admin/notification-template
 - **THEN** la respuesta es HTTP 403 y la plantilla no cambia
 
 #### Scenario: Opción en el menú
-- **WHEN** un Administrador y un usuario `INTERNAL` abren el tablero
-- **THEN** el menú del Administrador incluye "Plantillas de correo" y el del usuario `INTERNAL` no
+- **WHEN** un Administrador y un usuario `PMO` abren el tablero
+- **THEN** el menú del Administrador incluye "Plantillas de correo" y el del usuario `PMO` no
 
 ### Requirement: Consulta de las plantillas
 `GET /admin/notification-templates` SHALL listar las cinco plantillas en el orden Autorizada, Rechazada, Observaciones, Cancelada y Credenciales de acceso. De cada una SHALL mostrar el nombre del evento, el destinatario, el asunto vigente y la fecha y el Administrador de la última modificación, o "Predeterminada" si nunca se ha modificado. El destinatario SHALL ser:
@@ -115,7 +115,7 @@ El sistema SHALL reportar todos los errores juntos, con el formato "Campo: mensa
 - **THEN** la respuesta HTTP 400 incluye "Asunto: es obligatorio" y "Cuerpo: debe incluir la variable obligatoria {{numero_factura}}"
 
 ### Requirement: Vista previa con datos de ejemplo
-`POST /admin/notification-templates/{codigo}/preview` SHALL validar el borrador con las mismas reglas del guardado. Si es válido, SHALL responder HTTP 200 con el formulario y, debajo, el asunto y el cuerpo compuestos con estos datos de ejemplo:
+`POST /admin/notification-templates/{codigo}/preview` SHALL validar el borrador con las mismas reglas del guardado. Si es válido, SHALL responder HTTP 200 con el formulario y, debajo, el asunto y el correo compuestos con estos datos de ejemplo:
 - `numero_factura` = "A-1024";
 - `folio_interno` = "FAC-2026-00042";
 - `proveedor` = "Servicios Digitales del Norte SA de CV";
@@ -129,6 +129,8 @@ El sistema SHALL reportar todos los errores juntos, con el formato "Campo: mensa
 - `url_portal` = "https://proveedores.ultrasist.com.mx/login".
 
 Si el borrador no es válido, SHALL responder HTTP 400 con los errores y sin vista previa. La vista previa MUST NOT guardar la plantilla, cambiar su versión ni generar registros de auditoría. SHALL funcionar sin JavaScript y mostrar el texto compuesto escapado.
+
+El correo SHALL mostrarse como lo recibe el destinatario: la misma versión HTML que se envía (spec `notificaciones-correo`), con el logo como `data:` URI, en un `iframe` con `sandbox` sin `allow-scripts` y el documento en `srcdoc`. Debajo, plegada, SHALL mostrarse la versión de texto plano. La respuesta SHALL admitir en su CSP sólo los atributos `style` de ese correo (spec `proteccion-http`).
 
 #### Scenario: Vista previa del texto predeterminado
 - **WHEN** el Administrador pide la vista previa de la plantilla Autorizada con su texto predeterminado
@@ -149,6 +151,10 @@ Si el borrador no es válido, SHALL responder HTTP 400 con los errores y sin vis
 #### Scenario: Borrador inválido
 - **WHEN** el Administrador pide la vista previa de un borrador sin una variable obligatoria
 - **THEN** la respuesta es HTTP 400 con el error correspondiente y la página no muestra la vista previa
+
+#### Scenario: Vista previa como el correo
+- **WHEN** el Administrador pide la vista previa de la plantilla Credenciales de acceso con su texto predeterminado
+- **THEN** la página contiene un `iframe` `sandbox="allow-same-origin"` cuyo `srcdoc` es el HTML del correo con el logo, el asunto "Acceso al Portal de Proveedores ULTRASIST" como título y "Contraseña temporal" con "Ejemplo#Temporal2026" en el bloque de datos, y la versión de texto plano plegada debajo
 
 ### Requirement: Guardado con control de edición concurrente
 `POST /admin/notification-templates/{codigo}` SHALL recibir `subject`, `body` y `version`, que es la versión que el Administrador tenía al abrir el formulario. Si el texto es válido y `version` coincide con la vigente, el sistema SHALL guardar el asunto y el cuerpo, aumentar la versión en 1 y registrar la fecha y el Administrador de la modificación. Después SHALL redirigir con HTTP 303 al listado, que muestra el aviso "Plantilla actualizada".

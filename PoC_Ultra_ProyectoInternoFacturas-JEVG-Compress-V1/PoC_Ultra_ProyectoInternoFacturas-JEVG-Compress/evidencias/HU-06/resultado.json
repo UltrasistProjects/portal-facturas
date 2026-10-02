@@ -1,0 +1,183 @@
+{
+  "id": "HU-06",
+  "run": "RMUQ7SGCJ",
+  "inicio": "2026-10-02T00:18:36.381Z",
+  "fin": "2026-10-02T00:18:44.516Z",
+  "estado": "PASS",
+  "bloqueo": null,
+  "notas": [],
+  "prueba": {
+    "titulo": "HU-06 · Configuración de reglas de validación",
+    "archivo": "07-HU-06-reglas-validacion.spec.ts"
+  },
+  "escenarios": [
+    {
+      "nombre": "Consulta de los datos de ULTRASIST contra los que se comparan las facturas",
+      "estado": "PASS",
+      "pasos": [
+        {
+          "paso": "Abrir Administración › Reglas de validación",
+          "esperado": "Se muestran RFC, Razón social, Código postal y Dirección de ULTRASIST con su interruptor \"Comparar\", y la tabla de reglas XML.",
+          "obtenido": "RFC \"ULT940623AG0\", Razón social \"ULTRASIST\", C.P. \"03930\"; comparaciones activas.",
+          "estado": "PASS",
+          "evidencias": [
+            {
+              "archivo": "HU-06/01-reglas-validacion.png",
+              "descripcion": "Datos de ULTRASIST (RFC, razón social, código postal, dirección) con sus interruptores \"Comparar\".",
+              "tipo": "aplicacion"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "nombre": "Validación de los valores de referencia",
+      "estado": "PASS",
+      "pasos": [
+        {
+          "paso": "Capturar un RFC con formato inválido (\"XYZ123\") y un código postal inválido (\"ABC12\") y guardar",
+          "esperado": "El guardado se rechaza, se muestran juntos los errores y los valores vigentes no cambian.",
+          "obtenido": "Errores: RFC: no es un RFC de persona moral válido / Código postal: debe tener 5 dígitos. Al recargar, RFC y C.P. siguen en ULT940623AG0 y 03930.",
+          "estado": "PASS",
+          "evidencias": [
+            {
+              "archivo": "HU-06/02-errores-reglas.png",
+              "descripcion": "Errores de validación de las reglas (RFC y código postal).",
+              "tipo": "aplicacion"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "nombre": "Alta y modificación de un valor de referencia (Dirección)",
+      "estado": "PASS",
+      "pasos": [
+        {
+          "paso": "Capturar la Dirección de ULTRASIST y guardar",
+          "esperado": "Se guardan las reglas (\"Reglas de validación guardadas\") y la dirección queda registrada con la nueva versión.",
+          "obtenido": "Aviso \"Reglas de validación guardadas\"; dirección \"Av. Insurgentes Sur 1000, Col. Del Valle, Benito Juárez, CDMX (QA RMUQ7SGCJ)\". Antes: \"Última modificación: 01/10/2026 18:14 · Administrador Demo · versión 16\"; ahora: \"Última modificación: 01/10/2026 18:18 · Administrador Demo · versión 17\".",
+          "estado": "PASS",
+          "evidencias": [
+            {
+              "archivo": "HU-06/03-direccion-guardada.png",
+              "descripcion": "Reglas guardadas con la Dirección de ULTRASIST capturada.",
+              "tipo": "aplicacion"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "nombre": "La validación de facturas internacionales usa los datos configurados (INT-004 / Dirección)",
+      "estado": "PASS",
+      "pasos": [
+        {
+          "paso": "El proveedor internacional pulsa \"Verificar\" en su factura INV-2026-0042",
+          "esperado": "INT-004 compara el texto del Invoice con la Dirección recién configurada (valor esperado = dirección guardada).",
+          "obtenido": "INT-004: WARNING — \"No se encontró la dirección de ULTRASIST en el Invoice\" (esperado \"Av. Insurgentes Sur 1000, Col. Del Valle, Benito Juárez, CDMX (QA RMUQ7SGCJ)\").",
+          "estado": "PASS",
+          "evidencias": [
+            {
+              "archivo": "HU-06/04-int-004-direccion.png",
+              "descripcion": "INT-004 en el Invoice internacional con la Dirección configurada como valor esperado.",
+              "tipo": "aplicacion"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "nombre": "La validación de facturas consume la configuración vigente (XML-010 / Código postal)",
+      "estado": "PASS",
+      "pasos": [
+        {
+          "paso": "Cambiar el Código postal de ULTRASIST a 06600 y guardar",
+          "esperado": "Las reglas se guardan con el C.P. 06600.",
+          "obtenido": "Aviso \"Reglas de validación guardadas\"; C.P. configurado 06600.",
+          "estado": "PASS",
+          "evidencias": []
+        },
+        {
+          "paso": "El proveedor pulsa \"Verificar\" en su factura A-CORRECTA (XML con C.P. del receptor 03930)",
+          "esperado": "XML-010 resulta FAIL con esperado 06600 y detectado 03930: el motor usa el valor recién configurado.",
+          "obtenido": "XML-010: FAIL — \"Código postal del receptor incorrecto\" (esperado 06600, detectado 03930).",
+          "estado": "PASS",
+          "evidencias": [
+            {
+              "archivo": "HU-06/05-xml-010-fail.png",
+              "descripcion": "Tras cambiar el C.P. a 06600, \"Verificar\" marca XML-010 en FAIL (esperado 06600, detectado 03930).",
+              "tipo": "aplicacion"
+            }
+          ]
+        },
+        {
+          "paso": "Restaurar el Código postal 03930 y guardar",
+          "esperado": "Las reglas se guardan de nuevo con el C.P. 03930.",
+          "obtenido": "Aviso \"Reglas de validación guardadas\"; C.P. 03930 restaurado.",
+          "estado": "PASS",
+          "evidencias": []
+        },
+        {
+          "paso": "El proveedor vuelve a pulsar \"Verificar\"",
+          "esperado": "XML-010 resulta PASS (03930 = 03930).",
+          "obtenido": "XML-010: PASS — \"Código postal del receptor correcto\".",
+          "estado": "PASS",
+          "evidencias": [
+            {
+              "archivo": "HU-06/06-xml-010-pass.png",
+              "descripcion": "Con el C.P. restaurado, XML-010 vuelve a PASS.",
+              "tipo": "aplicacion"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "nombre": "Baja de una comparación: desactivar \"Comparar\" en el Código postal",
+      "estado": "PASS",
+      "pasos": [
+        {
+          "paso": "Desmarcar \"Comparar\" del Código postal y guardar",
+          "esperado": "Las reglas se guardan y XML-010 aparece \"Desactivada\".",
+          "obtenido": "Aviso \"Reglas de validación guardadas\"; XML-010 en estado \"Desactivada\".",
+          "estado": "PASS",
+          "evidencias": [
+            {
+              "archivo": "HU-06/07-comparacion-desactivada.png",
+              "descripcion": "Tabla de reglas XML con XML-010 \"Desactivada\".",
+              "tipo": "aplicacion"
+            }
+          ]
+        },
+        {
+          "paso": "El proveedor pulsa \"Verificar\" en A-CORRECTA",
+          "esperado": "XML-010 resulta NOT_APPLICABLE con el mensaje \"Comparación desactivada en Reglas de Validación\".",
+          "obtenido": "XML-010: NOT_APPLICABLE — \"Comparación desactivada en Reglas de Validación\".",
+          "estado": "PASS",
+          "evidencias": [
+            {
+              "archivo": "HU-06/08-xml-010-no-aplica.png",
+              "descripcion": "XML-010 \"NOT_APPLICABLE\": comparación desactivada en las Reglas de Validación.",
+              "tipo": "aplicacion"
+            }
+          ]
+        },
+        {
+          "paso": "Volver a activar \"Comparar\" en el Código postal",
+          "esperado": "XML-010 vuelve a \"Activa\".",
+          "obtenido": "Aviso \"Reglas de validación guardadas\"; XML-010 activa de nuevo.",
+          "estado": "PASS",
+          "evidencias": []
+        },
+        {
+          "paso": "El proveedor verifica de nuevo A-CORRECTA",
+          "esperado": "XML-010 vuelve a PASS.",
+          "obtenido": "XML-010: PASS.",
+          "estado": "PASS",
+          "evidencias": []
+        }
+      ]
+    }
+  ]
+}

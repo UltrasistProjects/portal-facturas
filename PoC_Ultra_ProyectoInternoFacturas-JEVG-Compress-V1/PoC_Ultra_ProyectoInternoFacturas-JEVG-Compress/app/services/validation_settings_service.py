@@ -91,6 +91,8 @@ class RuleParameters:
     payment_form: str
     allowed_cfdi_uses: tuple[str, ...]
     currencies: frozenset[str]
+    # Dato de referencia sin comparacion en el CFDI; la usa INT-004 sobre el texto del Invoice (HU-16).
+    receiver_address: str = ""
     check_receiver_rfc: bool = True
     check_receiver_name: bool = True
     check_receiver_postal_code: bool = True
@@ -109,6 +111,7 @@ def rule_parameters(db: Session) -> RuleParameters:
         receiver_rfc=settings.receiver_rfc,
         receiver_name=settings.receiver_name,
         receiver_postal_code=settings.receiver_postal_code,
+        receiver_address=settings.receiver_address,
         payment_method=settings.payment_method,
         payment_form=settings.payment_form,
         allowed_cfdi_uses=tuple(settings.allowed_cfdi_uses),

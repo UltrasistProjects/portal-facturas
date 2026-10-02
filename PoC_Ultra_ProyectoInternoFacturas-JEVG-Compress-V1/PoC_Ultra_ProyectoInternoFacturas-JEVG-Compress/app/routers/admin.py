@@ -1,8 +1,9 @@
 from fastapi import APIRouter, Depends, File, Form, Query, Request, UploadFile
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import RedirectResponse, Response
 from pydantic import ValidationError
 from sqlalchemy import select
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session, joinedload, selectinload
 
 from app.core.constants import (
     BUSINESS_RULES,
@@ -17,38 +18,91 @@ from app.core.constants import (
 )
 from app.core.database import get_db
 from app.core.errors import BusinessRuleError, InvalidInputError, NotFoundError
-from app.core.security import hash_password, require_roles, validate_csrf
+from app.core.middleware import content_security_policy_with_styles
+from app.core.security import require_roles, validate_csrf
 from app.models import AuditLog, EmailDelivery, Supplier, User
-from app.repositories.pagination import paginate
+from app.repositories.pagination import back_to, list_query, paginate, search
 from app.routers.common import templates
 from app.schemas import UserCreate, validation_message
 from app.services import catalog_service as catalogs
 from app.services import document_requirements_service as requirements
+from app.services import identity_service as identity
+from app.services import mail_layout, session_service
 from app.services import notification_service as notifications
 from app.services import notification_templates as templates_service
-from app.services import session_service
 from app.services import validation_settings_service as validation_settings
 from app.services.audit_service import audit
 from app.services.catalog_template import build_catalog_template, template_filename
+from app.services.keycloak_admin import IdentityAdmin, IdentityProviderError, get_identity_admin
 from app.services.supplier_import_service import ImportFileError
 from app.services.supplier_template import XLSX_MEDIA_TYPE
 
 router = APIRouter(prefix="/admin")
 
 
-def _users_page(request: Request, db: Session, user, error: str | None = None, status_code: int = 200):
+USERS_URL = "/admin/users"
+USER_NOTICES = {"created": "Usuario creado"}
+# Deshabilitar no depende de Keycloak (D10): si no responde, el usuario igual queda sin acceso al portal.
+USER_WARNINGS = {
+    "idp_sync_failed": (
+        "El usuario quedó deshabilitado en el portal, pero Keycloak no se actualizó: deshabilítelo también en la "
+        "consola de Keycloak."
+    )
+}
+# Un usuario Proveedor siempre esta vinculado a su proveedor (usuario-proveedor-vinculado; ck_users_provider_supplier).
+MSG_SUPPLIER_REQUIRED = "Seleccione el proveedor del usuario"
+MSG_SUPPLIER_NOT_FOUND = "Proveedor inexistente"
+MSG_ORPHAN_PROVIDER = "El usuario no está vinculado a un proveedor: dé de alta uno nuevo con su proveedor"
+
+
+def _users_page(
+    request: Request,
+    db: Session,
+    user,
+    error: str | None = None,
+    status_code: int = 200,
+    q: str = "",
+    page: int = 1,
+    notice: str | None = None,
+    form: dict[str, str] | None = None,
+    warning: str | None = None,
+    credentials: dict[str, str] | None = None,
+):
+    # Busqueda y paginacion en SQL (listados-paginados); el proveedor de cada usuario, en una consulta.
+    q = q.strip()
+    stmt = select(User).options(selectinload(User.supplier)).order_by(User.name, User.id)
+    result = paginate(db, search(stmt, q, User.name, User.email), page)
     context = {
         "user": user,
-        "users": list(db.scalars(select(User).order_by(User.name))),
-        "suppliers": list(db.scalars(select(Supplier))),
+        "users": result.items,
+        "page": result,
+        "q": q,
+        "base_query": list_query(q=q),
+        "notice": notice,
+        "suppliers": list(db.scalars(select(Supplier).order_by(Supplier.business_name))),
         "error": error,
+        "warning": warning,
+        # Alta rechazada: lo capturado se conserva.
+        "form": form or {},
+        # Alta exitosa: la contrasena temporal se muestra solo en esta respuesta (D15, D1-A).
+        "credentials": credentials,
     }
-    return templates.TemplateResponse(request, "admin/users.html", context, status_code=status_code)
+    response = templates.TemplateResponse(request, "admin/users.html", context, status_code=status_code)
+    if credentials:
+        response.headers["Cache-Control"] = "no-store"
+    return response
 
 
 @router.get("/users")
-def users(request: Request, db: Session = Depends(get_db), user=Depends(require_roles(Role.ADMIN))):
-    return _users_page(request, db, user)
+def users(
+    request: Request,
+    q: str = "",
+    page: int = 1,
+    ok: str = "",
+    db: Session = Depends(get_db),
+    user=Depends(require_roles(Role.ADMINISTRADOR)),
+):
+    return _users_page(request, db, user, q=q, page=page, notice=USER_NOTICES.get(ok), warning=USER_WARNINGS.get(ok))
 
 
 @router.post("/users")
@@ -56,41 +110,67 @@ async def create_user(
     request: Request,
     name: str = Form(...),
     email: str = Form(...),
-    password: str = Form(...),
     role: Role = Form(...),
     supplier_id: int | None = Form(None),
     db: Session = Depends(get_db),
-    user=Depends(require_roles(Role.ADMIN)),
+    user=Depends(require_roles(Role.ADMINISTRADOR)),
 ):
     await validate_csrf(request)
+    form = {"name": name, "email": email, "role": role.value, "supplier_id": str(supplier_id or "")}
+
+    def rejected(message: str, status_code: int):
+        return _users_page(request, db, user, message, status_code, form=form)
+
     try:
-        data = UserCreate(name=name, email=email, password=password, role=role, supplier_id=supplier_id)
+        data = UserCreate(name=name, email=email, role=role, supplier_id=supplier_id)
     except ValidationError as exc:
-        return _users_page(request, db, user, validation_message(exc), 400)
+        return rejected(validation_message(exc), 400)
+    # El proveedor solo aplica al rol Proveedor, y ahi es obligatorio y debe existir.
+    supplier_id = data.supplier_id if data.role == Role.PROVEEDOR else None
+    if data.role == Role.PROVEEDOR and supplier_id is None:
+        return rejected(MSG_SUPPLIER_REQUIRED, 400)
+    if supplier_id is not None and db.get(Supplier, supplier_id) is None:
+        return rejected(MSG_SUPPLIER_NOT_FOUND, 400)
     if db.scalar(select(User.id).where(User.email == data.email)):
-        return _users_page(request, db, user, "Ya existe un usuario con ese correo.", 409)
-    created = User(
-        name=data.name,
-        email=data.email,
-        password_hash=hash_password(data.password),
-        role=data.role,
-        supplier_id=data.supplier_id if data.role == Role.PROVIDER else None,
-    )
+        return rejected("Ya existe un usuario con ese correo.", 409)
+    created = User(name=data.name, email=data.email, role=data.role, supplier_id=supplier_id)
     db.add(created)
     db.flush()
-    audit(db, "USER_CREATED", "User", created.id, user.id)
+    # Cuenta en Keycloak dentro de la transaccion (D15): si Keycloak falla, no se crea nada.
+    try:
+        account = await run_in_threadpool(
+            identity.provision, db, get_identity_admin(), email=data.email, role=data.role
+        )
+    except (identity.AccountConflict, IdentityProviderError) as exc:
+        db.rollback()
+        return rejected(exc.message, exc.status_code)
+    created.keycloak_sub = account.sub
+    audit(db, "USER_CREATED", "User", created.id, user.id, new={"role": data.role.value, "idp_account": account.origin})
     db.commit()
-    return RedirectResponse("/admin/users", status_code=303)
+    # La respuesta muestra al usuario creado (busqueda por su correo) y su contrasena temporal, una sola vez.
+    credentials = {"email": created.email, "password": account.password}
+    return _users_page(request, db, user, q=created.email, notice=USER_NOTICES["created"], credentials=credentials)
 
 
 @router.post("/users/{user_id}/toggle")
 async def toggle_user(
-    user_id: int, request: Request, db: Session = Depends(get_db), user=Depends(require_roles(Role.ADMIN))
+    user_id: int, request: Request, db: Session = Depends(get_db), user=Depends(require_roles(Role.ADMINISTRADOR))
 ):
     await validate_csrf(request)
+    form = await request.form()
     target = db.get(User, user_id)
+    warning = None
     if target and target.id != user.id:
+        if not target.is_active and target.role == Role.PROVEEDOR and target.supplier_id is None:
+            raise BusinessRuleError(MSG_ORPHAN_PROVIDER)
         old = target.is_active
+        idp = get_identity_admin()
+        if not old and target.keycloak_sub:
+            # Habilitar: primero Keycloak; si no responde, el usuario sigue deshabilitado (D10).
+            try:
+                await run_in_threadpool(idp.set_enabled, target.keycloak_sub, True)
+            except IdentityProviderError as exc:
+                return _users_page(request, db, user, exc.message, exc.status_code)
         target.is_active = not old
         if not target.is_active:
             session_service.revoke_all_for_user(db, target.id)
@@ -98,14 +178,40 @@ async def toggle_user(
             db, "USER_STATUS_CHANGED", "User", target.id, user.id, {"is_active": old}, {"is_active": target.is_active}
         )
         db.commit()
-    return RedirectResponse("/admin/users", status_code=303)
+        if old and target.keycloak_sub:
+            # Deshabilitar: el portal ya le cerro el acceso; Keycloak se actualiza despues, sin revertir si falla.
+            try:
+                await run_in_threadpool(_disable_in_keycloak, idp, target.keycloak_sub)
+            except IdentityProviderError as exc:
+                audit(
+                    db,
+                    "IDP_SYNC_FAILED",
+                    "User",
+                    target.id,
+                    user.id,
+                    new={"operation": exc.operation, "error": exc.code},
+                )
+                db.commit()
+                warning = "idp_sync_failed"
+    url = back_to(USERS_URL, form)
+    if warning:
+        url += ("&" if "?" in url else "?") + list_query(ok=warning)
+    return RedirectResponse(url, status_code=303)
+
+
+def _disable_in_keycloak(idp: IdentityAdmin, sub: str) -> None:
+    """Deshabilita la cuenta y cierra sus sesiones de Keycloak: no puede volver a entrar por SSO."""
+    idp.set_enabled(sub, False)
+    idp.logout(sub)
 
 
 AUDIT_ENTRIES_PER_PAGE = 50
 
 
 @router.get("/audit")
-def audit_log(request: Request, page: int = 1, db: Session = Depends(get_db), user=Depends(require_roles(Role.ADMIN))):
+def audit_log(
+    request: Request, page: int = 1, db: Session = Depends(get_db), user=Depends(require_roles(Role.ADMINISTRADOR))
+):
     stmt = select(AuditLog).options(joinedload(AuditLog.user)).order_by(AuditLog.timestamp.desc(), AuditLog.id.desc())
     result = paginate(db, stmt, page, AUDIT_ENTRIES_PER_PAGE)
     context = {"user": user, "entries": result.items, "page": result, "base_query": ""}
@@ -153,12 +259,14 @@ def _rules_page(
 
 
 @router.get("/rules")
-def rules(request: Request, ok: str = "", db: Session = Depends(get_db), user=Depends(require_roles(Role.ADMIN))):
+def rules(
+    request: Request, ok: str = "", db: Session = Depends(get_db), user=Depends(require_roles(Role.ADMINISTRADOR))
+):
     return _rules_page(request, db, user, notice=RULES_NOTICES.get(ok))
 
 
 @router.post("/rules")
-async def save_rules(request: Request, db: Session = Depends(get_db), user=Depends(require_roles(Role.ADMIN))):
+async def save_rules(request: Request, db: Session = Depends(get_db), user=Depends(require_roles(Role.ADMINISTRADOR))):
     await validate_csrf(request)
     raw = await request.form()
     form = {key: value for key, value in raw.items() if isinstance(value, str)}
@@ -227,14 +335,14 @@ def _required_documents_done(result: str):
 
 @router.get("/required-documents")
 def required_documents(
-    request: Request, ok: str = "", db: Session = Depends(get_db), user=Depends(require_roles(Role.ADMIN))
+    request: Request, ok: str = "", db: Session = Depends(get_db), user=Depends(require_roles(Role.ADMINISTRADOR))
 ):
     return _required_documents_page(request, db, user, notice=REQUIRED_DOCUMENTS_NOTICES.get(ok))
 
 
 @router.post("/required-documents")
 async def save_required_documents(
-    request: Request, db: Session = Depends(get_db), user=Depends(require_roles(Role.ADMIN))
+    request: Request, db: Session = Depends(get_db), user=Depends(require_roles(Role.ADMINISTRADOR))
 ):
     await validate_csrf(request)
     form = {key: value for key, value in (await request.form()).items() if isinstance(value, str)}
@@ -255,7 +363,7 @@ async def create_document_type(
     national_requirement: str = Form("NOT_APPLICABLE"),
     international_requirement: str = Form("NOT_APPLICABLE"),
     db: Session = Depends(get_db),
-    user=Depends(require_roles(Role.ADMIN)),
+    user=Depends(require_roles(Role.ADMINISTRADOR)),
 ):
     await validate_csrf(request)
     try:
@@ -276,7 +384,7 @@ async def update_document_type(
     description: str = Form(""),
     formats: list[str] = Form([]),
     db: Session = Depends(get_db),
-    user=Depends(require_roles(Role.ADMIN)),
+    user=Depends(require_roles(Role.ADMINISTRADOR)),
 ):
     await validate_csrf(request)
     try:
@@ -293,7 +401,7 @@ async def set_document_type_status(
     request: Request,
     active: str = Form(""),
     db: Session = Depends(get_db),
-    user=Depends(require_roles(Role.ADMIN)),
+    user=Depends(require_roles(Role.ADMINISTRADOR)),
 ):
     await validate_csrf(request)
     try:
@@ -323,6 +431,7 @@ def _template_editor(
     error: str | None = None,
     notice: str | None = None,
     preview: templates_service.ComposedEmail | None = None,
+    preview_html: str | None = None,
     status_code: int = 200,
 ):
     context = {
@@ -335,6 +444,7 @@ def _template_editor(
         "error": error,
         "notice": notice,
         "preview": preview,
+        "preview_html": preview_html,
     }
     return templates.TemplateResponse(
         request, "admin/notification_template_edit.html", context, status_code=status_code
@@ -346,7 +456,7 @@ def notification_templates(
     request: Request,
     updated: str | None = None,
     db: Session = Depends(get_db),
-    user=Depends(require_roles(Role.ADMIN)),
+    user=Depends(require_roles(Role.ADMINISTRADOR)),
 ):
     # El aviso solo se muestra para un codigo del catalogo: el parametro nunca se refleja tal cual.
     spec = templates_service.EVENTS.get(updated)
@@ -364,7 +474,7 @@ def edit_notification_template(
     request: Request,
     load_default: bool = Query(False, alias="default"),
     db: Session = Depends(get_db),
-    user=Depends(require_roles(Role.ADMIN)),
+    user=Depends(require_roles(Role.ADMINISTRADOR)),
 ):
     spec = templates_service.spec_for_code(code)
     current = templates_service.get_template(db, spec)
@@ -382,7 +492,7 @@ async def preview_notification_template(
     subject: str = Form(""),
     body: str = Form(""),
     version: int = Form(0),
-    user=Depends(require_roles(Role.ADMIN)),
+    user=Depends(require_roles(Role.ADMINISTRADOR)),
 ):
     await validate_csrf(request)
     spec = templates_service.spec_for_code(code)
@@ -392,7 +502,14 @@ async def preview_notification_template(
             request, user, spec, draft.subject, draft.body, version, errors=draft.errors, status_code=400
         )
     preview = templates_service.compose_sample(spec, draft)
-    return _template_editor(request, user, spec, draft.subject, draft.body, version, preview=preview)
+    # El correo tal como se envia, en un iframe srcdoc que hereda la CSP: se admiten solo sus atributos style.
+    preview_html = mail_layout.render_preview(preview.subject, preview.body)
+    response = _template_editor(
+        request, user, spec, draft.subject, draft.body, version, preview=preview, preview_html=preview_html
+    )
+    hashes = mail_layout.style_hashes(preview_html)
+    response.headers["Content-Security-Policy"] = content_security_policy_with_styles(hashes)
+    return response
 
 
 @router.post("/notification-templates/{code}")
@@ -403,7 +520,7 @@ async def save_notification_template(
     body: str = Form(""),
     version: int = Form(0),
     db: Session = Depends(get_db),
-    user=Depends(require_roles(Role.ADMIN)),
+    user=Depends(require_roles(Role.ADMINISTRADOR)),
 ):
     await validate_csrf(request)
     spec = templates_service.spec_for_code(code)
@@ -439,9 +556,11 @@ def _notifications_page(
     test_address: str = "",
     test_errors: list[str] | None = None,
     status_code: int = 200,
+    page: int = 1,
 ):
     config = notifications.load(db)
     lists = notifications.recipient_lists(config)
+    deliveries = notifications.deliveries_page(db, page)
     context = {
         "user": user,
         "mailbox": lists[0],
@@ -455,7 +574,9 @@ def _notifications_page(
         "test_address": test_address,
         "test_errors": test_errors or [],
         "transport": notifications.transport_summary(),
-        "deliveries": notifications.recent_deliveries(db),
+        "deliveries": deliveries.items,
+        "page": deliveries,
+        "base_query": "",
         "delivery_label": notifications.delivery_label,
         "format_datetime": templates_service.format_datetime,
     }
@@ -467,19 +588,22 @@ def notification_settings(
     request: Request,
     ok: str = "",
     test: int | None = None,
+    page: int = 1,
     db: Session = Depends(get_db),
-    user=Depends(require_roles(Role.ADMIN)),
+    user=Depends(require_roles(Role.ADMINISTRADOR)),
 ):
     # El resultado de la prueba se lee de la bitacora: el parametro nunca se refleja tal cual.
     delivery = db.get(EmailDelivery, test) if test else None
     if delivery is not None and delivery.event is not None:
         delivery = None
-    return _notifications_page(request, db, user, notice=NOTIFICATIONS_NOTICES.get(ok), test_delivery=delivery)
+    return _notifications_page(
+        request, db, user, notice=NOTIFICATIONS_NOTICES.get(ok), test_delivery=delivery, page=page
+    )
 
 
 @router.post("/notifications")
 async def save_notification_settings(
-    request: Request, db: Session = Depends(get_db), user=Depends(require_roles(Role.ADMIN))
+    request: Request, db: Session = Depends(get_db), user=Depends(require_roles(Role.ADMINISTRADOR))
 ):
     await validate_csrf(request)
     form = {key: value for key, value in (await request.form()).items() if isinstance(value, str)}
@@ -499,7 +623,7 @@ async def send_test_notification(
     request: Request,
     address: str = Form(""),
     db: Session = Depends(get_db),
-    user=Depends(require_roles(Role.ADMIN)),
+    user=Depends(require_roles(Role.ADMINISTRADOR)),
 ):
     await validate_csrf(request)
     try:
@@ -523,7 +647,7 @@ CATALOG_NOTICES = {
 
 
 @router.get("/catalogs")
-def catalog_list(request: Request, db: Session = Depends(get_db), user=Depends(require_roles(Role.ADMIN))):
+def catalog_list(request: Request, db: Session = Depends(get_db), user=Depends(require_roles(Role.ADMINISTRADOR))):
     context = {"user": user, "catalogs": catalogs.summaries(db)}
     return templates.TemplateResponse(request, "admin/catalogs.html", context)
 
@@ -539,12 +663,20 @@ def _catalog_page(
     result: catalogs.ImportResult | None = None,
     import_error: str | None = None,
     status_code: int = 200,
+    q: str = "",
+    page: int = 1,
 ):
+    q = q.strip()
+    result_page = catalogs.page_entries(db, catalog, q, page)
     context = {
         "user": user,
         "catalog": catalog,
         "label": CATALOG_LABELS[catalog],
-        "entries": catalogs.entries(db, catalog),
+        "entries": result_page.items,
+        "page": result_page,
+        "q": q,
+        "base_query": list_query(q=q),
+        "counts": catalogs.counts(db, catalog),
         "in_use": catalogs.in_use(db)[catalog],
         "code_format": CATALOG_CODE_FORMATS[catalog][1],
         "max_rows": catalogs.MAX_ROWS,
@@ -556,20 +688,29 @@ def _catalog_page(
     return templates.TemplateResponse(request, "admin/catalog.html", context, status_code=status_code)
 
 
-def _catalog_done(catalog: CatalogType, result: str):
-    return RedirectResponse(f"{CATALOGS_URL}/{catalog.value}?ok={result}", status_code=303)
+def _catalog_done(catalog: CatalogType, result: str, form=None, q: str = ""):
+    """Al catalogo con el aviso: tras una accion en una fila, en la misma busqueda y pagina; tras un alta, buscando la
+    clave creada (listados-paginados)."""
+    url = back_to(f"{CATALOGS_URL}/{catalog.value}", form or {"q": q})
+    return RedirectResponse(f"{url}{'&' if '?' in url else '?'}ok={result}", status_code=303)
 
 
 @router.get("/catalogs/{code}")
 def catalog_detail(
-    code: str, request: Request, ok: str = "", db: Session = Depends(get_db), user=Depends(require_roles(Role.ADMIN))
+    code: str,
+    request: Request,
+    ok: str = "",
+    q: str = "",
+    page: int = 1,
+    db: Session = Depends(get_db),
+    user=Depends(require_roles(Role.ADMINISTRADOR)),
 ):
     catalog = catalogs.catalog_for_code(code)
-    return _catalog_page(request, db, user, catalog, notice=CATALOG_NOTICES.get(ok))
+    return _catalog_page(request, db, user, catalog, notice=CATALOG_NOTICES.get(ok), q=q, page=page)
 
 
 @router.get("/catalogs/{code}/template")
-def catalog_template(code: str, db: Session = Depends(get_db), user=Depends(require_roles(Role.ADMIN))):
+def catalog_template(code: str, db: Session = Depends(get_db), user=Depends(require_roles(Role.ADMINISTRADOR))):
     catalog = catalogs.catalog_for_code(code)
     content = build_catalog_template(catalog, catalogs.entries(db, catalog))
     headers = {"Content-Disposition": f'attachment; filename="{template_filename(catalog)}"'}
@@ -582,7 +723,7 @@ async def import_catalog(
     request: Request,
     upload: UploadFile | None = File(None),
     db: Session = Depends(get_db),
-    user=Depends(require_roles(Role.ADMIN)),
+    user=Depends(require_roles(Role.ADMINISTRADOR)),
 ):
     await validate_csrf(request)
     catalog = catalogs.catalog_for_code(code)
@@ -601,19 +742,19 @@ async def create_catalog_entry(
     entry_code: str = Form(""),
     name: str = Form(""),
     db: Session = Depends(get_db),
-    user=Depends(require_roles(Role.ADMIN)),
+    user=Depends(require_roles(Role.ADMINISTRADOR)),
 ):
     await validate_csrf(request)
     catalog = catalogs.catalog_for_code(code)
     try:
-        catalogs.create_entry(db, catalog, entry_code, name, user.id)
+        created = catalogs.create_entry(db, catalog, entry_code, name, user.id)
     except NotFoundError:
         raise
     except BusinessRuleError as exc:
         db.rollback()
         return _catalog_page(request, db, user, catalog, error=exc.message, status_code=exc.status_code)
     db.commit()
-    return _catalog_done(catalog, "created")
+    return _catalog_done(catalog, "created", q=created.code)
 
 
 @router.post("/catalogs/{code}/{entry_id}")
@@ -623,7 +764,7 @@ async def update_catalog_entry(
     request: Request,
     name: str = Form(""),
     db: Session = Depends(get_db),
-    user=Depends(require_roles(Role.ADMIN)),
+    user=Depends(require_roles(Role.ADMINISTRADOR)),
 ):
     await validate_csrf(request)
     catalog = catalogs.catalog_for_code(code)
@@ -635,7 +776,7 @@ async def update_catalog_entry(
         db.rollback()
         return _catalog_page(request, db, user, catalog, error=exc.message, status_code=exc.status_code)
     db.commit()
-    return _catalog_done(catalog, "updated" if changed else "unchanged")
+    return _catalog_done(catalog, "updated" if changed else "unchanged", await request.form())
 
 
 @router.post("/catalogs/{code}/{entry_id}/status")
@@ -645,7 +786,7 @@ async def set_catalog_entry_status(
     request: Request,
     active: str = Form(""),
     db: Session = Depends(get_db),
-    user=Depends(require_roles(Role.ADMIN)),
+    user=Depends(require_roles(Role.ADMINISTRADOR)),
 ):
     await validate_csrf(request)
     catalog = catalogs.catalog_for_code(code)
@@ -659,4 +800,4 @@ async def set_catalog_entry_status(
         db.rollback()
         return _catalog_page(request, db, user, catalog, error=exc.message, status_code=exc.status_code)
     db.commit()
-    return _catalog_done(catalog, "status" if changed else "unchanged")
+    return _catalog_done(catalog, "status" if changed else "unchanged", await request.form())

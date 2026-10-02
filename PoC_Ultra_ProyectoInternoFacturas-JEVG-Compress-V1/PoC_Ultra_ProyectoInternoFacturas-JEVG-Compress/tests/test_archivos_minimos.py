@@ -12,12 +12,11 @@ from sqlalchemy import delete, select
 from app.core.config import settings
 from app.core.constants import FORMAT_EXTENSIONS, Role, SupplierOrigin, SupplierStatus, SupplierType
 from app.core.database import SessionLocal
-from app.core.security import hash_password
 from app.models import AuditLog, Contract, Document, Invoice, InvoiceDocumentType, Supplier, User, ValidationResult
 from app.rules.document_rules import document_rules
 from app.services.file_service import ALLOWED_EXTENSIONS
 from app.services.validation_score_service import calculate_score
-from tests.conftest import ROOT, csrf, invoice_by_number, login, supplier_by_email
+from tests.conftest import ROOT, csrf, identity_account, invoice_by_number, login, supplier_by_email
 
 NATIONAL, INTERNATIONAL = SupplierOrigin.NATIONAL, SupplierOrigin.INTERNATIONAL
 
@@ -100,7 +99,7 @@ def test_factura_demo_sin_vobo_con_la_configuracion_inicial():
             for r in db.scalars(select(ValidationResult).where(ValidationResult.invoice_id == invoice.id))
             if r.category == "DOC"
         }
-    assert invoice.status == "REQUIRES_CORRECTION"
+    assert invoice.status == "DRAFT"
     assert [results[c].status for c in ("DOC-001", "DOC-002", "DOC-003")] == ["PASS"] * 3
     assert (results["DOC-004"].status, results["DOC-004"].message) == ("FAIL", "Falta Vo.Bo. del líder de proyecto")
     assert results["DOC-008"].status == "NOT_APPLICABLE"
@@ -113,7 +112,7 @@ PDF = b"%PDF-1.7\n1 0 obj\n<<>>\nendobj\n%%EOF\n"
 PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 16
 TXT = b"Documento de prueba"
 XML = (ROOT / "data" / "demo_documents" / "cfdi_demo_correcto.xml").read_bytes()
-INTERNATIONAL_EMAIL, INTERNATIONAL_PASSWORD = "internacional@poc.local", "Test#Internacional2026"
+INTERNATIONAL_EMAIL = "internacional@poc.local"
 
 
 @pytest.fixture()
@@ -143,7 +142,7 @@ def set_level(code: str, origin: SupplierOrigin, level: str) -> None:
 
 @pytest.fixture(scope="module")
 def international():
-    """Proveedor internacional activo, con contrato y usuario PROVIDER (la interfaz aun no permite autorizarlo)."""
+    """Proveedor internacional activo, con contrato y usuario Proveedor (la interfaz aun no permite autorizarlo)."""
     with SessionLocal() as db:
         user = db.scalar(select(User).where(User.email == INTERNATIONAL_EMAIL))
         if user is None:
@@ -174,8 +173,8 @@ def international():
             user = User(
                 name="Proveedor internacional",
                 email=INTERNATIONAL_EMAIL,
-                password_hash=hash_password(INTERNATIONAL_PASSWORD),
-                role=Role.PROVIDER,
+                keycloak_sub=identity_account(INTERNATIONAL_EMAIL, Role.PROVEEDOR),
+                role=Role.PROVEEDOR,
                 supplier_id=supplier.id,
             )
             db.add(user)
@@ -185,10 +184,20 @@ def international():
 
 
 def login_international(client) -> None:
-    login(client, INTERNATIONAL_EMAIL, INTERNATIONAL_PASSWORD)
+    login(client, INTERNATIONAL_EMAIL)
 
 
-def create_invoice(client, supplier_id: int, contract_id: int, project_name: str):
+# Datos del Invoice que el alta exige al proveedor internacional (HU-15).
+FOREIGN_INVOICE_DATA = {
+    "invoice_date": "2026-08-31",
+    "subtotal": "1000.00",
+    "tax": "0.00",
+    "total": "1000.00",
+    "currency": "USD",
+}
+
+
+def create_invoice(client, supplier_id: int, contract_id: int, project_name: str, extra: dict | None = None):
     number = f"HU04-{uuid4().hex[:10]}"
     data = {
         "supplier_id": supplier_id,
@@ -196,6 +205,7 @@ def create_invoice(client, supplier_id: int, contract_id: int, project_name: str
         "invoice_number": number,
         "service_period": "08/2026",
         "project_name": project_name,
+        **(extra or {}),
         "csrf_token": csrf(client, "/invoices/new"),
     }
     assert client.post("/invoices/new", data=data, follow_redirects=False).status_code == 303
@@ -211,7 +221,9 @@ def national_invoice(client):
 
 def international_invoice(client, international):
     login_international(client)
-    return create_invoice(client, international.supplier_id, international.contract_id, "Consultoria internacional")
+    return create_invoice(
+        client, international.supplier_id, international.contract_id, "Consultoria internacional", FOREIGN_INVOICE_DATA
+    )
 
 
 def upload(client, invoice_id: int, document_type: str, filename: str, content: bytes):
@@ -300,7 +312,7 @@ def test_formato_no_admitido_por_el_tipo(client):
 
 def test_formato_admitido_se_carga(client, international):
     invoice = international_invoice(client, international)
-    assert upload(client, invoice.id, "FOREIGN_INVOICE", "invoice.pdf", PDF).status_code == 303
+    assert upload(client, invoice.id, "FOREIGN_INVOICE", f"invoice-{invoice.id}.pdf", PDF).status_code == 303
     assert len(stored_files(invoice.id)) == 1
 
 
@@ -664,6 +676,7 @@ def test_desactivacion_y_reactivacion(client, international, restore_catalog):
     login(client)
     assert set_status(client, hours.id, "true").status_code == 303
     assert type_by(id=hours.id).international_requirement == "REQUIRED"
+    login_international(client)
     page = client.get(f"/invoices/{other.id}/documents").text
     assert checklist_row(page, "Reporte de horas") == "Obligatorio · Pendiente"
 
@@ -721,22 +734,45 @@ def national_with_cfdi(client, *extra: tuple[str, str, bytes]):
     return invoice
 
 
-def test_factura_ya_prevalidada_conserva_sus_resultados(client, restore_catalog):
-    invoice = national_with_cfdi(client, ("PURCHASE_ORDER", "oc.txt", TXT), ("APPROVAL", "vobo.txt", TXT))
-    assert validate(client, invoice).status_code == 303
-    assert invoice_status(invoice.id) == "PREVALIDATED"
-    before = [(r.rule_code, r.status, r.message) for r in rule_results(invoice.id, "DOC-009")]
-    set_level("CONTRACT", NATIONAL, "REQUIRED")
-    assert rule_results(invoice.id, "DOC-009") == [] and before == []
+def submit(client, invoice):
     token = csrf(client, f"/invoices/{invoice.id}")
-    assert client.post(f"/invoices/{invoice.id}/submit", data={"csrf_token": token}).status_code == 200
+    return client.post(f"/invoices/{invoice.id}/submit", data={"csrf_token": token}, follow_redirects=False)
+
+
+def complete_national(client):
+    return national_with_cfdi(client, ("PURCHASE_ORDER", "oc.txt", TXT), ("APPROVAL", "vobo.txt", TXT))
+
+
+def test_factura_ya_enviada_conserva_sus_resultados(client, restore_catalog):
+    invoice = complete_national(client)
+    assert invoice_status(invoice.id) == "UPLOADED"
+    assert submit(client, invoice).status_code == 303
+    assert invoice_status(invoice.id) == "UNDER_REVIEW"
+    before = [(r.rule_code, r.status, r.message) for r in rule_results(invoice.id, "DOC-004")]
+    set_level("CONTRACT", NATIONAL, "REQUIRED")
+    assert rule_results(invoice.id, "DOC-009") == []
+    assert [(r.rule_code, r.status, r.message) for r in rule_results(invoice.id, "DOC-004")] == before
     assert invoice_status(invoice.id) == "UNDER_REVIEW"
 
 
-def test_factura_editable_prevalidada_de_nuevo(client, restore_catalog):
+def test_factura_en_observaciones_enviada_de_nuevo(client, restore_catalog):
+    invoice = complete_national(client)
+    assert submit(client, invoice).status_code == 303
+    login(client, "pmo@poc.local")
+    data = {"decision": "REQUIRES_CORRECTION", "comments": "Falta el contrato", "csrf_token": csrf(client, "/invoices")}
+    assert client.post(f"/invoices/{invoice.id}/review", data=data, follow_redirects=False).status_code == 303
+    set_level("CONTRACT", NATIONAL, "REQUIRED")
+    login(client, "proveedor1@poc.local")
+    assert submit(client, invoice).status_code == 409
+    [contract] = rule_results(invoice.id, "DOC-009")
+    assert (contract.status, contract.message, contract.source_document) == ("FAIL", "Falta Contrato", "CONTRACT")
+    assert invoice_status(invoice.id) == "REQUIRES_CORRECTION"
+
+
+def test_factura_editable_verificada_de_nuevo(client, restore_catalog):
     invoice = national_with_cfdi(client)
     assert validate(client, invoice).status_code == 303
-    assert invoice_status(invoice.id) == "REQUIRES_CORRECTION"
+    assert invoice_status(invoice.id) == "DRAFT"
     assert rule_results(invoice.id, "DOC-009") == []
     set_level("CONTRACT", NATIONAL, "REQUIRED")
     assert validate(client, invoice).status_code == 303
@@ -752,14 +788,14 @@ def test_factura_internacional_sin_invoice(client, international):
     for code in ("DOC-001", "DOC-002"):
         [result] = rule_results(invoice.id, code)
         assert (result.status, result.message) == ("NOT_APPLICABLE", "No requerido para proveedores internacionales")
-    assert invoice_status(invoice.id) == "REQUIRES_CORRECTION"
+    assert invoice_status(invoice.id) == "DRAFT"
     assert "rule-result not_applicable" in client.get(f"/invoices/{invoice.id}").text
 
 
 def test_tipo_soporte_obligatorio_en_la_prevalidacion(client, international, restore_catalog):
     hours = hours_type(client)
     invoice = international_invoice(client, international)
-    assert upload(client, invoice.id, "FOREIGN_INVOICE", "invoice.pdf", PDF).status_code == 303
+    assert upload(client, invoice.id, "FOREIGN_INVOICE", f"invoice-{invoice.id}.pdf", PDF).status_code == 303
     assert validate(client, invoice).status_code == 303
     [result] = rule_results(invoice.id, "DOC-009")
     assert (result.status, result.source_document, result.message) == ("FAIL", hours.code, "Falta Reporte de horas")
