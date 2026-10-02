@@ -1,0 +1,92 @@
+{
+  "id": "HU-02",
+  "run": "RMUQ7SGCJ",
+  "inicio": "2026-10-02T00:18:11.675Z",
+  "fin": "2026-10-02T00:18:14.555Z",
+  "estado": "PASS",
+  "bloqueo": null,
+  "notas": [],
+  "prueba": {
+    "titulo": "HU-02 · Autorización masiva de proveedores",
+    "archivo": "02-HU-02-autorizacion-masiva.spec.ts"
+  },
+  "escenarios": [
+    {
+      "nombre": "Selección múltiple y autorización en una sola operación",
+      "estado": "PASS",
+      "pasos": [
+        {
+          "paso": "Filtrar el catálogo por estatus \"Registrado\" y seleccionar los proveedores cargados en HU-01",
+          "esperado": "Sólo los proveedores \"Registrado\" tienen casilla; al marcar 3, el contador indica \"3 seleccionados\".",
+          "obtenido": "Contador: \"3 seleccionados\"; botón \"Autorizar seleccionados\" habilitado.",
+          "estado": "PASS",
+          "evidencias": [
+            {
+              "archivo": "HU-02/01-seleccion-registrados.png",
+              "descripcion": "Proveedores en \"Registrado\" con 3 casillas marcadas y el contador \"3 seleccionados\".",
+              "tipo": "aplicacion"
+            }
+          ]
+        },
+        {
+          "paso": "Pulsar \"Autorizar seleccionados\"",
+          "esperado": "Un modal pide confirmación porque se enviarán las credenciales a cada proveedor.",
+          "obtenido": "Modal: \"Se autorizarán 3 proveedores y se enviará a cada uno su usuario y contraseña temporal por correo.\".",
+          "estado": "PASS",
+          "evidencias": [
+            {
+              "archivo": "HU-02/02-modal-confirmacion.png",
+              "descripcion": "Modal \"Autorizar proveedores\" con el texto de confirmación.",
+              "tipo": "aplicacion"
+            }
+          ]
+        },
+        {
+          "paso": "Confirmar con \"Autorizar y enviar credenciales\"",
+          "esperado": "Los 3 proveedores quedan \"Autorizado\" en una sola operación y el resumen indica \"Autorizado · Credenciales enviadas\" para cada uno.",
+          "obtenido": "Resumen: \"3 autorizados · 0 omitidos · 0 no autorizados\"; cada fila: \"Autorizado · Credenciales enviadas\".",
+          "estado": "PASS",
+          "evidencias": [
+            {
+              "archivo": "HU-02/03-resultado-autorizacion.png",
+              "descripcion": "Resultado de la autorización: 3 autorizados, credenciales enviadas a cada proveedor.",
+              "tipo": "aplicacion"
+            }
+          ]
+        },
+        {
+          "paso": "Consultar el catálogo filtrado por estatus \"Autorizado\"",
+          "esperado": "Los 3 proveedores aparecen con estatus \"Autorizado\" y ya no tienen casilla de selección.",
+          "obtenido": "3 proveedores con estatus \"Autorizado\" y sin casilla de selección.",
+          "estado": "PASS",
+          "evidencias": [
+            {
+              "archivo": "HU-02/04-catalogo-autorizados.png",
+              "descripcion": "Catálogo filtrado por \"Autorizado\": los 3 proveedores con su nuevo estatus.",
+              "tipo": "aplicacion"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "nombre": "El proveedor sin autorizar sigue \"Registrado\"",
+      "estado": "PASS",
+      "pasos": [
+        {
+          "paso": "Consultar el proveedor de la carga parcial de HU-01 (no seleccionado)",
+          "esperado": "Conserva el estatus \"Registrado\": la autorización sólo afecta a los seleccionados.",
+          "obtenido": "\"QA Delta Valida RMUQ7SGCJ SA de CV\" sigue con estatus \"Registrado\".",
+          "estado": "PASS",
+          "evidencias": [
+            {
+              "archivo": "HU-02/05-no-seleccionado-registrado.png",
+              "descripcion": "El proveedor que no se seleccionó sigue en \"Registrado\".",
+              "tipo": "aplicacion"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

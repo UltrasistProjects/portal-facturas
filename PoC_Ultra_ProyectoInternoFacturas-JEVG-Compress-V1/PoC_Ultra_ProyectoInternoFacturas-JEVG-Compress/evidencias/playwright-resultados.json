@@ -1,0 +1,1643 @@
+{
+  "config": {
+    "argv": [
+      "/usr/bin/node-22",
+      "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/tests/hu/node_modules/.bin/playwright",
+      "test"
+    ],
+    "configFile": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/tests/hu/playwright.config.ts",
+    "rootDir": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/tests/hu/specs",
+    "failOnFlakyTests": false,
+    "forbidOnly": false,
+    "fullyParallel": false,
+    "globalSetup": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/tests/hu/lib/global-setup.ts",
+    "globalTeardown": null,
+    "globalTimeout": 0,
+    "grep": {},
+    "grepInvert": null,
+    "maxFailures": 0,
+    "metadata": {
+      "actualWorkers": 1
+    },
+    "preserveOutput": "always",
+    "projects": [
+      {
+        "outputDir": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "",
+        "name": "",
+        "testDir": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/tests/hu/specs",
+        "testIgnore": [],
+        "testMatch": [
+          "**/*.@(spec|test).?(c|m)[jt]s?(x)"
+        ],
+        "timeout": 360000
+      }
+    ],
+    "quiet": false,
+    "reporter": [
+      [
+        "list",
+        null
+      ],
+      [
+        "html",
+        {
+          "outputFolder": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/playwright-report",
+          "open": "never"
+        }
+      ],
+      [
+        "json",
+        {
+          "outputFile": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/evidencias/playwright-resultados.json"
+        }
+      ]
+    ],
+    "reportSlowTests": {
+      "max": 5,
+      "threshold": 300000
+    },
+    "shard": null,
+    "tags": [],
+    "updateSnapshots": "missing",
+    "updateSourceMethod": "patch",
+    "version": "1.63.0",
+    "workers": 1,
+    "webServer": null
+  },
+  "suites": [
+    {
+      "title": "01-HU-01-carga-masiva-proveedores.spec.ts",
+      "file": "01-HU-01-carga-masiva-proveedores.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "HU-01 · Carga masiva de proveedores",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 360000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 4499,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-02T00:18:06.813Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "01-listado-proveedores-inicial.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/01-HU-01-carga-masiva-prov-c01b0-Carga-masiva-de-proveedores/attachments/01-listado-proveedores-inicial-png-9025130405f9a8a28104ec174982d7d512d7a208.png"
+                    },
+                    {
+                      "name": "02-pagina-carga-masiva.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/01-HU-01-carga-masiva-prov-c01b0-Carga-masiva-de-proveedores/attachments/02-pagina-carga-masiva-png-01b1c0a771171f75fdafbe39e828f845e37c169a.png"
+                    },
+                    {
+                      "name": "03-modal-filas-con-errores.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/01-HU-01-carga-masiva-prov-c01b0-Carga-masiva-de-proveedores/attachments/03-modal-filas-con-errores-png-730cb639235db1730456cd11032c9c82255b4f63.png"
+                    },
+                    {
+                      "name": "04-errores-por-fila.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/01-HU-01-carga-masiva-prov-c01b0-Carga-masiva-de-proveedores/attachments/04-errores-por-fila-png-2abe7262b08ff2a460381bec3b6da330d3e5a6fc.png"
+                    },
+                    {
+                      "name": "05-catalogo-sin-cambios.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/01-HU-01-carga-masiva-prov-c01b0-Carga-masiva-de-proveedores/attachments/05-catalogo-sin-cambios-png-d44ee2cc086f452186c3d32b9ba04dece7aa6716.png"
+                    },
+                    {
+                      "name": "06-resumen-carga-parcial.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/01-HU-01-carga-masiva-prov-c01b0-Carga-masiva-de-proveedores/attachments/06-resumen-carga-parcial-png-1127c3aaaadb4a736ee84a1ee7b96d3b1c5f85c8.png"
+                    },
+                    {
+                      "name": "07-resumen-carga-exitosa.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/01-HU-01-carga-masiva-prov-c01b0-Carga-masiva-de-proveedores/attachments/07-resumen-carga-exitosa-png-3c26c17ed54694421b9bd62b5b99ffb4a6241834.png"
+                    },
+                    {
+                      "name": "08-catalogo-registrados.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/01-HU-01-carga-masiva-prov-c01b0-Carga-masiva-de-proveedores/attachments/08-catalogo-registrados-png-372f903424d756aa3ca7c2bada9b88bb0c762f6c.png"
+                    },
+                    {
+                      "name": "09-expediente-internacional.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/01-HU-01-carga-masiva-prov-c01b0-Carga-masiva-de-proveedores/attachments/09-expediente-internacional-png-0fa8806243e42ff5ce1f85592a6427c807660281.png"
+                    },
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/01-HU-01-carga-masiva-prov-c01b0-Carga-masiva-de-proveedores/trace.zip"
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "132d70d06c84ccbb2dbb-7188a4f5e77a157f4018",
+          "file": "01-HU-01-carga-masiva-proveedores.spec.ts",
+          "line": 9,
+          "column": 5
+        }
+      ]
+    },
+    {
+      "title": "02-HU-02-autorizacion-masiva.spec.ts",
+      "file": "02-HU-02-autorizacion-masiva.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "HU-02 · Autorización masiva de proveedores",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 360000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2882,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-02T00:18:11.668Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "01-seleccion-registrados.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/02-HU-02-autorizacion-masi-f2e75-ación-masiva-de-proveedores/attachments/01-seleccion-registrados-png-df435c0c3d206a0f711169f0506416105183ce9f.png"
+                    },
+                    {
+                      "name": "02-modal-confirmacion.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/02-HU-02-autorizacion-masi-f2e75-ación-masiva-de-proveedores/attachments/02-modal-confirmacion-png-607f98ed0ae245dd33f87db8cd1a237118828008.png"
+                    },
+                    {
+                      "name": "03-resultado-autorizacion.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/02-HU-02-autorizacion-masi-f2e75-ación-masiva-de-proveedores/attachments/03-resultado-autorizacion-png-8db26126919670d3db663d6749ffb44dfd7adaea.png"
+                    },
+                    {
+                      "name": "04-catalogo-autorizados.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/02-HU-02-autorizacion-masi-f2e75-ación-masiva-de-proveedores/attachments/04-catalogo-autorizados-png-7263d1376afc72f4d7964c1686911a313c618a4e.png"
+                    },
+                    {
+                      "name": "05-no-seleccionado-registrado.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/02-HU-02-autorizacion-masi-f2e75-ación-masiva-de-proveedores/attachments/05-no-seleccionado-registrado-png-2e00d38946f4a79ec60b1f324821d9cbb16ac898.png"
+                    },
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/02-HU-02-autorizacion-masi-f2e75-ación-masiva-de-proveedores/trace.zip"
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "0bf577ecad35a92aee8a-9fd7e9ef759959ed2a74",
+          "file": "02-HU-02-autorizacion-masiva.spec.ts",
+          "line": 6,
+          "column": 5
+        }
+      ]
+    },
+    {
+      "title": "03-HU-03-envio-credenciales.spec.ts",
+      "file": "03-HU-03-envio-credenciales.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "HU-03 · Envío de credenciales al proveedor",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 360000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2684,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-02T00:18:14.697Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "01-bitacora-credenciales.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/03-HU-03-envio-credenciale-75b36-e-credenciales-al-proveedor/attachments/01-bitacora-credenciales-png-87c3084cc63607be0339eac21d006d70d3d6df04.png"
+                    },
+                    {
+                      "name": "02-correo-credenciales.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/03-HU-03-envio-credenciale-75b36-e-credenciales-al-proveedor/attachments/02-correo-credenciales-png-1c2121eb23a38e28bf6fd1b325d463001bc93b4f.png"
+                    },
+                    {
+                      "name": "03-expediente-acceso-portal.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/03-HU-03-envio-credenciale-75b36-e-credenciales-al-proveedor/attachments/03-expediente-acceso-portal-png-b31ffedffa3690ad36d4531727a371273ea220e2.png"
+                    },
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/03-HU-03-envio-credenciale-75b36-e-credenciales-al-proveedor/trace.zip"
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "aa49600a70f8ac40cd06-783c55bbe8a6c11bc117",
+          "file": "03-HU-03-envio-credenciales.spec.ts",
+          "line": 6,
+          "column": 5
+        }
+      ]
+    },
+    {
+      "title": "04-HU-10-cambio-contrasena-primer-acceso.spec.ts",
+      "file": "04-HU-10-cambio-contrasena-primer-acceso.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "HU-10 · Cambio de contraseña en primer inicio de sesión",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 360000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 6110,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-02T00:18:17.491Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "01-login-keycloak.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/04-HU-10-cambio-contrasena-65c7f--en-primer-inicio-de-sesión/attachments/01-login-keycloak-png-d5fcab859a5adadf12c466cb36e4968a35d1a57e.png"
+                    },
+                    {
+                      "name": "02-solicitud-cambio-contrasena.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/04-HU-10-cambio-contrasena-65c7f--en-primer-inicio-de-sesión/attachments/02-solicitud-cambio-contrasena-png-e68c4db270b7e4efba2e47bc7f049ec2d365afde.png"
+                    },
+                    {
+                      "name": "03-acceso-directo-bloqueado.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/04-HU-10-cambio-contrasena-65c7f--en-primer-inicio-de-sesión/attachments/03-acceso-directo-bloqueado-png-a66af5af5ffd70a0e9b78702ba1e277f53261d03.png"
+                    },
+                    {
+                      "name": "04-rechazo-sin-caracter-especial.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/04-HU-10-cambio-contrasena-65c7f--en-primer-inicio-de-sesión/attachments/04-rechazo-sin-caracter-especial-png-fa2301bfcb6ba0e7cd358be20639205c1b28d83e.png"
+                    },
+                    {
+                      "name": "05-rechazo-menos-de-8-caracteres.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/04-HU-10-cambio-contrasena-65c7f--en-primer-inicio-de-sesión/attachments/05-rechazo-menos-de-8-caracteres-png-623922dabe4892150ef585a360b4404c294b651e.png"
+                    },
+                    {
+                      "name": "06-rechazo-sin-numero.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/04-HU-10-cambio-contrasena-65c7f--en-primer-inicio-de-sesión/attachments/06-rechazo-sin-numero-png-d0ca1edf3da4ff2cb59424909d38fb6d1d83bd2f.png"
+                    },
+                    {
+                      "name": "07-rechazo-sin-letra.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/04-HU-10-cambio-contrasena-65c7f--en-primer-inicio-de-sesión/attachments/07-rechazo-sin-letra-png-810bf0159ab79ed87d9fd3a852a2d28090e17c64.png"
+                    },
+                    {
+                      "name": "08-acceso-portal-tras-cambio.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/04-HU-10-cambio-contrasena-65c7f--en-primer-inicio-de-sesión/attachments/08-acceso-portal-tras-cambio-png-53b1b27b46970bcbd040c742bbe8a186e5fa03b4.png"
+                    },
+                    {
+                      "name": "09-expediente-contrasena-cambiada.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/04-HU-10-cambio-contrasena-65c7f--en-primer-inicio-de-sesión/attachments/09-expediente-contrasena-cambiada-png-9110a18440a8414198497f8ebd0bb0a586ef2e70.png"
+                    },
+                    {
+                      "name": "10-temporal-rechazada.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/04-HU-10-cambio-contrasena-65c7f--en-primer-inicio-de-sesión/attachments/10-temporal-rechazada-png-929a7839907828595b7da4dacd762972890cb055.png"
+                    },
+                    {
+                      "name": "11-acceso-con-contrasena-nueva.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/04-HU-10-cambio-contrasena-65c7f--en-primer-inicio-de-sesión/attachments/11-acceso-con-contrasena-nueva-png-08a8d8c85a7065206e5c7649dc8f282991021dd5.png"
+                    },
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/04-HU-10-cambio-contrasena-65c7f--en-primer-inicio-de-sesión/trace.zip"
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "d38523bf856d0feb3bb6-6add9581fabc498340a3",
+          "file": "04-HU-10-cambio-contrasena-primer-acceso.spec.ts",
+          "line": 15,
+          "column": 5
+        }
+      ]
+    },
+    {
+      "title": "05-HU-04-archivos-minimos.spec.ts",
+      "file": "05-HU-04-archivos-minimos.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "HU-04 · Definición de archivos requeridos por tipo de proveedor",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 360000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 7013,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-02T00:18:23.848Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "01-configuracion-por-origen.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/05-HU-04-archivos-minimos--a45d1-ridos-por-tipo-de-proveedor/attachments/01-configuracion-por-origen-png-fbdad747e8f8e69719c43dc332e8940c1cc83c2e.png"
+                    },
+                    {
+                      "name": "02-guardar-sin-cambios.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/05-HU-04-archivos-minimos--a45d1-ridos-por-tipo-de-proveedor/attachments/02-guardar-sin-cambios-png-f4fbf945b367893ecd2a859b9c60f148b13a3d13.png"
+                    },
+                    {
+                      "name": "03-formulario-tipo-soporte.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/05-HU-04-archivos-minimos--a45d1-ridos-por-tipo-de-proveedor/attachments/03-formulario-tipo-soporte-png-e491a15e7a510ebfc4c60523f9dab975fedb9166.png"
+                    },
+                    {
+                      "name": "04-tipo-soporte-creado.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/05-HU-04-archivos-minimos--a45d1-ridos-por-tipo-de-proveedor/attachments/04-tipo-soporte-creado-png-2438b05b49127b19f55d6df68e155603f4ec21b6.png"
+                    },
+                    {
+                      "name": "05-internacional-tipo-obligatorio.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/05-HU-04-archivos-minimos--a45d1-ridos-por-tipo-de-proveedor/attachments/05-internacional-tipo-obligatorio-png-1f57140dda38ca1e8d14ec619640ef173ef2c1ff.png"
+                    },
+                    {
+                      "name": "06-envio-bloqueado-por-obligatorio.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/05-HU-04-archivos-minimos--a45d1-ridos-por-tipo-de-proveedor/attachments/06-envio-bloqueado-por-obligatorio-png-0d93f31f3369830dfc0bbe2f0348506f282d4edf.png"
+                    },
+                    {
+                      "name": "07-nacional-sin-tipo.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/05-HU-04-archivos-minimos--a45d1-ridos-por-tipo-de-proveedor/attachments/07-nacional-sin-tipo-png-a8f07e7c31ce9993216ca223982da5ccbd433451.png"
+                    },
+                    {
+                      "name": "08-tipo-inactivo.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/05-HU-04-archivos-minimos--a45d1-ridos-por-tipo-de-proveedor/attachments/08-tipo-inactivo-png-c9cf255bafa347f24aa41474d15a1375ba18a4da.png"
+                    },
+                    {
+                      "name": "09-internacional-sin-tipo.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/05-HU-04-archivos-minimos--a45d1-ridos-por-tipo-de-proveedor/attachments/09-internacional-sin-tipo-png-fd0e39d38f6ac7d66c4f70d642723eca3665b21a.png"
+                    },
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/05-HU-04-archivos-minimos--a45d1-ridos-por-tipo-de-proveedor/trace.zip"
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "77c50a6850230addedb1-cfe04209a7cfae05a664",
+          "file": "05-HU-04-archivos-minimos.spec.ts",
+          "line": 14,
+          "column": 5
+        }
+      ]
+    },
+    {
+      "title": "06-HU-05-plantillas-correo.spec.ts",
+      "file": "06-HU-05-plantillas-correo.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "HU-05 · Configuración de plantillas de estatus de factura",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 360000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 5081,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-02T00:18:31.088Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "01-listado-plantillas.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/06-HU-05-plantillas-correo-e0e33-illas-de-estatus-de-factura/attachments/01-listado-plantillas-png-07166708489988355084265f1524d8b07355c269.png"
+                    },
+                    {
+                      "name": "02-editor-rechazada.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/06-HU-05-plantillas-correo-e0e33-illas-de-estatus-de-factura/attachments/02-editor-rechazada-png-9ccd5dde860800b7968a8b09bc4f2c5efb87a9b0.png"
+                    },
+                    {
+                      "name": "03-vista-previa.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/06-HU-05-plantillas-correo-e0e33-illas-de-estatus-de-factura/attachments/03-vista-previa-png-fab370c32dd96a86ea947a83bf5b551ce3ad4454.png"
+                    },
+                    {
+                      "name": "04-errores-validacion.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/06-HU-05-plantillas-correo-e0e33-illas-de-estatus-de-factura/attachments/04-errores-validacion-png-a590d35e95e23a7004f7335e94cafd998d31307d.png"
+                    },
+                    {
+                      "name": "05-plantilla-guardada.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/06-HU-05-plantillas-correo-e0e33-illas-de-estatus-de-factura/attachments/05-plantilla-guardada-png-7804ff3dcdfdabbb09a914804898516c11d897e9.png"
+                    },
+                    {
+                      "name": "06-texto-predeterminado-cargado.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/06-HU-05-plantillas-correo-e0e33-illas-de-estatus-de-factura/attachments/06-texto-predeterminado-cargado-png-9cd8a2b90c12aee51761d65611c64b1117acfea9.png"
+                    },
+                    {
+                      "name": "07-plantilla-restaurada.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/06-HU-05-plantillas-correo-e0e33-illas-de-estatus-de-factura/attachments/07-plantilla-restaurada-png-37699e629b98c84205bd28f83a7dcb666628d246.png"
+                    },
+                    {
+                      "name": "08-correo-con-plantilla-guardada.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/06-HU-05-plantillas-correo-e0e33-illas-de-estatus-de-factura/attachments/08-correo-con-plantilla-guardada-png-39ddd5d0c6a17ed16c49388a4e8b024329044533.png"
+                    },
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/06-HU-05-plantillas-correo-e0e33-illas-de-estatus-de-factura/trace.zip"
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "bfd9ddc1d8dc88298db9-69afeb71e7bd9f61e050",
+          "file": "06-HU-05-plantillas-correo.spec.ts",
+          "line": 8,
+          "column": 5
+        }
+      ]
+    },
+    {
+      "title": "07-HU-06-reglas-validacion.spec.ts",
+      "file": "07-HU-06-reglas-validacion.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "HU-06 · Configuración de reglas de validación",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 360000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 8137,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-02T00:18:36.376Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "01-reglas-validacion.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/07-HU-06-reglas-validacion-28307-ión-de-reglas-de-validación/attachments/01-reglas-validacion-png-155e918d87f88c412e5ea8e270c7628975e8fcab.png"
+                    },
+                    {
+                      "name": "02-errores-reglas.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/07-HU-06-reglas-validacion-28307-ión-de-reglas-de-validación/attachments/02-errores-reglas-png-b84c454c980ef06dfc060c12e75961b8350c91cd.png"
+                    },
+                    {
+                      "name": "03-direccion-guardada.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/07-HU-06-reglas-validacion-28307-ión-de-reglas-de-validación/attachments/03-direccion-guardada-png-632a0752ab39b281ec263230dcf00cfb713ea930.png"
+                    },
+                    {
+                      "name": "04-int-004-direccion.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/07-HU-06-reglas-validacion-28307-ión-de-reglas-de-validación/attachments/04-int-004-direccion-png-a77fe8b08a05038a99cad7ba520204e93ffe034a.png"
+                    },
+                    {
+                      "name": "05-xml-010-fail.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/07-HU-06-reglas-validacion-28307-ión-de-reglas-de-validación/attachments/05-xml-010-fail-png-0d45073e0fee7a40e6beb50a8cdd9120adffd898.png"
+                    },
+                    {
+                      "name": "06-xml-010-pass.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/07-HU-06-reglas-validacion-28307-ión-de-reglas-de-validación/attachments/06-xml-010-pass-png-b83a26603d462deb9896a70531d865afe633abd4.png"
+                    },
+                    {
+                      "name": "07-comparacion-desactivada.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/07-HU-06-reglas-validacion-28307-ión-de-reglas-de-validación/attachments/07-comparacion-desactivada-png-97c9e90be0dc0a1f2497f3bdebbf90543b2d4c0a.png"
+                    },
+                    {
+                      "name": "08-xml-010-no-aplica.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/07-HU-06-reglas-validacion-28307-ión-de-reglas-de-validación/attachments/08-xml-010-no-aplica-png-42dae8533fa1b63c28ca445fe99c3fdcbfba3c0b.png"
+                    },
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/07-HU-06-reglas-validacion-28307-ión-de-reglas-de-validación/trace.zip"
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "6028207a4124e0da0208-ea19b9abac23bcb8b03d",
+          "file": "07-HU-06-reglas-validacion.spec.ts",
+          "line": 12,
+          "column": 5
+        }
+      ]
+    },
+    {
+      "title": "08-HU-07-catalogos.spec.ts",
+      "file": "08-HU-07-catalogos.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "HU-07 · Administración de catálogos",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 360000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 5055,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-02T00:18:44.743Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "01-indice-catalogos.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/08-HU-07-catalogos-HU-07-·-Administración-de-catálogos/attachments/01-indice-catalogos-png-9b92bde5ba71e7141f638af9b0b8fdae61da1ef0.png"
+                    },
+                    {
+                      "name": "02-catalogo-monedas.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/08-HU-07-catalogos-HU-07-·-Administración-de-catálogos/attachments/02-catalogo-monedas-png-4fcfb97302a769c07928e787d71e24d7f604aa8b.png"
+                    },
+                    {
+                      "name": "03-clave-agregada.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/08-HU-07-catalogos-HU-07-·-Administración-de-catálogos/attachments/03-clave-agregada-png-dcd3dc2f20c8fa0ee7f363fd1685930d17e60ffb.png"
+                    },
+                    {
+                      "name": "04-clave-duplicada.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/08-HU-07-catalogos-HU-07-·-Administración-de-catálogos/attachments/04-clave-duplicada-png-6a2abd125dc7f208f56095db0126131184e6d3b8.png"
+                    },
+                    {
+                      "name": "05-descripcion-actualizada.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/08-HU-07-catalogos-HU-07-·-Administración-de-catálogos/attachments/05-descripcion-actualizada-png-fdb249e838c2a5658a52256381e468b226d7159a.png"
+                    },
+                    {
+                      "name": "06-clave-inactiva.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/08-HU-07-catalogos-HU-07-·-Administración-de-catálogos/attachments/06-clave-inactiva-png-24eec7e67b493aaabc6a31169c8656d4d6cbc93a.png"
+                    },
+                    {
+                      "name": "07-clave-en-uso.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/08-HU-07-catalogos-HU-07-·-Administración-de-catálogos/attachments/07-clave-en-uso-png-81182aac3a370d655b873034ff6914ebb625cca6.png"
+                    },
+                    {
+                      "name": "08-carga-excel-aplicada.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/08-HU-07-catalogos-HU-07-·-Administración-de-catálogos/attachments/08-carga-excel-aplicada-png-316d2edad25a9418984dc1178afac3b8674a6780.png"
+                    },
+                    {
+                      "name": "09-clave-desde-excel.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/08-HU-07-catalogos-HU-07-·-Administración-de-catálogos/attachments/09-clave-desde-excel-png-3f1643d50eba83b63672d19f81ca04d10e4d5395.png"
+                    },
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/08-HU-07-catalogos-HU-07-·-Administración-de-catálogos/trace.zip"
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "8e4eb3108a7a1cbfb0e5-93370ee325536ca13b93",
+          "file": "08-HU-07-catalogos.spec.ts",
+          "line": 19,
+          "column": 5
+        }
+      ]
+    },
+    {
+      "title": "09-HU-08-correos-notificacion.spec.ts",
+      "file": "09-HU-08-correos-notificacion.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "HU-08 · Configuración de correos de notificación",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 360000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 4743,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-02T00:18:50.004Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "01-destinatarios.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/09-HU-08-correos-notificac-d262e--de-correos-de-notificación/attachments/01-destinatarios-png-6710b5d8c635b3d05a94c361edacd5cb616b0b04.png"
+                    },
+                    {
+                      "name": "02-transporte-y-prueba.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/09-HU-08-correos-notificac-d262e--de-correos-de-notificación/attachments/02-transporte-y-prueba-png-9bfae714e19252ec7b784638d65193828d9336d8.png"
+                    },
+                    {
+                      "name": "03-direccion-invalida.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/09-HU-08-correos-notificac-d262e--de-correos-de-notificación/attachments/03-direccion-invalida-png-dfb41cfc4f44c298096b2bcf1c1e320221105f82.png"
+                    },
+                    {
+                      "name": "04-destinatarios-guardados.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/09-HU-08-correos-notificac-d262e--de-correos-de-notificación/attachments/04-destinatarios-guardados-png-9b799aba00abbc4dd8443d504a720ad456c6cc75.png"
+                    },
+                    {
+                      "name": "05-correo-prueba.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/09-HU-08-correos-notificac-d262e--de-correos-de-notificación/attachments/05-correo-prueba-png-bde0660566d0563548f590353af37509192ab2d4.png"
+                    },
+                    {
+                      "name": "06-bitacora-prueba.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/09-HU-08-correos-notificac-d262e--de-correos-de-notificación/attachments/06-bitacora-prueba-png-a51c562d44499bc0880284b8f2a0f1e84dc99a6c.png"
+                    },
+                    {
+                      "name": "07-cancelacion-notificada.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/09-HU-08-correos-notificac-d262e--de-correos-de-notificación/attachments/07-cancelacion-notificada-png-bbceab6c64a8d8e5bc7162bd8ba2e6b37fb1b8a9.png"
+                    },
+                    {
+                      "name": "08-correo-cancelada-destinatarios.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/09-HU-08-correos-notificac-d262e--de-correos-de-notificación/attachments/08-correo-cancelada-destinatarios-png-c698d649ce63aeb59929dcc250bfd0f5d1085d3e.png"
+                    },
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/09-HU-08-correos-notificac-d262e--de-correos-de-notificación/trace.zip"
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "f3679f5f6119252c4451-1b5fcb565b4db187c9f2",
+          "file": "09-HU-08-correos-notificacion.spec.ts",
+          "line": 8,
+          "column": 5
+        }
+      ]
+    },
+    {
+      "title": "10-HU-12-registro-factura.spec.ts",
+      "file": "10-HU-12-registro-factura.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "HU-12 · Registro de factura",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 360000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 3383,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-02T00:18:54.937Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "01-formulario-registro.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/10-HU-12-registro-factura-HU-12-·-Registro-de-factura/attachments/01-formulario-registro-png-c1728101bf2b7282de0c7987633133d20f8783d3.png"
+                    },
+                    {
+                      "name": "02-periodo-invalido.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/10-HU-12-registro-factura-HU-12-·-Registro-de-factura/attachments/02-periodo-invalido-png-6ef39672a7d22ae85e48d9d919b89a450724c070.png"
+                    },
+                    {
+                      "name": "03-carga-documental-inicial.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/10-HU-12-registro-factura-HU-12-·-Registro-de-factura/attachments/03-carga-documental-inicial-png-73dd3713007e108ebaad98c158e5d5a965ef2f22.png"
+                    },
+                    {
+                      "name": "04-formato-no-admitido.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/10-HU-12-registro-factura-HU-12-·-Registro-de-factura/attachments/04-formato-no-admitido-png-da381a23de68bf56d37c14b1af0d35b3151c58be.png"
+                    },
+                    {
+                      "name": "05-falta-un-obligatorio.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/10-HU-12-registro-factura-HU-12-·-Registro-de-factura/attachments/05-falta-un-obligatorio-png-d19096af79d909ea8009b8842d8d4b4b97d25b06.png"
+                    },
+                    {
+                      "name": "06-obligatorios-completos.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/10-HU-12-registro-factura-HU-12-·-Registro-de-factura/attachments/06-obligatorios-completos-png-a466fde5d63b4d828d6c3850481c4979e9232925.png"
+                    },
+                    {
+                      "name": "07-detalle-cargada.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/10-HU-12-registro-factura-HU-12-·-Registro-de-factura/attachments/07-detalle-cargada-png-a85d145e89ba9cf656c1c481b68c1d68f804a8db.png"
+                    },
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/10-HU-12-registro-factura-HU-12-·-Registro-de-factura/trace.zip"
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "139047fe8032b940361a-9254fcf3124900b248ea",
+          "file": "10-HU-12-registro-factura.spec.ts",
+          "line": 6,
+          "column": 5
+        }
+      ]
+    },
+    {
+      "title": "11-HU-13-envio-factura-nacional.spec.ts",
+      "file": "11-HU-13-envio-factura-nacional.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "HU-13 · Envío de factura por proveedor nacional",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 360000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 5886,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-02T00:18:58.515Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "01-antes-de-enviar.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/11-HU-13-envio-factura-nac-576d1-tura-por-proveedor-nacional/attachments/01-antes-de-enviar-png-747489dfe1899fb8a7e43c8a7bd8bec6dff064c7.png"
+                    },
+                    {
+                      "name": "02-factura-enviada.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/11-HU-13-envio-factura-nac-576d1-tura-por-proveedor-nacional/attachments/02-factura-enviada-png-50dddae79e8bfa9d910f41aed050ee10fd54fafb.png"
+                    },
+                    {
+                      "name": "03-reglas-xml-pass.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/11-HU-13-envio-factura-nac-576d1-tura-por-proveedor-nacional/attachments/03-reglas-xml-pass-png-64e57a736b5dd461f65c29d5ba8c694ed66b023b.png"
+                    },
+                    {
+                      "name": "04-fin-004-uuid-unico.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/11-HU-13-envio-factura-nac-576d1-tura-por-proveedor-nacional/attachments/04-fin-004-uuid-unico-png-c05baae2fa5c05c120a26940907cbdd9024115ee.png"
+                    },
+                    {
+                      "name": "05-envio-rechazado-reglas.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/11-HU-13-envio-factura-nac-576d1-tura-por-proveedor-nacional/attachments/05-envio-rechazado-reglas-png-e67973c8a82b5084d1f2f3115951610286fb06bc.png"
+                    },
+                    {
+                      "name": "06-envio-rechazado-duplicado.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/11-HU-13-envio-factura-nac-576d1-tura-por-proveedor-nacional/attachments/06-envio-rechazado-duplicado-png-979802e78a68d3ae8d69ebabc81dd7b491ae9ead.png"
+                    },
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/11-HU-13-envio-factura-nac-576d1-tura-por-proveedor-nacional/trace.zip"
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "21eee04e273114d87712-530a4465b7e09be3eb92",
+          "file": "11-HU-13-envio-factura-nacional.spec.ts",
+          "line": 6,
+          "column": 5
+        }
+      ]
+    },
+    {
+      "title": "12-HU-15-registro-factura-internacional.spec.ts",
+      "file": "12-HU-15-registro-factura-internacional.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "HU-15 · Registro de factura por proveedor internacional",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 360000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 3789,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-02T00:19:04.596Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "01-formulario-invoice.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/12-HU-15-registro-factura--4f723-por-proveedor-internacional/attachments/01-formulario-invoice-png-d2b13944a6d88a738069a88bf188b38d0e07d641.png"
+                    },
+                    {
+                      "name": "02-importes-inconsistentes.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/12-HU-15-registro-factura--4f723-por-proveedor-internacional/attachments/02-importes-inconsistentes-png-cf43b48d22936942dd6bf7f19787424e070b3850.png"
+                    },
+                    {
+                      "name": "03-carga-documental-invoice.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/12-HU-15-registro-factura--4f723-por-proveedor-internacional/attachments/03-carga-documental-invoice-png-dcee219d11dee3414741119e589f9a4ef7f06253.png"
+                    },
+                    {
+                      "name": "04-invoice-cargado.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/12-HU-15-registro-factura--4f723-por-proveedor-internacional/attachments/04-invoice-cargado-png-930ca7da5263e51831e5281177d38df99f8b78e9.png"
+                    },
+                    {
+                      "name": "05-detalle-cargada.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/12-HU-15-registro-factura--4f723-por-proveedor-internacional/attachments/05-detalle-cargada-png-3e9e1ebd23abb1295453e56fbd4fa97b7de6791e.png"
+                    },
+                    {
+                      "name": "06-invoice-duplicado.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/12-HU-15-registro-factura--4f723-por-proveedor-internacional/attachments/06-invoice-duplicado-png-5e0aa5363b1df88fc15aad0e98d68c5fcb09b135.png"
+                    },
+                    {
+                      "name": "07-invoice-otro-nombre.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/12-HU-15-registro-factura--4f723-por-proveedor-internacional/attachments/07-invoice-otro-nombre-png-8edaf5d9b8180f5b169bbfc2d7a104454be19878.png"
+                    },
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/12-HU-15-registro-factura--4f723-por-proveedor-internacional/trace.zip"
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "0aed14a3a8cac4bf733f-3cb4207299e2c774ac33",
+          "file": "12-HU-15-registro-factura-internacional.spec.ts",
+          "line": 9,
+          "column": 5
+        }
+      ]
+    },
+    {
+      "title": "13-HU-16-envio-factura-internacional.spec.ts",
+      "file": "13-HU-16-envio-factura-internacional.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "HU-16 · Envío de factura por proveedor internacional",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 360000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 3148,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-02T00:19:08.583Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "01-reglas-int.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/13-HU-16-envio-factura-int-d3536-por-proveedor-internacional/attachments/01-reglas-int-png-272ee1d2c083f0a955859aa18ce385337feb51e2.png"
+                    },
+                    {
+                      "name": "02-reglas-xml-no-aplican.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/13-HU-16-envio-factura-int-d3536-por-proveedor-internacional/attachments/02-reglas-xml-no-aplican-png-d902d9d606cee4f1658633e68c2a075c731e591b.png"
+                    },
+                    {
+                      "name": "03-invoice-enviado.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/13-HU-16-envio-factura-int-d3536-por-proveedor-internacional/attachments/03-invoice-enviado-png-371c30005799a236c89456752ba8a14f53c836b3.png"
+                    },
+                    {
+                      "name": "04-datos-invoice.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/13-HU-16-envio-factura-int-d3536-por-proveedor-internacional/attachments/04-datos-invoice-png-05bb41bdff7f5484040f711c5be0c4816f4c66ff.png"
+                    },
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/13-HU-16-envio-factura-int-d3536-por-proveedor-internacional/trace.zip"
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "c982462c2b894debff32-7e9caccf2b10b14c5b1b",
+          "file": "13-HU-16-envio-factura-internacional.spec.ts",
+          "line": 6,
+          "column": 5
+        }
+      ]
+    },
+    {
+      "title": "14-HU-14-cancelacion-factura.spec.ts",
+      "file": "14-HU-14-cancelacion-factura.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "HU-14 · Cancelación de factura",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 360000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 3996,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-02T00:19:11.825Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "01-formulario-cancelacion.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/14-HU-14-cancelacion-factura-HU-14-·-Cancelación-de-factura/attachments/01-formulario-cancelacion-png-ddfd1bc0099cf1b73d8145623ce77792f43cde39.png"
+                    },
+                    {
+                      "name": "02-cancelacion-sin-acuse.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/14-HU-14-cancelacion-factura-HU-14-·-Cancelación-de-factura/attachments/02-cancelacion-sin-acuse-png-d8f8f4954398a3dd89ba685c683ea099f17e7681.png"
+                    },
+                    {
+                      "name": "03-servidor-exige-acuse.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/14-HU-14-cancelacion-factura-HU-14-·-Cancelación-de-factura/attachments/03-servidor-exige-acuse-png-879d439e77202abc95a0e7438ee39f86fda89d2f.png"
+                    },
+                    {
+                      "name": "04-factura-cancelada.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/14-HU-14-cancelacion-factura-HU-14-·-Cancelación-de-factura/attachments/04-factura-cancelada-png-0bffb0f280a4d30f2e7982babb565695eb6b8477.png"
+                    },
+                    {
+                      "name": "05-acuse-en-documentos.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/14-HU-14-cancelacion-factura-HU-14-·-Cancelación-de-factura/attachments/05-acuse-en-documentos-png-8194610967a857831fed18a06dddbfd2475e78d1.png"
+                    },
+                    {
+                      "name": "06-correo-cancelacion.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/14-HU-14-cancelacion-factura-HU-14-·-Cancelación-de-factura/attachments/06-correo-cancelacion-png-cf291e23de074055efa46c73e20bb1099c88cee3.png"
+                    },
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/14-HU-14-cancelacion-factura-HU-14-·-Cancelación-de-factura/trace.zip"
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "4248a90f45080f092c95-5db727faa00631805c95",
+          "file": "14-HU-14-cancelacion-factura.spec.ts",
+          "line": 14,
+          "column": 5
+        }
+      ]
+    },
+    {
+      "title": "15-HU-18-consulta-facturas-pmo.spec.ts",
+      "file": "15-HU-18-consulta-facturas-pmo.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "HU-18 · Consulta de facturas por PMO",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 360000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 3139,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-02T00:19:15.950Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "01-bandeja-enviadas.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/15-HU-18-consulta-facturas-18915-onsulta-de-facturas-por-PMO/attachments/01-bandeja-enviadas-png-3513b595e48934a86ddbc9d765765bb13842c434.png"
+                    },
+                    {
+                      "name": "02-bandeja-orden-envio.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/15-HU-18-consulta-facturas-18915-onsulta-de-facturas-por-PMO/attachments/02-bandeja-orden-envio-png-64181330d9d6f77c85db244dcbc7c488af182a52.png"
+                    },
+                    {
+                      "name": "03-filtro-internacional.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/15-HU-18-consulta-facturas-18915-onsulta-de-facturas-por-PMO/attachments/03-filtro-internacional-png-19f6f31b8b85f1098cff5f802850df301b9dcd52.png"
+                    },
+                    {
+                      "name": "04-filtro-nacional.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/15-HU-18-consulta-facturas-18915-onsulta-de-facturas-por-PMO/attachments/04-filtro-nacional-png-02d4fb40a36994ec9f26ffe8e3eb8eba2dc32f2f.png"
+                    },
+                    {
+                      "name": "05-todas-las-facturas.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/15-HU-18-consulta-facturas-18915-onsulta-de-facturas-por-PMO/attachments/05-todas-las-facturas-png-d721aa6ab4a541f97252bebe27759b649ae55e95.png"
+                    },
+                    {
+                      "name": "06-detalle-seleccionado.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/15-HU-18-consulta-facturas-18915-onsulta-de-facturas-por-PMO/attachments/06-detalle-seleccionado-png-a732cb88d25cbaa294573fd42cf2cf9e19205ce5.png"
+                    },
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/15-HU-18-consulta-facturas-18915-onsulta-de-facturas-por-PMO/trace.zip"
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "b0a70ae61c1e1039c65e-e445255e31babd8d280a",
+          "file": "15-HU-18-consulta-facturas-pmo.spec.ts",
+          "line": 6,
+          "column": 5
+        }
+      ]
+    },
+    {
+      "title": "16-HU-19-detalle-factura-pmo.spec.ts",
+      "file": "16-HU-19-detalle-factura-pmo.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "HU-19 · Visualización de detalle de factura por PMO",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 360000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 5527,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-02T00:19:19.237Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "01-detalle-encabezado.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/16-HU-19-detalle-factura-p-52fd3--detalle-de-factura-por-PMO/attachments/01-detalle-encabezado-png-decf800327258a89a1dbae1453f0cacf1228defb.png"
+                    },
+                    {
+                      "name": "02-detalle-proveedor-historial.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/16-HU-19-detalle-factura-p-52fd3--detalle-de-factura-por-PMO/attachments/02-detalle-proveedor-historial-png-02b97c0bd68da955c6ace2d3095731fb2ae356a9.png"
+                    },
+                    {
+                      "name": "03-visor-pdf-cfdi.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/16-HU-19-detalle-factura-p-52fd3--detalle-de-factura-por-PMO/attachments/03-visor-pdf-cfdi-png-718d145427747aa091d37c042f9bc6bc11e38e64.png"
+                    },
+                    {
+                      "name": "04-visor-xml-cfdi.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/16-HU-19-detalle-factura-p-52fd3--detalle-de-factura-por-PMO/attachments/04-visor-xml-cfdi-png-e962a9ac2cd6543a601347f6c4e5f44ebb995035.png"
+                    },
+                    {
+                      "name": "05-visor-orden-compra.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/16-HU-19-detalle-factura-p-52fd3--detalle-de-factura-por-PMO/attachments/05-visor-orden-compra-png-5e150b29d45291a7313d678f43bb1cd83a0e96f5.png"
+                    },
+                    {
+                      "name": "06-score-validaciones.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/16-HU-19-detalle-factura-p-52fd3--detalle-de-factura-por-PMO/attachments/06-score-validaciones-png-a4f8c36dbb727c4911a586216b934184d3e15388.png"
+                    },
+                    {
+                      "name": "07-matriz-evidencia.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/16-HU-19-detalle-factura-p-52fd3--detalle-de-factura-por-PMO/attachments/07-matriz-evidencia-png-fba18fdee739fc5d169d617d327f0be0e7aa3b29.png"
+                    },
+                    {
+                      "name": "08-detalle-internacional.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/16-HU-19-detalle-factura-p-52fd3--detalle-de-factura-por-PMO/attachments/08-detalle-internacional-png-10cdd298346de4975a5afcbb2008f6d2e9c3158b.png"
+                    },
+                    {
+                      "name": "09-reglas-int-pmo.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/16-HU-19-detalle-factura-p-52fd3--detalle-de-factura-por-PMO/attachments/09-reglas-int-pmo-png-3c585b94441b6e545a1b6f93e2aba77c757ee694.png"
+                    },
+                    {
+                      "name": "10-visor-invoice.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/16-HU-19-detalle-factura-p-52fd3--detalle-de-factura-por-PMO/attachments/10-visor-invoice-png-b6e9242e27483d516c7978c281c55d2ed5c5ee07.png"
+                    },
+                    {
+                      "name": "11-panel-decision.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/16-HU-19-detalle-factura-p-52fd3--detalle-de-factura-por-PMO/attachments/11-panel-decision-png-113fe5d3414785c76c9284e2aaa86519ea1b871f.png"
+                    },
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/16-HU-19-detalle-factura-p-52fd3--detalle-de-factura-por-PMO/trace.zip"
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "2d58e9642af20123bc43-e5f263df4823d886b6b5",
+          "file": "16-HU-19-detalle-factura-pmo.spec.ts",
+          "line": 12,
+          "column": 5
+        }
+      ]
+    },
+    {
+      "title": "17-HU-20-cambio-estatus-pmo.spec.ts",
+      "file": "17-HU-20-cambio-estatus-pmo.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "HU-20 · Cambio de estatus de factura",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 360000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 10709,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-02T00:19:24.901Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "01-precondicion-enviadas.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/17-HU-20-cambio-estatus-pm-5cf3c-ambio-de-estatus-de-factura/attachments/01-precondicion-enviadas-png-169bc91ab3a5c6fb515abaf38f52ad9f66de0c8a.png"
+                    },
+                    {
+                      "name": "02-panel-tres-botones.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/17-HU-20-cambio-estatus-pm-5cf3c-ambio-de-estatus-de-factura/attachments/02-panel-tres-botones-png-e6035580a68feecae05c24e2805b41743d6af14f.png"
+                    },
+                    {
+                      "name": "03-rechazar-despliega-observaciones.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/17-HU-20-cambio-estatus-pm-5cf3c-ambio-de-estatus-de-factura/attachments/03-rechazar-despliega-observaciones-png-cf7859391145088ac291b94086ff3f059f9f1afd.png"
+                    },
+                    {
+                      "name": "04-observaciones-obligatorias.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/17-HU-20-cambio-estatus-pm-5cf3c-ambio-de-estatus-de-factura/attachments/04-observaciones-obligatorias-png-8e99c0c530d15d457914bfc3c6a1871dbe56952d.png"
+                    },
+                    {
+                      "name": "05-factura-rechazada.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/17-HU-20-cambio-estatus-pm-5cf3c-ambio-de-estatus-de-factura/attachments/05-factura-rechazada-png-3aff0f50b6466c3417e4df4211a2e6e7f73bfd87.png"
+                    },
+                    {
+                      "name": "06-correo-rechazada.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/17-HU-20-cambio-estatus-pm-5cf3c-ambio-de-estatus-de-factura/attachments/06-correo-rechazada-png-7ce8701e958c82cbd12b4dd50650e06ac1f0bf82.png"
+                    },
+                    {
+                      "name": "07-observaciones-capturadas.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/17-HU-20-cambio-estatus-pm-5cf3c-ambio-de-estatus-de-factura/attachments/07-observaciones-capturadas-png-6e8d2fa68e0e6a75e4d5230f50cfae074ba8b237.png"
+                    },
+                    {
+                      "name": "08-factura-observaciones.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/17-HU-20-cambio-estatus-pm-5cf3c-ambio-de-estatus-de-factura/attachments/08-factura-observaciones-png-fde284acf77d0bc6514354654a33f81c5419fcde.png"
+                    },
+                    {
+                      "name": "09-correo-observaciones.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/17-HU-20-cambio-estatus-pm-5cf3c-ambio-de-estatus-de-factura/attachments/09-correo-observaciones-png-62af95412954aa1c041c0d20b8ae62fcdd360475.png"
+                    },
+                    {
+                      "name": "10-modal-autorizar.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/17-HU-20-cambio-estatus-pm-5cf3c-ambio-de-estatus-de-factura/attachments/10-modal-autorizar-png-b8a1d4b4c458b1062f210448fcadc0cf46bc8d35.png"
+                    },
+                    {
+                      "name": "11-factura-autorizada.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/17-HU-20-cambio-estatus-pm-5cf3c-ambio-de-estatus-de-factura/attachments/11-factura-autorizada-png-2c6eff2b212c1035934aff2b8b4ff9f96b742a01.png"
+                    },
+                    {
+                      "name": "12-correo-autorizada.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/17-HU-20-cambio-estatus-pm-5cf3c-ambio-de-estatus-de-factura/attachments/12-correo-autorizada-png-0bcc467f835f54ac2f2bc637df13496eb270b655.png"
+                    },
+                    {
+                      "name": "13-historial-decision.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/17-HU-20-cambio-estatus-pm-5cf3c-ambio-de-estatus-de-factura/attachments/13-historial-decision-png-ffe62c1ceac52709e1f894f87e3d11f1f61c724c.png"
+                    },
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/17-HU-20-cambio-estatus-pm-5cf3c-ambio-de-estatus-de-factura/trace.zip"
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "bcc282927da08e733cb2-326e203499e3b14a913d",
+          "file": "17-HU-20-cambio-estatus-pmo.spec.ts",
+          "line": 16,
+          "column": 5
+        }
+      ]
+    },
+    {
+      "title": "18-HU-17-consulta-estatus-proveedor.spec.ts",
+      "file": "18-HU-17-consulta-estatus-proveedor.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "HU-17 · Consulta de estatus de factura",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 360000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 3838,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-02T00:19:35.916Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "01-tablero-indicadores.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/18-HU-17-consulta-estatus--3ae8c-sulta-de-estatus-de-factura/attachments/01-tablero-indicadores-png-65f631a5511ae96c3d537ff75c57a90f50e0b606.png"
+                    },
+                    {
+                      "name": "02-listado-estatus.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/18-HU-17-consulta-estatus--3ae8c-sulta-de-estatus-de-factura/attachments/02-listado-estatus-png-d00fc96a658952f68226bdb8e9f78c0ef1251478.png"
+                    },
+                    {
+                      "name": "03-filtro-observaciones.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/18-HU-17-consulta-estatus--3ae8c-sulta-de-estatus-de-factura/attachments/03-filtro-observaciones-png-7b533d0335525f8c881582d98f1c58b5f5b924e6.png"
+                    },
+                    {
+                      "name": "04-motivo-rechazo.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/18-HU-17-consulta-estatus--3ae8c-sulta-de-estatus-de-factura/attachments/04-motivo-rechazo-png-69d913e47a04ff9a2cc88e92a7080506a87877aa.png"
+                    },
+                    {
+                      "name": "05-seguimiento-rechazo.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/18-HU-17-consulta-estatus--3ae8c-sulta-de-estatus-de-factura/attachments/05-seguimiento-rechazo-png-f8602688b4610c906f3b375509fc77f199a73418.png"
+                    },
+                    {
+                      "name": "06-observaciones-pmo.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/18-HU-17-consulta-estatus--3ae8c-sulta-de-estatus-de-factura/attachments/06-observaciones-pmo-png-3c4f94f6520793b1de55b11bfcf9b00227db62a5.png"
+                    },
+                    {
+                      "name": "07-reenviada.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/18-HU-17-consulta-estatus--3ae8c-sulta-de-estatus-de-factura/attachments/07-reenviada-png-810270f071a9aaae03f5203432331a1873254114.png"
+                    },
+                    {
+                      "name": "08-cancelada-fecha-limite.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/18-HU-17-consulta-estatus--3ae8c-sulta-de-estatus-de-factura/attachments/08-cancelada-fecha-limite-png-cc12425db0483ab3e65f0079aa838b7bb029d747.png"
+                    },
+                    {
+                      "name": "09-factura-ajena-404.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/18-HU-17-consulta-estatus--3ae8c-sulta-de-estatus-de-factura/attachments/09-factura-ajena-404-png-9a55edef87b2faf3b5feae9d8ec219d10d4303a3.png"
+                    },
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/18-HU-17-consulta-estatus--3ae8c-sulta-de-estatus-de-factura/trace.zip"
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "20b0222797c1e7cabb53-e96bd67663ce2cd92a6d",
+          "file": "18-HU-17-consulta-estatus-proveedor.spec.ts",
+          "line": 6,
+          "column": 5
+        }
+      ]
+    }
+  ],
+  "errors": [],
+  "stats": {
+    "startTime": "2026-10-02T00:18:05.587Z",
+    "duration": 94446.47499999999,
+    "expected": 18,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0
+  }
+}

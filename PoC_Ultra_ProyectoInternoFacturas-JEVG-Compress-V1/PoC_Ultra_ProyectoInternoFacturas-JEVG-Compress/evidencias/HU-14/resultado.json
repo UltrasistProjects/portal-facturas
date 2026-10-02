@@ -1,0 +1,111 @@
+{
+  "id": "HU-14",
+  "run": "RMUQ7SGCJ",
+  "inicio": "2026-10-02T00:19:11.831Z",
+  "fin": "2026-10-02T00:19:15.825Z",
+  "estado": "PASS",
+  "bloqueo": null,
+  "notas": [],
+  "prueba": {
+    "titulo": "HU-14 · Cancelación de factura",
+    "archivo": "14-HU-14-cancelacion-factura.spec.ts"
+  },
+  "escenarios": [
+    {
+      "nombre": "La cancelación obliga a cargar el \"Acuse de cancelación\"",
+      "estado": "PASS",
+      "pasos": [
+        {
+          "paso": "Abrir QA-RMUQ7SGCJ-N2 (\"Cargada\") y desplegar \"Cancelar factura\"",
+          "esperado": "Se muestra el formulario con el archivo \"Acuse de cancelación\" y la confirmación \"Confirmo que la factura se canceló y adjunto su acuse\".",
+          "obtenido": "Formulario con \"Acuse de cancelación\" (Formatos admitidos: PDF, XML) y la casilla de confirmación.",
+          "estado": "PASS",
+          "evidencias": [
+            {
+              "archivo": "HU-14/01-formulario-cancelacion.png",
+              "descripcion": "Sección \"Cancelar factura\" con el acuse obligatorio y la confirmación.",
+              "tipo": "aplicacion"
+            }
+          ]
+        },
+        {
+          "paso": "Pulsar \"Cancelar factura\" sin acuse ni confirmación",
+          "esperado": "El formulario no se envía: se indica junto a cada campo que falta el archivo y la confirmación; la factura sigue \"Cargada\".",
+          "obtenido": "Mensajes: Seleccione un archivo. / Marque la casilla para continuar.; no hubo envío.",
+          "estado": "PASS",
+          "evidencias": [
+            {
+              "archivo": "HU-14/02-cancelacion-sin-acuse.png",
+              "descripcion": "Validación junto a los campos: falta el acuse y la confirmación.",
+              "tipo": "aplicacion"
+            }
+          ]
+        },
+        {
+          "paso": "Enviar la cancelación confirmada sin acuse, quitando la validación del navegador (prueba de la validación del servidor)",
+          "esperado": "El servidor rechaza la petición con \"Cargue el Acuse de cancelación\" y la factura no cambia.",
+          "obtenido": "Servidor: \"Cargue el Acuse de cancelación\"; estatus \"Cargada\".",
+          "estado": "PASS",
+          "evidencias": [
+            {
+              "archivo": "HU-14/03-servidor-exige-acuse.png",
+              "descripcion": "Respuesta del servidor: exige el Acuse de cancelación; la factura sigue \"Cargada\".",
+              "tipo": "aplicacion"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "nombre": "Cancelación con acuse: factura \"Cancelada\" con fecha límite de 72 horas",
+      "estado": "PASS",
+      "pasos": [
+        {
+          "paso": "Adjuntar el acuse (PDF), confirmar y pulsar \"Cancelar factura\"",
+          "esperado": "La factura queda \"Cancelada\"; se informa \"Se notificó a Recepción de Facturas\" y \"… debe aceptar la cancelación antes del <fecha + 72 h>\".",
+          "obtenido": "Estatus \"Cancelada\"; \"Factura cancelada. Se notificó a Recepción de Facturas.\"; \"Cancelada el 01/10/2026 18:19. Recepción de Facturas debe aceptar la cancelación antes del 04/10/2026 18:19.\" (diferencia: 72 h).",
+          "estado": "PASS",
+          "evidencias": [
+            {
+              "archivo": "HU-14/04-factura-cancelada.png",
+              "descripcion": "Factura \"Cancelada\": aviso a Recepción de Facturas y fecha límite (+72 h).",
+              "tipo": "aplicacion"
+            }
+          ]
+        },
+        {
+          "paso": "Revisar los documentos de la factura",
+          "esperado": "El \"Acuse de cancelación\" aparece entre los documentos y ya no se ofrecen cambios (sin \"Gestionar documentos\", \"Enviar\" ni \"Cancelar factura\").",
+          "obtenido": "Documentos: XML del CFDI, PDF del CFDI, Orden de compra, Vo.Bo. del líder de proyecto, Acuse de cancelación; sin acciones de edición.",
+          "estado": "PASS",
+          "evidencias": [
+            {
+              "archivo": "HU-14/05-acuse-en-documentos.png",
+              "descripcion": "Documentos de la factura cancelada con el \"Acuse de cancelación\".",
+              "tipo": "aplicacion"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "nombre": "Correo a \"Recepción de Facturas\" con número de factura, proveedor y fecha límite",
+      "estado": "PASS",
+      "pasos": [
+        {
+          "paso": "Abrir el correo \"Cancelada\" generado por el portal",
+          "esperado": "Va a Recepción de Facturas (recepcionfacturas@ultrasist.com.mx, recepcion.qa.rmuq7sgcj@ultrasist-qa.example) e indica el número de factura, el nombre del proveedor y que acepte la cancelación antes de la fecha límite (+72 h).",
+          "obtenido": "Para: recepcion.qa.rmuq7sgcj@ultrasist-qa.example, recepcionfacturas@ultrasist.com.mx; asunto \"Cancelación de la factura QA-RMUQ7SGCJ-N2 de Tecnologia Integral del Centro SA de CV\"; texto: \"La factura número QA-RMUQ7SGCJ-N2 del proveedor Tecnologia Integral del Centro SA de CV ha sido cancelada. Por favor acepte la “Cancelación” antes del 04/10/2026 18:19\".",
+          "estado": "PASS",
+          "evidencias": [
+            {
+              "archivo": "HU-14/06-correo-cancelacion.png",
+              "descripcion": "Correo \"Cancelada\" a Recepción de Facturas para QA-RMUQ7SGCJ-N2.",
+              "tipo": "correo"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
