@@ -26,3 +26,7 @@ Microsoft/
 
 coverage.xml
 .coverage
+
+# Artefactos regenerables de la suite Playwright de HUs
+playwright-report/
+test-results/
