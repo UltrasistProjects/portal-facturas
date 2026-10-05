@@ -27,3 +27,7 @@
 | HU-18 Consulta de facturas por PMO | HU-16 Envío de factura por proveedor internacional |
 | HU-19 Visualización de detalle de factura por PMO | HU-18 Consulta de facturas por PMO |
 | HU-20 Cambio de estatus de factura | HU-19 Visualización de detalle de factura por PMO |
+| HU-21 Requisitos de alta del proveedor | HU-01 Carga masiva de proveedores |
+| HU-21 Requisitos de alta del proveedor | HU-02 Autorización masiva de proveedores |
+| HU-22 Requisitos de alta del contrato | HU-21 Requisitos de alta del proveedor |
+| HU-22 Requisitos de alta del contrato | HU-02 Autorización masiva de proveedores |

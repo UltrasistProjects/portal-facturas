@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.core.constants import DocumentType, ProcessingStatus, SupplierOrigin
 from app.core.types import to_money
-from app.models import Document, Invoice, ValidationResult
+from app.models import Invoice, ValidationResult
 from app.rules.contract_rules import contract_rules
 from app.rules.date_rules import date_rules
 from app.rules.document_rules import document_rules
@@ -19,12 +19,11 @@ from app.rules.international_rules import international_rules, invoice_duplicate
 from app.rules.semantic_rules import semantic_not_evaluated, semantic_outcomes
 from app.rules.supplier_rules import supplier_rules
 from app.rules.xml_rules import xml_rules
-from app.services import foreign_invoice_service
+from app.services import contract_requirements_service, foreign_invoice_service, supplier_requirements_service
 from app.services.ai import get_document_analyzer
 from app.services.audit_service import audit
 from app.services.document_requirements_service import required_types
 from app.services.file_service import LocalFileStorage
-from app.services.supplier_service import supplier_requirement_status
 from app.services.validation_score_service import calculate_score
 from app.services.validation_settings_service import rule_parameters
 from app.services.xml_service import XMLParseError, parse_cfdi
@@ -99,9 +98,8 @@ def run_validation(db: Session, invoice: Invoice, user_id: int | None = None) ->
             xml_document.processing_status = ProcessingStatus.FAILED
     processable = all(d.processing_status != ProcessingStatus.FAILED for d in documents)
     contract = invoice.contract
-    requirements = supplier_requirement_status(
-        invoice.supplier, [d for d in db.scalars(select(Document).where(Document.supplier_id == invoice.supplier_id))]
-    )
+    # Requisitos de alta con la configuracion vigente (HU-21): solo los documentos del expediente, sin los de facturas.
+    requirements = supplier_requirements_service.checklist(db, invoice.supplier)
     descriptions = [c.get("description") or "" for c in (xml_data or {}).get("concepts", [])]
     duplicate_number = bool(
         db.scalar(
@@ -116,7 +114,9 @@ def run_validation(db: Session, invoice: Invoice, user_id: int | None = None) ->
     )
     results = []
     # Configuracion vigente de archivos minimos, sin cache: la leida en esta prevalidacion queda en sus resultados.
-    results += document_rules(types, required_types(db, origin), origin, processable, bool(contract))
+    # Requisitos del contrato con la configuracion vigente (HU-22): solo los documentos del contrato.
+    contract_pending = contract_requirements_service.pending_names(db, contract)
+    results += document_rules(types, required_types(db, origin), origin, processable, contract_pending)
     # Reglas de Validacion vigentes (HU-06) y monedas activas (HU-07), sin cache, como los archivos minimos.
     params = rule_parameters(db)
     results += xml_rules(xml_data, xml_error, params, international=international)

@@ -1,0 +1,6 @@
+{# Acciones Editar y Eliminar de los tipos definidos por el Administrador en las pantallas de Requisitos mínimos. Los
+   formularios de eliminación van fuera de la tabla de configuración (que ya es un formulario); los botones los
+   apuntan con el atributo form. "Editar" recarga con ?editar=<id> para abrir el formulario sin JavaScript. #}
+{% macro type_actions(t) %}{% if not t.is_system %}<div class="type-actions"><a class="btn btn-outline-primary btn-sm" href="?editar={{ t.id }}#editar-{{ t.id }}">Editar</a><details class="delete-confirm"><summary class="btn btn-outline-danger btn-sm">Eliminar</summary><div class="delete-confirm-box"><p>¿Eliminar «{{ t.name }}»? Esta acción no se puede deshacer.</p><button class="btn btn-danger btn-sm" form="eliminar-{{ t.id }}">Sí, eliminar</button></div></details></div>{% endif %}{% endmacro %}
+{% macro delete_forms(types, base_url) %}{% for t in types if not t.is_system %}<form id="eliminar-{{ t.id }}" method="post" action="{{ base_url }}/types/{{ t.id }}/delete" hidden><input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}"></form>{% endfor %}{% endmacro %}
+{% macro edit_open(t) %}{% if request.query_params.get('editar') == t.id|string %} open{% endif %}{% endmacro %}

@@ -21,6 +21,8 @@ DOMAIN_TABLES = {
     "reviews",
     "user_sessions",
     "invoice_document_types",
+    "supplier_document_types",
+    "contract_document_types",
     "notification_templates",
     "notification_mailboxes",
     "notification_copies",
@@ -31,7 +33,10 @@ DOMAIN_TABLES = {
 NOTIFICATION_TABLES = {"notification_mailboxes", "notification_copies", "email_deliveries"}
 VALIDATION_TABLES = {"validation_settings", "catalog_entries"}
 BASELINE_TABLES = (
-    DOMAIN_TABLES - {"invoice_document_types", "notification_templates"} - NOTIFICATION_TABLES - VALIDATION_TABLES
+    DOMAIN_TABLES
+    - {"invoice_document_types", "supplier_document_types", "contract_document_types", "notification_templates"}
+    - NOTIFICATION_TABLES
+    - VALIDATION_TABLES
 ) | {"login_attempts"}
 
 
@@ -853,6 +858,7 @@ def test_identidad_en_keycloak_en_el_esquema(empty_db):
         )
     }
     assert "id_token_hint" in columns
+    command.upgrade(config, "head")
     command.check(config)
 
 
@@ -866,7 +872,8 @@ def test_downgrade_de_la_identidad_con_usuarios_sin_hash(empty_db):
     )
     with pytest.raises(NotImplementedError, match="Restaure un respaldo"):
         command.downgrade(config, BUSINESS_ROLE_NAMES)
-    assert query(empty_db, "SELECT version_num FROM alembic_version") == [(KEYCLOAK_IDENTITY,)]
+    # Toda la corrida es una transaccion: el fallo revierte tambien los downgrades posteriores.
+    assert query(empty_db, "SELECT version_num FROM alembic_version") == [(head_revision(),)]
     assert "login_attempts" not in tables(empty_db)
 
 
@@ -889,3 +896,193 @@ def test_downgrade_de_la_identidad_sin_usuarios_enlazados(empty_db):
         execute(empty_db, "UPDATE users SET password_hash = NULL")
     command.upgrade(config, "head")
     command.check(config)
+
+
+SUPPLIER_REQUIREMENTS = "0016_supplier_document_types"
+# Catalogo inicial de requisitos de alta (HU-21): clave -> (nombre, persona moral, persona fisica, internacional).
+INITIAL_REQUIREMENTS = {
+    "INCORPORATION_ACT": ("Acta constitutiva", "REQUIRED", "NOT_APPLICABLE", "NOT_APPLICABLE"),
+    "POWER_OF_ATTORNEY": ("Poderes", "REQUIRED", "NOT_APPLICABLE", "NOT_APPLICABLE"),
+    "TAX_STATUS": ("Cédula fiscal", "REQUIRED", "REQUIRED", "NOT_APPLICABLE"),
+    "LEGAL_REP_ID": ("Identificación del representante legal", "REQUIRED", "NOT_APPLICABLE", "NOT_APPLICABLE"),
+    "LEGAL_REP_ADDRESS_PROOF": (
+        "Comprobante de domicilio del representante legal",
+        "REQUIRED",
+        "NOT_APPLICABLE",
+        "NOT_APPLICABLE",
+    ),
+    "ADDRESS_PROOF": ("Comprobante de domicilio", "REQUIRED", "REQUIRED", "NOT_APPLICABLE"),
+    "BANK_STATEMENT": ("Estado de cuenta bancario", "REQUIRED", "REQUIRED", "NOT_APPLICABLE"),
+    "OFFICIAL_ID": ("Identificación oficial", "NOT_APPLICABLE", "REQUIRED", "NOT_APPLICABLE"),
+    "SAT_OPINION": ("Opinión de cumplimiento", "OPTIONAL", "OPTIONAL", "NOT_APPLICABLE"),
+    "ECONOMIC_PROPOSAL": ("Propuesta económica", "OPTIONAL", "OPTIONAL", "NOT_APPLICABLE"),
+    "DUE_DILIGENCE": ("Debida diligencia", "OPTIONAL", "NOT_APPLICABLE", "NOT_APPLICABLE"),
+    "LOCATION": ("Ubicación", "OPTIONAL", "OPTIONAL", "NOT_APPLICABLE"),
+    "SUPPLIER_CONTRACT": ("Contrato", "OPTIONAL", "OPTIONAL", "NOT_APPLICABLE"),
+}
+
+
+def insert_supplier_documents(url: str, *document_types: str) -> None:
+    """Un Administrador, un proveedor nacional y un documento vigente de su expediente por tipo."""
+    insert_supplier(url, NATIONAL_COLUMNS, NATIONAL_VALUES)
+    execute(
+        url,
+        "INSERT INTO users (name, email, role, is_active, created_at)"
+        " VALUES ('Admin previo', 'admin.previo@poc.local', 'Administrador', true, now())",
+    )
+    for document_type in document_types:
+        execute(
+            url,
+            "INSERT INTO documents (supplier_id, document_type, original_filename, stored_filename, path,"
+            " mime_type, file_size, sha256, uploaded_at, uploaded_by, processing_status, is_current)"
+            f" SELECT s.id, '{document_type}', 'a.pdf', 'a.pdf', 'suppliers/1/a.pdf', 'application/pdf',"
+            " 1, repeat('0', 64), now(), u.id, 'PROCESSED', true FROM suppliers s, users u",
+        )
+
+
+def requirements_catalog(url: str) -> dict:
+    rows = query(
+        url,
+        "SELECT code, name, persona_moral_requirement, persona_fisica_requirement, international_requirement,"
+        " is_system, is_active FROM supplier_document_types ORDER BY id",
+    )
+    return {code: rest for code, *rest in rows}
+
+
+def test_catalogo_de_requisitos_tras_la_migracion(empty_db):
+    config = alembic_config(empty_db)
+    command.upgrade(config, KEYCLOAK_IDENTITY)
+    insert_supplier_documents(empty_db, "TAX_STATUS", "SAT_OPINION")
+    command.upgrade(config, SUPPLIER_REQUIREMENTS)
+    loaded = requirements_catalog(empty_db)
+    assert list(loaded) == list(INITIAL_REQUIREMENTS), "los requisitos se siembran en el orden del catalogo"
+    assert loaded == {code: [*values, True, True] for code, values in INITIAL_REQUIREMENTS.items()}
+    # Ni el estatus del proveedor ni sus documentos cambian.
+    assert query(empty_db, "SELECT status FROM suppliers") == [("ACTIVE",)]
+    assert query(empty_db, "SELECT document_type FROM documents ORDER BY id") == [("TAX_STATUS",), ("SAT_OPINION",)]
+
+
+def test_downgrade_de_requisitos_sin_datos_nuevos(empty_db):
+    config = alembic_config(empty_db)
+    command.upgrade(config, SUPPLIER_REQUIREMENTS)
+    insert_supplier_documents(empty_db, "TAX_STATUS")
+    execute(
+        empty_db, "UPDATE supplier_document_types SET persona_moral_requirement = 'OPTIONAL' WHERE code = 'LOCATION'"
+    )
+    command.downgrade(config, KEYCLOAK_IDENTITY)
+    assert "supplier_document_types" not in tables(empty_db)
+    command.upgrade(config, "head")
+    command.check(config)
+
+
+@pytest.mark.parametrize("data", ["admin_requirement", "POWER_OF_ATTORNEY", "REQUISITO_14"])
+def test_downgrade_de_requisitos_con_datos_nuevos(empty_db, data):
+    config = alembic_config(empty_db)
+    command.upgrade(config, SUPPLIER_REQUIREMENTS)
+    if data == "admin_requirement":
+        execute(
+            empty_db,
+            "INSERT INTO supplier_document_types (code, name, is_system, is_active, persona_moral_requirement,"
+            " persona_fisica_requirement, international_requirement, created_at, updated_at) VALUES"
+            " ('REQUISITO_14', 'Declaración de ISR', false, false, 'NOT_APPLICABLE', 'NOT_APPLICABLE',"
+            " 'NOT_APPLICABLE', now(), now())",
+        )
+    else:
+        insert_supplier_documents(empty_db, data)
+    with pytest.raises(NotImplementedError, match="Restaure un respaldo"):
+        command.downgrade(config, KEYCLOAK_IDENTITY)
+    assert "supplier_document_types" in tables(empty_db)
+    assert query(empty_db, "SELECT version_num FROM alembic_version") == [(SUPPLIER_REQUIREMENTS,)]
+
+
+CONTRACT_REQUIREMENTS = "0017_contract_document_types"
+# Catalogo inicial de requisitos del contrato (HU-22): clave -> (nombre, nivel, varios archivos).
+INITIAL_CONTRACT_REQUIREMENTS = {
+    "SIGNED_CONTRACT": ("Contrato", "REQUIRED", False),
+    "CONTRACT_PURCHASE_ORDER": ("Orden de compra", "OPTIONAL", True),
+    "CONTRACT_ANNEXES": ("Anexos", "OPTIONAL", True),
+}
+
+
+def insert_contract(url: str, status: str = "ACTIVE") -> None:
+    execute(
+        url,
+        "INSERT INTO contracts (supplier_id, project_name, project_leader, authorized_technology, authorized_amount,"
+        " currency, start_date, end_date, status, created_at, updated_at) SELECT id, 'Proyecto previo', 'Lider',"
+        f" 'Tecnologia', 1000, 'MXN', '2026-01-01', '2026-12-31', '{status}', now(), now() FROM suppliers",
+    )
+
+
+def supplier_contract_levels(url: str) -> list:
+    return query(
+        url,
+        "SELECT persona_moral_requirement, persona_fisica_requirement, international_requirement"
+        " FROM supplier_document_types WHERE code = 'SUPPLIER_CONTRACT'",
+    )
+
+
+def test_requisitos_del_contrato_tras_la_migracion(empty_db):
+    config = alembic_config(empty_db)
+    command.upgrade(config, SUPPLIER_REQUIREMENTS)
+    insert_supplier_documents(empty_db, "SUPPLIER_CONTRACT")
+    insert_contract(empty_db)
+    command.upgrade(config, CONTRACT_REQUIREMENTS)
+    rows = query(
+        empty_db,
+        "SELECT code, name, requirement, allows_multiple, is_system, is_active"
+        " FROM contract_document_types ORDER BY id",
+    )
+    assert [code for code, *_ in rows] == list(INITIAL_CONTRACT_REQUIREMENTS), "en el orden del catalogo"
+    assert {code: tuple(rest) for code, *rest in rows} == {
+        code: (*values, True, True) for code, values in INITIAL_CONTRACT_REQUIREMENTS.items()
+    }
+    # El contrato existente sigue activo; el Contrato sale del expediente del proveedor y su documento no cambia.
+    assert query(empty_db, "SELECT status FROM contracts") == [("ACTIVE",)]
+    assert supplier_contract_levels(empty_db) == [("NOT_APPLICABLE",) * 3]
+    assert query(empty_db, "SELECT document_type, contract_id FROM documents") == [("SUPPLIER_CONTRACT", None)]
+    execute(empty_db, "UPDATE contracts SET status = 'REGISTERED'")
+
+
+def test_downgrade_de_requisitos_del_contrato_sin_datos_nuevos(empty_db):
+    config = alembic_config(empty_db)
+    command.upgrade(config, CONTRACT_REQUIREMENTS)
+    insert_supplier_documents(empty_db, "SUPPLIER_CONTRACT")
+    insert_contract(empty_db)
+    command.downgrade(config, SUPPLIER_REQUIREMENTS)
+    assert "contract_document_types" not in tables(empty_db)
+    document_columns = query(
+        empty_db, "SELECT column_name FROM information_schema.columns WHERE table_name = 'documents'"
+    )
+    assert ("contract_id",) not in document_columns
+    assert supplier_contract_levels(empty_db) == [("OPTIONAL", "OPTIONAL", "NOT_APPLICABLE")]
+    with pytest.raises((DataError, IntegrityError)):
+        execute(empty_db, "UPDATE contracts SET status = 'REGISTERED'")
+    command.upgrade(config, "head")
+    command.check(config)
+
+
+@pytest.mark.parametrize("data", ["registered_contract", "contract_document", "admin_requirement"])
+def test_downgrade_de_requisitos_del_contrato_con_datos_nuevos(empty_db, data):
+    config = alembic_config(empty_db)
+    command.upgrade(config, CONTRACT_REQUIREMENTS)
+    insert_supplier_documents(empty_db)
+    insert_contract(empty_db, "REGISTERED" if data == "registered_contract" else "ACTIVE")
+    if data == "contract_document":
+        execute(
+            empty_db,
+            "INSERT INTO documents (contract_id, document_type, original_filename, stored_filename, path, mime_type,"
+            " file_size, sha256, uploaded_at, uploaded_by, processing_status, is_current) SELECT c.id,"
+            " 'SIGNED_CONTRACT', 'c.pdf', 'c.pdf', 'contracts/1/c.pdf', 'application/pdf', 1, repeat('0', 64), now(),"
+            " u.id, 'PROCESSED', true FROM contracts c, users u",
+        )
+    if data == "admin_requirement":
+        execute(
+            empty_db,
+            "INSERT INTO contract_document_types (code, name, is_system, is_active, requirement, allows_multiple,"
+            " created_at, updated_at) VALUES ('REQ_CONTRATO_4', 'Acta de inicio', false, true, 'OPTIONAL', false,"
+            " now(), now())",
+        )
+    with pytest.raises(NotImplementedError, match="Restaure un respaldo"):
+        command.downgrade(config, SUPPLIER_REQUIREMENTS)
+    assert "contract_document_types" in tables(empty_db)
+    assert query(empty_db, "SELECT version_num FROM alembic_version") == [(CONTRACT_REQUIREMENTS,)]

@@ -5,6 +5,7 @@ Cada prueba crea sus registros con un prefijo unico, los busca por ese prefijo (
 compartida) y los borra al terminar.
 """
 
+import html
 import re
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
@@ -257,8 +258,12 @@ def test_alta_de_contrato_visible(client, many_contracts):
         "csrf_token": csrf(client, "/contracts"),
     }
     response = client.post("/contracts", data=data, follow_redirects=False)
-    page = client.get(response.headers["location"]).text
-    assert "Contrato creado" in page and re.findall(r"<strong>([^<]+)</strong><small>Lider", page)[0] == project
+    # El alta lleva al expediente del contrato, que pide sus requisitos (HU-22).
+    with SessionLocal() as db:
+        created = db.scalar(select(Contract).where(Contract.project_name == project))
+    assert response.headers["location"] == f"/contracts/{created.id}?ok=created"
+    page = html.unescape(client.get(response.headers["location"]).text)
+    assert "Contrato creado. Cargue sus requisitos para activarlo." in page and f"<h1>{project}</h1>" in page
 
 
 def test_alta_de_clave_visible(client, many_entries):

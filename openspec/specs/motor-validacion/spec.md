@@ -63,7 +63,7 @@ En cada validación, el motor SHALL leer la configuración vigente de archivos m
 - DOC-001 (XML del CFDI, `CRITICAL`), DOC-002 (PDF del CFDI, `ERROR`), DOC-003 (Orden de compra, `ERROR`), DOC-004 (Vo.Bo. del líder de proyecto, `ERROR`) y DOC-008 (Invoice (PDF), `CRITICAL`) resultan `PASS` o `FAIL` cuando su tipo es Obligatorio para ese origen, y `NOT_APPLICABLE` en otro caso;
 - DOC-009 (`ERROR`) genera un resultado por cada otro tipo activo que sea Obligatorio para ese origen, con la clave del tipo en `source_document`;
 - los mensajes usan el nombre del tipo: "<nombre> presente" o "Falta <nombre>"; en `NOT_APPLICABLE`, "No requerido para proveedores nacionales" o "No requerido para proveedores internacionales";
-- DOC-005, DOC-006 y DOC-007 no cambian.
+- DOC-005 se evalúa conforme a "Contrato y anexos disponibles según los requisitos del contrato"; DOC-006 y DOC-007 no cambian.
 
 Un `FAIL` de cualquiera de estas reglas SHALL impedir el envío. Una factura que ya salió de los estados editables SHALL conservar sus resultados aunque la configuración cambie después. Una factura editable SHALL evaluarse con la configuración vigente al verificarse o enviarse.
 
@@ -130,12 +130,13 @@ Cuando su comparación está desactivada, XML-002, XML-003, XML-004, XML-005, XM
 Al validar una factura de un proveedor de origen Internacional, el motor SHALL reportar como `NOT_APPLICABLE`, con el mensaje "No aplica a proveedores internacionales" y conservando la severidad de cada regla:
 - las reglas del CFDI, XML-001 a XML-010, sin intentar leer un XML;
 - FIN-004 (UUID duplicado);
-- SUP-003 y SUP-004 (expediente del Anexo A), mientras no se defina el expediente del proveedor internacional.
+- SUP-003 (expediente mínimo), cuando el proveedor no tiene requisitos de alta exigibles; si los tiene, SUP-003 se evalúa conforme a "Expediente mínimo según los requisitos de alta configurados";
+- SUP-004 (vigencia de los documentos del expediente).
 
-SEM-001 SHALL resultar `NOT_EVALUATED` con "Sin conceptos que comparar: el Invoice no es un CFDI". Las demás reglas (DOC, SUP-001, SUP-002, CON, DAT y FIN-001, FIN-002, FIN-003, FIN-005 y FIN-006) SHALL evaluarse igual que para el proveedor nacional, con los importes y la moneda capturados. La validación de facturas de proveedores nacionales MUST NOT cambiar.
+SEM-001 SHALL resultar `NOT_EVALUATED` con "Sin conceptos que comparar: el Invoice no es un CFDI". Las demás reglas (DOC, SUP-001, SUP-002, CON, DAT y FIN-001, FIN-002, FIN-003, FIN-005 y FIN-006) SHALL evaluarse igual que para el proveedor nacional, con los importes y la moneda capturados. La validación de facturas de proveedores nacionales MUST NOT cambiar, salvo SUP-003, que sigue la configuración de requisitos de alta.
 
 #### Scenario: Factura internacional completa
-- **WHEN** se valida una factura internacional con Invoice, orden de compra y Vo.Bo., importes que cuadran y dentro del monto de su contrato vigente
+- **WHEN** con la configuración inicial de requisitos de alta se valida una factura internacional con Invoice, orden de compra y Vo.Bo., importes que cuadran y dentro del monto de su contrato vigente
 - **THEN** XML-001 a XML-010, FIN-004, SUP-003 y SUP-004 resultan `NOT_APPLICABLE`, ninguna regla resulta `FAIL` y la factura puede enviarse
 
 #### Scenario: Monto excedido
@@ -146,3 +147,50 @@ SEM-001 SHALL resultar `NOT_EVALUATED` con "Sin conceptos que comparar: el Invoi
 - **WHEN** se valida la factura demo A-CORRECTA
 - **THEN** sus resultados son los mismos que antes de este cambio y no incluyen reglas INT ni FIN-007
 
+### Requirement: Expediente mínimo según los requisitos de alta configurados
+Al validar una factura, SUP-003 (`ERROR`) SHALL evaluar los requisitos de alta exigibles del proveedor de la factura con la configuración vigente (capacidad `requisitos-alta-proveedor`):
+- `PASS` con el mensaje "Expediente mínimo disponible" si cada requisito exigible tiene un documento vigente en el expediente;
+- `FAIL` con el mensaje "Expediente del proveedor incompleto. Pendientes: <nombre>, <nombre>" en otro caso, con los nombres en el orden del catálogo;
+- `NOT_APPLICABLE` con el mensaje "No aplica a proveedores internacionales" si el proveedor es Internacional y no tiene requisitos de alta exigibles.
+
+La antigüedad de los documentos MUST NOT afectar SUP-003. SUP-004 no cambia.
+
+#### Scenario: Proveedor demo con expediente completo
+- **WHEN** se valida la factura demo A-CORRECTA después de la migración y de `reset_demo`
+- **THEN** SUP-003 resulta `PASS` con "Expediente mínimo disponible"
+
+#### Scenario: Requisito obligatorio agregado después de la autorización
+- **WHEN** el Administrador da de alta "Declaración de ISR por retenciones de salarios", Obligatorio para Persona moral, y se valida una factura de una persona moral "Autorizado" que no tiene ese documento
+- **THEN** SUP-003 resulta `FAIL` con "Expediente del proveedor incompleto. Pendientes: Declaración de ISR por retenciones de salarios", el envío no procede y el proveedor sigue "Autorizado"
+
+#### Scenario: Opinión de cumplimiento opcional
+- **WHEN** con la configuración inicial se valida una factura de una persona moral con todos sus requisitos obligatorios y sin opinión de cumplimiento
+- **THEN** SUP-003 resulta `PASS`
+
+#### Scenario: Proveedor internacional con un requisito configurado
+- **WHEN** "Estado de cuenta bancario" es Obligatorio para Internacional y se valida una factura de un proveedor internacional sin ese documento
+- **THEN** SUP-003 resulta `FAIL` con "Expediente del proveedor incompleto. Pendientes: Estado de cuenta bancario"
+
+### Requirement: Contrato y anexos disponibles según los requisitos del contrato
+Al validar una factura, DOC-005 (`ERROR`) SHALL evaluar los requisitos obligatorios del contrato de la factura con la configuración vigente (capacidad `requisitos-alta-contrato`):
+- `PASS` con el mensaje "Contrato/anexo disponible" si cada requisito obligatorio activo tiene al menos un documento vigente ligado al contrato;
+- `FAIL` con el mensaje "Faltan documentos del contrato: <nombre>, <nombre>" si falta alguno, con los nombres en el orden del catálogo;
+- `FAIL` con el mensaje "Falta contrato/anexo" si la factura no tiene contrato.
+
+Los documentos de la factura y del expediente del proveedor MUST NOT contar para DOC-005. Un `FAIL` SHALL impedir el envío. Una factura que ya salió de los estados editables SHALL conservar su resultado aunque la configuración o los documentos del contrato cambien después.
+
+#### Scenario: Factura demo con contrato completo
+- **WHEN** se valida la factura demo A-CORRECTA después de la migración y de `reset_demo`
+- **THEN** DOC-005 resulta `PASS` con "Contrato/anexo disponible"
+
+#### Scenario: Contrato activo sin contrato firmado
+- **WHEN** se valida una factura editable cuyo contrato "Activo" existía antes de la migración y no tiene documentos
+- **THEN** DOC-005 resulta `FAIL` con "Faltan documentos del contrato: Contrato" y el envío no procede
+
+#### Scenario: Requisito obligatorio agregado después de la activación
+- **WHEN** el Administrador hace obligatoria la orden de compra y se valida una factura editable de un contrato activo sin orden de compra
+- **THEN** DOC-005 resulta `FAIL` con "Faltan documentos del contrato: Orden de compra", el envío no procede y el contrato sigue "Activo"
+
+#### Scenario: Contrato cargado en la factura
+- **WHEN** una factura tiene cargado un documento "Contrato" de los archivos de la factura (HU-04) y su contrato no tiene contrato firmado
+- **THEN** DOC-005 resulta `FAIL` con "Faltan documentos del contrato: Contrato"

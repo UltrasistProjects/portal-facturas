@@ -1,23 +1,14 @@
-"""Alta individual, edicion y expediente (Anexo A) del proveedor.
+"""Alta individual y edicion del proveedor. Su expediente (requisitos de alta) vive en supplier_requirements_service.
 
 Estas funciones no confirman la transaccion: lo hace el router.
 """
 
-from datetime import date, timedelta
+from datetime import date
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.core.constants import (
-    ALTERNATIVE_SUPPLIER_DOCUMENTS,
-    DATED_SUPPLIER_DOCUMENTS,
-    OPTIONAL_SUPPLIER_DOCUMENTS,
-    QUOTATION_DOCUMENT,
-    SUPPLIER_DOCUMENT_LABELS,
-    SUPPLIER_REQUIREMENTS,
-    CatalogType,
-    SupplierStatus,
-)
+from app.core.constants import CatalogType, SupplierStatus
 from app.core.errors import BusinessRuleError, InvalidInputError
 from app.models import CatalogEntry, Supplier, User
 from app.schemas import SupplierCreate, SupplierProfile, SupplierUpdate
@@ -44,50 +35,6 @@ PROFILE_FIELDS = (
     "contact_name",
     "contact_phone",
 )
-
-
-def supplier_requirement_status(supplier, documents) -> list[dict]:
-    """Una fila por documento del expediente. `required` indica si cuenta para el expediente minimo (SUP-003); `note`
-    explica por que un documento no es obligatorio o que otro lo sustituye."""
-    codes = SUPPLIER_REQUIREMENTS[supplier.supplier_type]
-    current = {d.document_type: d for d in documents if d.is_current}
-    rows = []
-    for code in codes:
-        doc = current.get(code)
-        expired = bool(
-            doc
-            and doc.document_date
-            and doc.document_date < date.today() - timedelta(days=93)
-            and code in DATED_SUPPLIER_DOCUMENTS
-        )
-        required, note = _requirement(code, codes, current, supplier.economic_proposal)
-        rows.append(
-            {
-                "code": code,
-                "label": SUPPLIER_DOCUMENT_LABELS[code],
-                "present": bool(doc),
-                "expired": expired,
-                "document": doc,
-                "required": required,
-                "note": note,
-            }
-        )
-    return rows
-
-
-def _requirement(code: str, codes: list[str], current: dict, quotation: bool) -> tuple[bool, str | None]:
-    if code in OPTIONAL_SUPPLIER_DOCUMENTS:
-        return False, "Opcional"
-    if code == QUOTATION_DOCUMENT:
-        if quotation:
-            return True, "Alta por cotización o licitación"
-        return False, "Opcional: el alta no es por cotización o licitación"
-    alternative = ALTERNATIVE_SUPPLIER_DOCUMENTS.get(code)
-    if alternative in codes:
-        label = SUPPLIER_DOCUMENT_LABELS[alternative]
-        # Deja de ser obligatorio si falta y el alternativo ya esta cargado; cargado, cumple el requisito.
-        return code in current or alternative not in current, f"Basta este o el {label[0].lower()}{label[1:]}"
-    return True, None
 
 
 # --- Actividad principal (catalogo INDUSTRY) ----------------------------------------------------------------------

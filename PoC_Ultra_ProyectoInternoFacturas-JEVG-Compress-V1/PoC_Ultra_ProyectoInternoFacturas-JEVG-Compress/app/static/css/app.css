@@ -33,3 +33,8 @@
 
 /* Errores de validacion junto al campo (interfaz-sin-dialogos-nativos) */
 .dropzone.is-invalid{border-color:var(--bs-form-invalid-border-color);background:#fff8f8}.catalog-edit-form{flex-wrap:wrap}.catalog-edit-form .form-control{flex:1 1 0;min-width:0}.catalog-edit-form .invalid-feedback{flex-basis:100%;order:1;margin-top:0}
+/* Requisitos de alta del proveedor (HU-21) */
+.requirements-summary{margin:0 22px 4px;font-weight:600}.requirements-panel .document-list{padding:0 22px 12px}.requirements-others{font-size:11px;letter-spacing:.8px;text-transform:uppercase;color:var(--muted);margin:14px 22px 0}.requirement-pending{white-space:nowrap}.authorize-hint{color:var(--muted);font-size:12px}
+/* Requisitos de alta del contrato (HU-22) */
+.status-contract-registered{background:#e8f1ff;color:#155bb9}.status-contract-active{background:#e8f7f0;color:#14724f}.status-contract-inactive{background:#fdecec;color:#ae3030}.contract-file{display:block;font-size:12px;text-decoration:none;margin-top:3px}.contract-amendments{margin:16px 22px}.contract-activation .access-actions{margin-top:16px}
+.type-actions{display:flex;flex-wrap:wrap;gap:6px;align-items:flex-start}.inactive-types td .type-actions{margin-top:6px}.delete-confirm summary{list-style:none}.delete-confirm summary::-webkit-details-marker{display:none}.delete-confirm-box{margin-top:8px;padding:10px 12px;border:1px solid #f1c4c4;background:#fdf4f4;border-radius:7px;max-width:260px}.delete-confirm-box p{margin:0 0 8px;font-size:12px}

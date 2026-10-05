@@ -11,6 +11,7 @@ data/*.sqlite*
 storage/invoices/*
 storage/suppliers/*
 storage/temp/*
+storage/contracts/*
 !storage/**/.gitkeep
 logs/*
 !logs/.gitkeep

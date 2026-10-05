@@ -27,7 +27,7 @@ Un middleware SHALL asignar un `request_id` a cada petición y devolverlo en la 
 
 ### Requirement: Registro de eventos técnicos del flujo
 El sistema SHALL registrar:
-- subida de documento: `invoice_id` o `supplier_id`, tipo documental, extensión y tamaño en bytes;
+- subida de documento: `invoice_id`, `supplier_id` o `contract_id`, tipo documental, extensión y tamaño en bytes;
 - inicio y fin de validación, con `invoice_id`, duración en milisegundos, score, número de bloqueos y estado resultante;
 - decisión de revisión, con `invoice_id` y decisión;
 - todo fallo de parseo de XML o de apertura de PDF, con el tipo y el mensaje técnico de la excepción, registrado **antes** de devolver el mensaje genérico al usuario;
@@ -37,11 +37,11 @@ El sistema SHALL registrar:
 - envío de un correo: evento `notification.sent` con el id del envío en la bitácora (`delivery_id`), `event_code` (`TEST` para el correo de prueba), el transporte (`transport`), el número de destinatarios (`recipients`) y la duración en milisegundos (`duration_ms`);
 - correo que no se pudo enviar: evento `notification.failed` con los mismos campos y el tipo de la excepción (`error_type`);
 - cambio de los destinatarios de notificaciones: evento `notification_recipients.updated` con los códigos de las listas que cambiaron (`lists`);
-- autorización masiva de proveedores: evento `supplier.bulk_authorize` con los proveedores solicitados (`requested`), autorizados (`authorized`), autorizados que ya tenían usuario (`existing_access`), omitidos (`skipped`), no autorizados por correo en uso (`conflicts`), credenciales enviadas (`credentials_sent`) y fallidas (`credentials_failed`), y la duración en milisegundos (`duration_ms`);
+- autorización masiva de proveedores: evento `supplier.bulk_authorize` con los proveedores solicitados (`requested`), autorizados (`authorized`), autorizados que ya tenían usuario (`existing_access`), omitidos (`skipped`), no autorizados por requisitos de alta incompletos (`requirements_incomplete`), no autorizados por correo en uso (`conflicts`), credenciales enviadas (`credentials_sent`) y fallidas (`credentials_failed`), y la duración en milisegundos (`duration_ms`);
 - cambio de las Reglas de Validación: evento `validation_settings.updated` con los nombres de los campos que cambiaron (`fields`) y la nueva versión (`version`);
 - carga de un catálogo desde Excel: evento `catalog.import` con el catálogo (`catalog`), `result` (`imported` o `rejected`), filas leídas (`rows`), claves agregadas (`added`), actualizadas (`updated`) y sin cambios (`unchanged`), filas con errores (`invalid`), tamaño del archivo en bytes (`size_bytes`) y duración en milisegundos (`duration_ms`); y un fallo al leer el archivo, con el evento `catalog_import.read_failed` y el tipo y el mensaje técnico de la excepción.
 
-Los eventos de plantillas y notificaciones MUST NOT incluir el asunto, el cuerpo, los valores de las variables, las direcciones de correo ni el mensaje técnico de un error de envío. El evento de autorización masiva MUST NOT incluir razones sociales, correos, identificadores fiscales ni contraseñas. El evento de las Reglas de Validación MUST NOT incluir los valores de los campos.
+Los eventos de plantillas y notificaciones MUST NOT incluir el asunto, el cuerpo, los valores de las variables, las direcciones de correo ni el mensaje técnico de un error de envío. El evento de autorización masiva MUST NOT incluir razones sociales, correos, identificadores fiscales, nombres de requisitos ni contraseñas. El evento de las Reglas de Validación MUST NOT incluir los valores de los campos.
 
 #### Scenario: Validación registrada
 - **WHEN** se ejecuta la prevalidación de una factura
@@ -80,8 +80,12 @@ Los eventos de plantillas y notificaciones MUST NOT incluir el asunto, el cuerpo
 - **THEN** el log contiene un evento `notification_recipients.updated` con `lists = ["INVOICE_REJECTED"]` y sin direcciones de correo
 
 #### Scenario: Autorización masiva registrada
-- **WHEN** el Administrador autoriza 3 proveedores "Registrado" sin usuario y un proveedor ya autorizado, y los 3 correos de credenciales se envían
-- **THEN** el log contiene un evento `supplier.bulk_authorize` con `requested = 4`, `authorized = 3`, `existing_access = 0`, `skipped = 1`, `conflicts = 0`, `credentials_sent = 3`, `credentials_failed = 0` y `duration_ms`, sin correos ni contraseñas
+- **WHEN** el Administrador autoriza 3 proveedores "Registrado" sin usuario y con sus requisitos completos y un proveedor ya autorizado, y los 3 correos de credenciales se envían
+- **THEN** el log contiene un evento `supplier.bulk_authorize` con `requested = 4`, `authorized = 3`, `existing_access = 0`, `skipped = 1`, `requirements_incomplete = 0`, `conflicts = 0`, `credentials_sent = 3`, `credentials_failed = 0` y `duration_ms`, sin correos ni contraseñas
+
+#### Scenario: Autorización con requisitos incompletos registrada
+- **WHEN** el Administrador autoriza 2 proveedores "Registrado" y a uno le faltan requisitos obligatorios
+- **THEN** el log contiene un evento `supplier.bulk_authorize` con `requested = 2`, `authorized = 1` y `requirements_incomplete = 1`, sin nombres de requisitos
 
 #### Scenario: Cambio de las Reglas de Validación registrado
 - **WHEN** el Administrador cambia la Razón Social y la forma de pago y la configuración queda en la versión 2
@@ -90,6 +94,10 @@ Los eventos de plantillas y notificaciones MUST NOT incluir el asunto, el cuerpo
 #### Scenario: Carga de catálogo registrada
 - **WHEN** el Administrador carga en monedas un archivo con 2 filas que agrega una clave y actualiza otra
 - **THEN** el log contiene un evento `catalog.import` con `catalog = "CURRENCY"`, `result = "imported"`, `rows = 2`, `added = 1`, `updated = 1`, `unchanged = 0`, `invalid = 0`, `size_bytes` y `duration_ms`
+
+#### Scenario: Subida de documento de contrato registrada
+- **WHEN** el Administrador carga el contrato firmado de un contrato
+- **THEN** el log contiene un evento `document.uploaded` con `contract_id`, `document_type = "SIGNED_CONTRACT"`, `extension` y `size_bytes`, sin el nombre original del archivo
 
 ### Requirement: Sin datos sensibles en logs
 El log MUST NOT contener:
@@ -113,4 +121,3 @@ Las llamadas a Keycloak SHALL registrarse sólo con la operación, el código HT
 #### Scenario: Revisión del log tras enviar correos
 - **WHEN** con `SMTP_PASSWORD` definida se guarda el buzón, se envía un correo de prueba y se envía un correo de evento, y se busca en el log la contraseña SMTP, las direcciones del buzón y de la prueba, y el asunto enviado
 - **THEN** no hay coincidencias
-

@@ -1,3 +1,4 @@
+import html
 import re
 
 from sqlalchemy import delete, func, select
@@ -30,9 +31,9 @@ def test_alta_crea_el_usuario_en_keycloak_sin_contrasena_local(client, keycloak)
     assert created.password_hash is None and created.keycloak_sub
     account = keycloak.account("valida@ultrasist.com.mx")
     assert (account.id, account.roles, account.required_actions) == (created.keycloak_sub, {"PMO"}, [UPDATE_PASSWORD])
-    # La temporal se muestra una sola vez, en esta respuesta (D15).
-    assert f"<code>{account.password}</code>" in response.text
-    assert account.password not in client.get("/admin/users?q=valida").text
+    # La temporal se muestra una sola vez, en esta respuesta (D15). Escapada: puede contener &, < o >.
+    assert f"<code>{html.escape(account.password)}</code>" in response.text
+    assert html.escape(account.password) not in client.get("/admin/users?q=valida").text
 
 
 def test_contrasenas_temporales_cumplen_la_politica():

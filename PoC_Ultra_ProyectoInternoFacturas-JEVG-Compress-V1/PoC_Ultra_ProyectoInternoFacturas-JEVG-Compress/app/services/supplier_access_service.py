@@ -1,9 +1,10 @@
 """Autorizacion de proveedores y credenciales de acceso al portal (HU-02 y HU-03, add-keycloak-authentication).
 
-- `authorize()`: pasa proveedores Registrados a Autorizado con sus filas bloqueadas. Cada proveedor se procesa en un
-  punto de guardado: su usuario del portal y su cuenta en Keycloak (creada o enlazada, rol Proveedor y contrasena
-  temporal con UPDATE_PASSWORD). Si Keycloak falla, solo ese proveedor se revierte y sigue Registrado (D12). Despues
-  del commit se envia el correo de credenciales (D1-A).
+- `authorize()`: pasa proveedores Registrados a Autorizado con sus filas bloqueadas. Un proveedor con requisitos de
+  alta exigibles pendientes no se autoriza (HU-21). Cada proveedor se procesa en un punto de guardado: su usuario del
+  portal y su cuenta en Keycloak (creada o enlazada, rol Proveedor y contrasena temporal con UPDATE_PASSWORD). Si
+  Keycloak falla, solo ese proveedor se revierte y sigue Registrado (D12). Despues del commit se envia el correo de
+  credenciales (D1-A).
 - `resend_credentials()`: contrasena temporal nueva en Keycloak mientras la cuenta conserve UPDATE_PASSWORD (D14).
 
 La contrasena temporal solo existe en claro en memoria, en la llamada a Keycloak y en el correo: nunca en la base de
@@ -24,6 +25,7 @@ from app.core.errors import BusinessRuleError, InvalidInputError, NotFoundError
 from app.models import AuditLog, EmailDelivery, Supplier, User
 from app.services import identity_service as identity
 from app.services import notification_service
+from app.services import supplier_requirements_service as requirements
 from app.services.audit_service import audit
 from app.services.invoice_service import violates
 from app.services.keycloak_admin import IdentityAdmin, IdentityProviderError, get_identity_admin
@@ -103,6 +105,7 @@ class AuthorizationResult:
     authorized: list[int]
     existing_access: list[int]
     skipped: list[int]
+    requirements_incomplete: list[int]
     conflicts: list[int]
     provisioning_failed: list[int]
     deliveries: list[EmailDelivery]
@@ -163,9 +166,10 @@ def _create_user(db: Session, supplier: Supplier, admin: User, idp: IdentityAdmi
 
 
 def authorize(db: Session, raw_ids: Iterable[str | int], admin: User, portal_url: str) -> AuthorizationResult:
-    """Autoriza los proveedores Registrados de la seleccion. Los demas se omiten; los que tienen su correo en uso por
-    otro usuario (del portal o de Keycloak) o cuyo aprovisionamiento en Keycloak falla no se autorizan. Confirma la
-    transaccion y despues envia las credenciales."""
+    """Autoriza los proveedores Registrados de la seleccion. Los demas se omiten. No se autorizan los que tienen
+    requisitos de alta exigibles pendientes (HU-21), los que tienen su correo en uso por otro usuario (del portal o de
+    Keycloak) ni aquellos cuyo aprovisionamiento en Keycloak falla. Confirma la transaccion y despues envia las
+    credenciales."""
     started = time.perf_counter()
     ids = _selection(raw_ids)
     suppliers = list(db.scalars(select(Supplier).where(Supplier.id.in_(ids)).order_by(Supplier.id).with_for_update()))
@@ -173,10 +177,14 @@ def authorize(db: Session, raw_ids: Iterable[str | int], admin: User, portal_url
         raise NotFoundError(MSG_NOT_FOUND)
     emails = {_email(supplier) for supplier in suppliers}
     users = {user.email.lower(): user for user in db.scalars(select(User).where(func.lower(User.email).in_(emails)))}
+    # Requisitos de alta con la configuracion vigente, dentro de la transaccion que bloquea a los proveedores: el
+    # catalogo y los documentos del expediente de los seleccionados en dos consultas (D5).
+    pending = requirements.pending_requirements(db, [s for s in suppliers if s.status == SupplierStatus.REGISTERED])
     outcome: dict[str, list[int]] = {
         "authorized": [],
         "existing_access": [],
         "skipped": [],
+        "requirements_incomplete": [],
         "conflicts": [],
         "provisioning_failed": [],
     }
@@ -185,6 +193,9 @@ def authorize(db: Session, raw_ids: Iterable[str | int], admin: User, portal_url
     for supplier in suppliers:
         if supplier.status != SupplierStatus.REGISTERED:
             outcome["skipped"].append(supplier.id)
+            continue
+        if pending[supplier.id]:
+            outcome["requirements_incomplete"].append(supplier.id)
             continue
         existing = users.get(_email(supplier))
         if existing is not None and not (existing.role == Role.PROVEEDOR and existing.supplier_id == supplier.id):
@@ -234,6 +245,7 @@ def authorize(db: Session, raw_ids: Iterable[str | int], admin: User, portal_url
             "authorized": len(outcome["authorized"]),
             "existing_access": len(outcome["existing_access"]),
             "skipped": len(outcome["skipped"]),
+            "requirements_incomplete": len(outcome["requirements_incomplete"]),
             "conflicts": len(outcome["conflicts"]),
             "provisioning_failed": len(outcome["provisioning_failed"]),
             "credentials_sent": sent,
@@ -281,9 +293,18 @@ class SummaryRow:
 
 
 @dataclass(frozen=True)
+class IncompleteRow:
+    """Proveedor no autorizado por requisitos de alta pendientes, con los nombres pendientes al consultar el resumen."""
+
+    supplier: Supplier
+    pending: list[str]
+
+
+@dataclass(frozen=True)
 class AuthorizationSummary:
     authorized: list[SummaryRow]
     skipped: list[Supplier]
+    requirements_incomplete: list[IncompleteRow]
     conflicts: list[Supplier]
     provisioning_failed: list[Supplier]
 
@@ -310,7 +331,13 @@ def authorization_summary(db: Session, audit_id: int) -> AuthorizationSummary | 
         delivery = credentials_status(db, supplier.id)
         state = "pending" if delivery is None else ("sent" if delivery.status == DeliveryStatus.SENT else "failed")
         rows.append(SummaryRow(supplier, state, delivery))
-    return AuthorizationSummary(rows, listed("skipped"), listed("conflicts"), listed("provisioning_failed"))
+    # Los requisitos pendientes se recalculan al mostrar el resumen, como el estado del correo (D6 de HU-21).
+    incomplete = listed("requirements_incomplete")
+    pending = requirements.pending_requirements(db, incomplete)
+    incomplete_rows = [IncompleteRow(s, [t.name for t in pending[s.id]]) for s in incomplete]
+    return AuthorizationSummary(
+        rows, listed("skipped"), incomplete_rows, listed("conflicts"), listed("provisioning_failed")
+    )
 
 
 def password_state(user: User | None) -> str | None:

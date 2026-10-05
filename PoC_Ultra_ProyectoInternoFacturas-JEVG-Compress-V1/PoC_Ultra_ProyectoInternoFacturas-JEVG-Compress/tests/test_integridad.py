@@ -12,7 +12,7 @@ from app.core.database import SessionLocal
 from app.core.errors import BusinessRuleError
 from app.models import Contract, Document, Invoice, Supplier
 from app.services.reconciliation_service import reconcile_amount
-from tests.conftest import csrf, invoice_by_number, login, supplier_by_email
+from tests.conftest import active_contract, csrf, invoice_by_number, login, supplier_by_email
 
 
 @pytest.fixture()
@@ -161,6 +161,13 @@ def test_numero_unico_por_proveedor(db):
         "UPDATE documents SET processing_status = 'RARO'",
         "UPDATE invoice_document_types SET national_requirement = 'MANDATORY' WHERE code = 'ADDITIONAL'",
         "UPDATE invoice_document_types SET international_requirement = 'MANDATORY' WHERE code = 'ADDITIONAL'",
+        # Niveles de los requisitos de alta (HU-21).
+        "UPDATE supplier_document_types SET persona_moral_requirement = 'MANDATORY' WHERE code = 'POWER_OF_ATTORNEY'",
+        "UPDATE supplier_document_types SET persona_fisica_requirement = 'MANDATORY' WHERE code = 'TAX_STATUS'",
+        "UPDATE supplier_document_types SET international_requirement = 'MANDATORY' WHERE code = 'TAX_STATUS'",
+        # Estatus del contrato y nivel de los requisitos del contrato (HU-22).
+        "UPDATE contracts SET status = 'PENDIENTE'",
+        "UPDATE contract_document_types SET requirement = 'MANDATORY' WHERE code = 'CONTRACT_ANNEXES'",
     ],
 )
 def test_check_rechaza_valores_invalidos_por_sql_directo(db, sql):
@@ -279,7 +286,7 @@ def test_rutas_relativas_en_documentos():
     assert paths
     for path in paths:
         assert not path.startswith("/") and "\\" not in path and ":" not in path
-        assert path.split("/")[0] in {"invoices", "suppliers"}
+        assert path.split("/")[0] in {"invoices", "suppliers", "contracts"}
 
 
 def test_contrato_con_vigencia_invertida_muestra_error(client):
@@ -427,6 +434,117 @@ def test_formatos_invalidos(db, formats):
 def test_tipo_soporte_se_puede_desactivar(db):
     insert_document_type(db, "Reporte de pruebas")
     db.execute(text("UPDATE invoice_document_types SET is_active = false WHERE name = 'Reporte de pruebas'"))
+
+
+# Requisitos de alta del proveedor (HU-21).
+
+
+def insert_supplier_requirement(db, name: str) -> None:
+    db.execute(
+        text(
+            "INSERT INTO supplier_document_types (code, name, is_system, is_active, persona_moral_requirement,"
+            " persona_fisica_requirement, international_requirement, created_at, updated_at) VALUES (:code, :name,"
+            " false, true, 'NOT_APPLICABLE', 'NOT_APPLICABLE', 'NOT_APPLICABLE', now(), now())"
+        ),
+        {"code": f"REQUISITO_TST_{uuid4().hex[:8]}", "name": name},
+    )
+
+
+def test_requisito_del_sistema_desactivado_por_sql(db):
+    with pytest.raises(IntegrityError, match='violates check constraint "ck_supplier_document_types_system_active"'):
+        db.execute(text("UPDATE supplier_document_types SET is_active = false WHERE code = 'TAX_STATUS'"))
+
+
+def test_requisito_con_nombre_repetido_con_otra_capitalizacion(db):
+    with pytest.raises(IntegrityError, match='violates unique constraint "uq_supplier_document_types_name_lower"'):
+        insert_supplier_requirement(db, "PODERES")
+
+
+def test_requisito_con_clave_repetida(db):
+    with pytest.raises(IntegrityError, match='violates unique constraint "uq_supplier_document_types_code"'):
+        db.execute(text("UPDATE supplier_document_types SET code = 'TAX_STATUS' WHERE code = 'LOCATION'"))
+
+
+def test_requisito_del_administrador_se_puede_desactivar(db):
+    insert_supplier_requirement(db, "Requisito de pruebas")
+    db.execute(text("UPDATE supplier_document_types SET is_active = false WHERE name = 'Requisito de pruebas'"))
+
+
+SUPPLIER_LEVEL_COLUMNS = ["persona_moral_requirement", "persona_fisica_requirement", "international_requirement"]
+
+
+@pytest.mark.parametrize("column", SUPPLIER_LEVEL_COLUMNS)
+def test_contrato_devuelto_al_alta_del_proveedor_por_sql(db, column):
+    with pytest.raises(IntegrityError, match='violates check constraint "ck_supplier_document_types_fixed_levels"'):
+        db.execute(text(f"UPDATE supplier_document_types SET {column} = 'OPTIONAL' WHERE code = 'SUPPLIER_CONTRACT'"))
+
+
+# Requisitos de alta del contrato (HU-22).
+
+
+def insert_contract_requirement(db, name: str) -> None:
+    db.execute(
+        text(
+            "INSERT INTO contract_document_types (code, name, is_system, is_active, requirement, allows_multiple,"
+            " created_at, updated_at) VALUES (:code, :name, false, true, 'NOT_APPLICABLE', false, now(), now())"
+        ),
+        {"code": f"REQ_CONTRATO_TST_{uuid4().hex[:8]}", "name": name},
+    )
+
+
+def test_contrato_opcional_por_sql(db):
+    with pytest.raises(IntegrityError, match='violates check constraint "ck_contract_document_types_fixed_levels"'):
+        db.execute(text("UPDATE contract_document_types SET requirement = 'OPTIONAL' WHERE code = 'SIGNED_CONTRACT'"))
+
+
+def test_requisito_del_contrato_del_sistema_desactivado_por_sql(db):
+    with pytest.raises(IntegrityError, match='violates check constraint "ck_contract_document_types_system_active"'):
+        db.execute(text("UPDATE contract_document_types SET is_active = false WHERE code = 'CONTRACT_ANNEXES'"))
+
+
+def test_requisito_del_contrato_con_nombre_repetido_con_otra_capitalizacion(db):
+    with pytest.raises(IntegrityError, match='violates unique constraint "uq_contract_document_types_name_lower"'):
+        insert_contract_requirement(db, "ANEXOS")
+
+
+def test_requisito_del_contrato_con_clave_repetida(db):
+    with pytest.raises(IntegrityError, match='violates unique constraint "uq_contract_document_types_code"'):
+        db.execute(
+            text("UPDATE contract_document_types SET code = 'CONTRACT_PURCHASE_ORDER' WHERE code = 'CONTRACT_ANNEXES'")
+        )
+
+
+def test_requisito_del_contrato_del_administrador_se_puede_desactivar(db):
+    insert_contract_requirement(db, "Requisito de contrato de pruebas")
+    db.execute(
+        text("UPDATE contract_document_types SET is_active = false WHERE name = 'Requisito de contrato de pruebas'")
+    )
+
+
+@pytest.mark.parametrize("owner", ["invoice_id", "supplier_id"])
+def test_documento_de_contrato_con_otro_dueno(db, owner):
+    invoice = invoice_by_number("A-CORRECTA")
+    owner_id = invoice.id if owner == "invoice_id" else invoice.supplier_id
+    with pytest.raises(IntegrityError, match='violates check constraint "ck_documents_contract_owner"'):
+        db.execute(text(f"UPDATE documents SET {owner} = :owner WHERE contract_id IS NOT NULL"), {"owner": owner_id})
+
+
+def test_borrado_sql_de_contrato_con_documentos(db):
+    # Contrato sin facturas: solo su contrato firmado lo referencia.
+    contract = active_contract(
+        db,
+        supplier_by_email("proveedor1@poc.local").id,
+        project_name="Contrato con documentos",
+        project_leader="L",
+        authorized_technology="T",
+        authorized_amount=Decimal("1000.00"),
+        start_date=date(2026, 1, 1),
+        end_date=date(2026, 12, 31),
+    )
+    with pytest.raises(
+        IntegrityError, match='violates RESTRICT setting of foreign key constraint "fk_documents_contract_id_contracts"'
+    ):
+        db.execute(text("DELETE FROM contracts WHERE id = :id"), {"id": contract.id})
 
 
 # Plantillas de correo (HU-05). updated_by con ON DELETE RESTRICT lo cubre la prueba general de pg_constraint.

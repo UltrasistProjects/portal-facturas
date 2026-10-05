@@ -2,6 +2,7 @@ import { expect, test, type Page } from '@playwright/test';
 import { leerEstado } from '../lib/estado';
 import { ejecutarHU } from '../lib/hu';
 import { cargarDocumento, clicNavegando, resumenObligatorios, texto } from '../lib/portal';
+import { escenarioEditarEliminar } from '../lib/requisitos';
 
 /** Abre la carga documental de una factura del proveedor buscandola por su numero. */
 async function cargaDocumental(page: Page, numero: string): Promise<void> {
@@ -20,13 +21,13 @@ test('HU-04 · Definición de archivos requeridos por tipo de proveedor', async 
     await hu.escenario('Configuración diferenciada para proveedores Nacional e Internacional', async () => {
       await hu.paso(
         admin,
-        'Abrir Administración › Archivos mínimos',
+        'Abrir Requisitos mínimos › Archivos de factura',
         'La tabla muestra cada tipo de documento con un nivel (Obligatorio / Opcional / No aplica) para Nacional y otro para Internacional; los niveles fijos (CFDI e Invoice) aparecen con candado.',
         async () => {
           await admin.goto('/admin/required-documents');
           await expect(admin.locator('h1')).toHaveText('Archivos mínimos');
           const encabezados = await admin.locator('.requirements-table thead th').allInnerTexts();
-          expect(encabezados.map((h) => h.trim().toUpperCase())).toEqual(['TIPO DE DOCUMENTO', 'FORMATOS', 'NACIONAL', 'INTERNACIONAL']);
+          expect(encabezados.map((h) => h.trim().toUpperCase())).toEqual(['TIPO DE DOCUMENTO', 'FORMATOS', 'NACIONAL', 'INTERNACIONAL', 'ACCIONES']);
           const xml = admin.locator('.requirements-table tbody tr').filter({ hasText: 'XML del CFDI' });
           await expect(xml.locator('td').nth(2)).toContainText('Obligatorio');
           await expect(xml.locator('td').nth(2)).toContainText('El proveedor nacional factura con CFDI');
@@ -177,5 +178,18 @@ test('HU-04 · Definición de archivos requeridos por tipo de proveedor', async 
       },
       { requiere: ['Alta de un tipo de documento soporte obligatorio sólo para el proveedor Internacional'] },
     );
+
+    await escenarioEditarEliminar(hu, admin, {
+      url: '/admin/required-documents',
+      nombre: `Temporal QA ${run}`,
+      avisoEditado: 'Tipo de documento actualizado',
+      crear: async (nombre) => {
+        await admin.locator('summary', { hasText: 'Nuevo tipo de documento soporte' }).click();
+        await admin.locator('#new-name').fill(nombre);
+        await admin.locator('#new-PDF').check();
+        await clicNavegando(admin, admin.getByRole('button', { name: 'Crear tipo de documento' }));
+        await expect(admin.locator('.alert-success')).toHaveText('Tipo de documento creado');
+      },
+    });
   });
 });

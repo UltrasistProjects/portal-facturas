@@ -21,6 +21,7 @@ DEDICATED_RULES = {
     DocumentType.APPROVAL: ("DOC-004", "ERROR"),
     DocumentType.FOREIGN_INVOICE: ("DOC-008", "CRITICAL"),
 }
+CONTRACT_COMPLETE = "Requisitos del contrato completos"
 NOT_REQUIRED = {
     SupplierOrigin.NATIONAL: "No requerido para proveedores nacionales",
     SupplierOrigin.INTERNATIONAL: "No requerido para proveedores internacionales",
@@ -46,10 +47,11 @@ def document_rules(
     required: Iterable[RequiredDocument],
     origin: SupplierOrigin,
     processable: bool,
-    contract_available: bool,
+    contract_pending: list[str] | None,
 ):
     """Reglas documentales segun los archivos minimos configurados para el origen del proveedor (HU-04). `present`
-    son las claves de los documentos vigentes; `required`, los tipos activos Obligatorios en el orden del catalogo."""
+    son las claves de los documentos vigentes; `required`, los tipos activos Obligatorios en el orden del catalogo;
+    `contract_pending`, los requisitos obligatorios del contrato sin documento (HU-22), o None sin contrato."""
     required = list(required)
     by_code = {document.code: document for document in required}
 
@@ -69,18 +71,7 @@ def document_rules(
             DocumentType.APPROVAL,
         )
     ]
-    results.append(
-        outcome(
-            "DOC-005",
-            "DOC",
-            contract_available,
-            "ERROR",
-            "Contrato/anexo disponible",
-            "Falta contrato/anexo",
-            "Contrato activo",
-            contract_available,
-        )
-    )
+    results.append(contract_rule(contract_pending))
     results.append(
         outcome(
             "DOC-006",
@@ -103,3 +94,22 @@ def document_rules(
         if document.code not in DEDICATED_RULES
     ]
     return results
+
+
+def contract_rule(pending: list[str] | None):
+    """DOC-005: los requisitos obligatorios del contrato de la factura, con la configuracion vigente (HU-22). Solo
+    cuentan los documentos del contrato, no los de la factura."""
+    if pending is None:
+        return outcome(
+            "DOC-005", "DOC", False, "ERROR", "Contrato/anexo disponible", "Falta contrato/anexo", CONTRACT_COMPLETE
+        )
+    return outcome(
+        "DOC-005",
+        "DOC",
+        not pending,
+        "ERROR",
+        "Contrato/anexo disponible",
+        f"Faltan documentos del contrato: {', '.join(pending)}",
+        CONTRACT_COMPLETE,
+        ", ".join(pending) or "Completos",
+    )

@@ -48,6 +48,8 @@ MSG_CHANGED = "La configuración cambió mientras la editaba. Recargue la págin
 MSG_DUPLICATE_NAME = "Ya existe un tipo de documento con ese nombre"
 MSG_SYSTEM_TYPE = "Los tipos de documento del sistema no se pueden editar ni desactivar"
 MSG_NOT_FOUND = "Tipo de documento no encontrado"
+MSG_SYSTEM_DELETE = "Los elementos del sistema no se pueden eliminar"
+MSG_IN_USE = "El tipo ya tiene documentos cargados; desactívelo en su lugar"
 MSG_NOT_OFFERED = "El tipo de documento no aplica a esta factura"
 
 
@@ -139,6 +141,7 @@ def offered_type(db: Session, invoice: Invoice, code: str) -> InvoiceDocumentTyp
     offered = next((t for t in offered_types(db, invoice.supplier.origin) if t.code == code), None)
     if offered is None:
         raise InvalidInputError(MSG_NOT_OFFERED)
+    _share_lock(db, InvoiceDocumentType, offered.id)
     return offered
 
 
@@ -163,6 +166,15 @@ def _support_type(db: Session, type_id: int) -> InvoiceDocumentType:
     if document_type.is_system:
         raise BusinessRuleError(MSG_SYSTEM_TYPE)
     return document_type
+
+
+def _in_use(db: Session, code: str) -> bool:
+    return db.scalar(select(Document.id).where(Document.document_type == code).limit(1)) is not None
+
+
+def _share_lock(db: Session, model, type_id: int) -> None:
+    """Bloqueo compartido de la fila del tipo durante la carga: impide su eliminacion hasta el commit."""
+    db.execute(select(model.id).where(model.id == type_id).with_for_update(key_share=True, read=True))
 
 
 def _ensure_unique_name(db: Session, name: str, exclude_id: int | None = None) -> None:
@@ -319,3 +331,35 @@ def set_active(db: Session, type_id: int, user_id: int, active: bool) -> bool:
         {"is_active": active},
     )
     return True
+
+
+def delete_type(db: Session, type_id: int, user_id: int) -> None:
+    """Elimina un tipo soporte sin documentos. La fila se bloquea FOR UPDATE: una carga concurrente la
+    tiene FOR KEY SHARE, asi que no queda un documento con la clave de un tipo eliminado. Con documentos (vigentes o
+    reemplazados) responde 409 y sugiere desactivarlo."""
+    _lock(db)
+    document_type = db.get(InvoiceDocumentType, type_id, with_for_update=True)
+    if document_type is None:
+        raise NotFoundError(MSG_NOT_FOUND)
+    if document_type.is_system:
+        raise BusinessRuleError(MSG_SYSTEM_DELETE)
+    if _in_use(db, document_type.code):
+        raise BusinessRuleError(MSG_IN_USE)
+    audit(
+        db,
+        "INVOICE_DOCUMENT_TYPE_DELETED",
+        ENTITY,
+        document_type.id,
+        user_id,
+        old={
+            "code": document_type.code,
+            "name": document_type.name,
+            "description": document_type.description,
+            "formats": document_type.formats,
+            "is_active": document_type.is_active,
+            "national": document_type.national_requirement.value,
+            "international": document_type.international_requirement.value,
+        },
+    )
+    db.delete(document_type)
+    db.flush()

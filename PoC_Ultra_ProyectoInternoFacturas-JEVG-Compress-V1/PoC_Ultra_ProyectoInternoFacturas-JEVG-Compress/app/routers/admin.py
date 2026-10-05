@@ -10,9 +10,13 @@ from app.core.constants import (
     CATALOG_CODE_FORMATS,
     CATALOG_LABELS,
     DOCUMENT_REQUIREMENT_LABELS,
+    FIXED_CONTRACT_REQUIREMENT_REASONS,
     FIXED_REQUIREMENT_REASONS,
+    FIXED_SUPPLIER_REQUIREMENT_REASONS,
     FORMAT_EXTENSIONS,
+    REQUIREMENT_PROFILE_LABELS,
     CatalogType,
+    RequirementProfile,
     Role,
     SupplierOrigin,
 )
@@ -25,11 +29,13 @@ from app.repositories.pagination import back_to, list_query, paginate, search
 from app.routers.common import templates
 from app.schemas import UserCreate, validation_message
 from app.services import catalog_service as catalogs
+from app.services import contract_requirements_service as contract_requirements
 from app.services import document_requirements_service as requirements
 from app.services import identity_service as identity
 from app.services import mail_layout, session_service
 from app.services import notification_service as notifications
 from app.services import notification_templates as templates_service
+from app.services import supplier_requirements_service as supplier_requirements
 from app.services import validation_settings_service as validation_settings
 from app.services.audit_service import audit
 from app.services.catalog_template import build_catalog_template, template_filename
@@ -296,6 +302,7 @@ REQUIRED_DOCUMENTS_NOTICES = {
     "created": "Tipo de documento creado",
     "updated": "Tipo de documento actualizado",
     "status": "Estado del tipo de documento actualizado",
+    "deleted": "Tipo eliminado",
 }
 ORIGIN_COLUMNS = [
     (SupplierOrigin.NATIONAL, "national", "Nacional"),
@@ -412,6 +419,284 @@ async def set_document_type_status(
         return _required_documents_error(request, db, user, exc)
     db.commit()
     return _required_documents_done("status" if changed else "unchanged")
+
+
+@router.post("/required-documents/types/{type_id}/delete")
+async def delete_document_type(
+    type_id: int, request: Request, db: Session = Depends(get_db), user=Depends(require_roles(Role.ADMINISTRADOR))
+):
+    await validate_csrf(request)
+    try:
+        requirements.delete_type(db, type_id, user.id)
+    except BusinessRuleError as exc:
+        return _required_documents_error(request, db, user, exc)
+    db.commit()
+    return _required_documents_done("deleted")
+
+
+# Requisitos de alta del proveedor (HU-21). La logica vive en supplier_requirements_service; estas rutas solo
+# traducen HTTP, como las de Archivos minimos.
+SUPPLIER_REQUIREMENTS_URL = "/admin/supplier-requirements"
+SUPPLIER_REQUIREMENTS_NOTICES = {
+    "saved": "Configuración guardada",
+    "unchanged": "Sin cambios",
+    "created": "Requisito creado",
+    "updated": "Requisito actualizado",
+    "status": "Estado del requisito actualizado",
+    "deleted": "Tipo eliminado",
+}
+PROFILE_COLUMNS = [(profile, REQUIREMENT_PROFILE_LABELS[profile]) for profile in RequirementProfile]
+
+
+def _supplier_requirements_page(
+    request: Request, db: Session, user, error: str | None = None, status_code: int = 200, notice: str | None = None
+):
+    types = supplier_requirements.catalog(db)
+    context = {
+        "user": user,
+        "active_types": [t for t in types if t.is_active],
+        "inactive_types": [t for t in types if not t.is_active],
+        "config_version": supplier_requirements.config_version(types),
+        "profiles": PROFILE_COLUMNS,
+        "levels": DOCUMENT_REQUIREMENT_LABELS,
+        "fixed_requirement": supplier_requirements.fixed_requirement,
+        "fixed_reasons": FIXED_SUPPLIER_REQUIREMENT_REASONS,
+        "error": error,
+        "notice": notice,
+    }
+    return templates.TemplateResponse(request, "admin/supplier_requirements.html", context, status_code=status_code)
+
+
+def _supplier_requirements_error(request: Request, db: Session, user, exc: BusinessRuleError):
+    db.rollback()  # nada se guarda y se libera el bloqueo consultivo antes de volver a pintar
+    return _supplier_requirements_page(request, db, user, exc.message, exc.status_code)
+
+
+def _supplier_requirements_done(result: str):
+    return RedirectResponse(f"{SUPPLIER_REQUIREMENTS_URL}?ok={result}", status_code=303)
+
+
+@router.get("/supplier-requirements")
+def supplier_requirements_page(
+    request: Request, ok: str = "", db: Session = Depends(get_db), user=Depends(require_roles(Role.ADMINISTRADOR))
+):
+    return _supplier_requirements_page(request, db, user, notice=SUPPLIER_REQUIREMENTS_NOTICES.get(ok))
+
+
+@router.post("/supplier-requirements")
+async def save_supplier_requirements(
+    request: Request, db: Session = Depends(get_db), user=Depends(require_roles(Role.ADMINISTRADOR))
+):
+    await validate_csrf(request)
+    form = {key: value for key, value in (await request.form()).items() if isinstance(value, str)}
+    try:
+        changed = supplier_requirements.save_requirements(db, form, user.id)
+    except BusinessRuleError as exc:
+        return _supplier_requirements_error(request, db, user, exc)
+    db.commit()
+    return _supplier_requirements_done("saved" if changed else "unchanged")
+
+
+@router.post("/supplier-requirements/types")
+async def create_supplier_requirement(
+    request: Request,
+    name: str = Form(""),
+    description: str = Form(""),
+    persona_moral_requirement: str = Form("NOT_APPLICABLE"),
+    persona_fisica_requirement: str = Form("NOT_APPLICABLE"),
+    international_requirement: str = Form("NOT_APPLICABLE"),
+    db: Session = Depends(get_db),
+    user=Depends(require_roles(Role.ADMINISTRADOR)),
+):
+    await validate_csrf(request)
+    try:
+        supplier_requirements.create_type(
+            db,
+            user.id,
+            name,
+            description,
+            persona_moral_requirement=persona_moral_requirement,
+            persona_fisica_requirement=persona_fisica_requirement,
+            international_requirement=international_requirement,
+        )
+    except BusinessRuleError as exc:
+        return _supplier_requirements_error(request, db, user, exc)
+    db.commit()
+    return _supplier_requirements_done("created")
+
+
+@router.post("/supplier-requirements/types/{type_id}")
+async def update_supplier_requirement(
+    type_id: int,
+    request: Request,
+    name: str = Form(""),
+    description: str = Form(""),
+    db: Session = Depends(get_db),
+    user=Depends(require_roles(Role.ADMINISTRADOR)),
+):
+    await validate_csrf(request)
+    try:
+        changed = supplier_requirements.update_type(db, type_id, user.id, name, description)
+    except BusinessRuleError as exc:
+        return _supplier_requirements_error(request, db, user, exc)
+    db.commit()
+    return _supplier_requirements_done("updated" if changed else "unchanged")
+
+
+@router.post("/supplier-requirements/types/{type_id}/status")
+async def set_supplier_requirement_status(
+    type_id: int,
+    request: Request,
+    active: str = Form(""),
+    db: Session = Depends(get_db),
+    user=Depends(require_roles(Role.ADMINISTRADOR)),
+):
+    await validate_csrf(request)
+    try:
+        if active not in {"true", "false"}:
+            raise InvalidInputError("Estado inválido")
+        changed = supplier_requirements.set_active(db, type_id, user.id, active == "true")
+    except BusinessRuleError as exc:
+        return _supplier_requirements_error(request, db, user, exc)
+    db.commit()
+    return _supplier_requirements_done("status" if changed else "unchanged")
+
+
+@router.post("/supplier-requirements/types/{type_id}/delete")
+async def delete_supplier_requirement(
+    type_id: int, request: Request, db: Session = Depends(get_db), user=Depends(require_roles(Role.ADMINISTRADOR))
+):
+    await validate_csrf(request)
+    try:
+        supplier_requirements.delete_type(db, type_id, user.id)
+    except BusinessRuleError as exc:
+        return _supplier_requirements_error(request, db, user, exc)
+    db.commit()
+    return _supplier_requirements_done("deleted")
+
+
+# Requisitos de alta del contrato (HU-22). La logica vive en contract_requirements_service; estas rutas solo traducen
+# HTTP, como las de Requisitos de alta del proveedor.
+CONTRACT_REQUIREMENTS_URL = "/admin/contract-requirements"
+
+
+def _contract_requirements_page(
+    request: Request, db: Session, user, error: str | None = None, status_code: int = 200, notice: str | None = None
+):
+    types = contract_requirements.catalog(db)
+    context = {
+        "user": user,
+        "active_types": [t for t in types if t.is_active],
+        "inactive_types": [t for t in types if not t.is_active],
+        "config_version": contract_requirements.config_version(types),
+        "levels": DOCUMENT_REQUIREMENT_LABELS,
+        "fixed_requirement": contract_requirements.fixed_requirement,
+        "fixed_reasons": FIXED_CONTRACT_REQUIREMENT_REASONS,
+        "error": error,
+        "notice": notice,
+    }
+    return templates.TemplateResponse(request, "admin/contract_requirements.html", context, status_code=status_code)
+
+
+def _contract_requirements_error(request: Request, db: Session, user, exc: BusinessRuleError):
+    db.rollback()  # nada se guarda y se libera el bloqueo consultivo antes de volver a pintar
+    return _contract_requirements_page(request, db, user, exc.message, exc.status_code)
+
+
+def _contract_requirements_done(result: str):
+    return RedirectResponse(f"{CONTRACT_REQUIREMENTS_URL}?ok={result}", status_code=303)
+
+
+@router.get("/contract-requirements")
+def contract_requirements_page(
+    request: Request, ok: str = "", db: Session = Depends(get_db), user=Depends(require_roles(Role.ADMINISTRADOR))
+):
+    return _contract_requirements_page(request, db, user, notice=SUPPLIER_REQUIREMENTS_NOTICES.get(ok))
+
+
+@router.post("/contract-requirements")
+async def save_contract_requirements(
+    request: Request, db: Session = Depends(get_db), user=Depends(require_roles(Role.ADMINISTRADOR))
+):
+    await validate_csrf(request)
+    form = {key: value for key, value in (await request.form()).items() if isinstance(value, str)}
+    try:
+        changed = contract_requirements.save_requirements(db, form, user.id)
+    except BusinessRuleError as exc:
+        return _contract_requirements_error(request, db, user, exc)
+    db.commit()
+    return _contract_requirements_done("saved" if changed else "unchanged")
+
+
+@router.post("/contract-requirements/types")
+async def create_contract_requirement(
+    request: Request,
+    name: str = Form(""),
+    description: str = Form(""),
+    requirement: str = Form("NOT_APPLICABLE"),
+    allows_multiple: str = Form(""),
+    db: Session = Depends(get_db),
+    user=Depends(require_roles(Role.ADMINISTRADOR)),
+):
+    await validate_csrf(request)
+    try:
+        contract_requirements.create_type(
+            db, user.id, name, description, requirement=requirement, allows_multiple=allows_multiple == "true"
+        )
+    except BusinessRuleError as exc:
+        return _contract_requirements_error(request, db, user, exc)
+    db.commit()
+    return _contract_requirements_done("created")
+
+
+@router.post("/contract-requirements/types/{type_id}")
+async def update_contract_requirement(
+    type_id: int,
+    request: Request,
+    name: str = Form(""),
+    description: str = Form(""),
+    db: Session = Depends(get_db),
+    user=Depends(require_roles(Role.ADMINISTRADOR)),
+):
+    await validate_csrf(request)
+    try:
+        changed = contract_requirements.update_type(db, type_id, user.id, name, description)
+    except BusinessRuleError as exc:
+        return _contract_requirements_error(request, db, user, exc)
+    db.commit()
+    return _contract_requirements_done("updated" if changed else "unchanged")
+
+
+@router.post("/contract-requirements/types/{type_id}/status")
+async def set_contract_requirement_status(
+    type_id: int,
+    request: Request,
+    active: str = Form(""),
+    db: Session = Depends(get_db),
+    user=Depends(require_roles(Role.ADMINISTRADOR)),
+):
+    await validate_csrf(request)
+    try:
+        if active not in {"true", "false"}:
+            raise InvalidInputError("Estado inválido")
+        changed = contract_requirements.set_active(db, type_id, user.id, active == "true")
+    except BusinessRuleError as exc:
+        return _contract_requirements_error(request, db, user, exc)
+    db.commit()
+    return _contract_requirements_done("status" if changed else "unchanged")
+
+
+@router.post("/contract-requirements/types/{type_id}/delete")
+async def delete_contract_requirement(
+    type_id: int, request: Request, db: Session = Depends(get_db), user=Depends(require_roles(Role.ADMINISTRADOR))
+):
+    await validate_csrf(request)
+    try:
+        contract_requirements.delete_type(db, type_id, user.id)
+    except BusinessRuleError as exc:
+        return _contract_requirements_error(request, db, user, exc)
+    db.commit()
+    return _contract_requirements_done("deleted")
 
 
 # Plantillas de correo (HU-05). La logica vive en el servicio; estas rutas solo traducen HTTP (D11).

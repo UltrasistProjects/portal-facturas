@@ -36,6 +36,7 @@ export const CUENTAS = {
   admin: 'admin@poc.local',
   pmo: 'pmo@poc.local',
   proveedor1: 'proveedor1@poc.local',
+  proveedor2: 'proveedor2@poc.local',
   proveedor3: 'proveedor3@poc.local',
 } as const;
 

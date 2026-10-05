@@ -16,7 +16,7 @@ from app.models import AuditLog, Contract, Document, Invoice, InvoiceDocumentTyp
 from app.rules.document_rules import document_rules
 from app.services.file_service import ALLOWED_EXTENSIONS
 from app.services.validation_score_service import calculate_score
-from tests.conftest import ROOT, csrf, identity_account, invoice_by_number, login, supplier_by_email
+from tests.conftest import ROOT, active_contract, csrf, identity_account, invoice_by_number, login, supplier_by_email
 
 NATIONAL, INTERNATIONAL = SupplierOrigin.NATIONAL, SupplierOrigin.INTERNATIONAL
 
@@ -48,7 +48,7 @@ def by_code(results) -> dict:
 
 def test_reglas_de_proveedor_nacional_sin_vobo():
     present = {"INVOICE_XML", "INVOICE_PDF", "PURCHASE_ORDER"}
-    results = by_code(document_rules(present, REQUIRED_NATIONAL, NATIONAL, True, True))
+    results = by_code(document_rules(present, REQUIRED_NATIONAL, NATIONAL, True, []))
     assert [results[c].status for c in ("DOC-001", "DOC-002", "DOC-003")] == ["PASS"] * 3
     assert (results["DOC-004"].status, results["DOC-004"].severity) == ("FAIL", "ERROR")
     assert results["DOC-004"].message == "Falta Vo.Bo. del líder de proyecto"
@@ -60,7 +60,7 @@ def test_reglas_de_proveedor_nacional_sin_vobo():
 
 
 def test_reglas_de_proveedor_internacional_sin_invoice():
-    results = by_code(document_rules({"PURCHASE_ORDER", "APPROVAL"}, REQUIRED_INTERNATIONAL, INTERNATIONAL, True, True))
+    results = by_code(document_rules({"PURCHASE_ORDER", "APPROVAL"}, REQUIRED_INTERNATIONAL, INTERNATIONAL, True, []))
     assert (results["DOC-008"].status, results["DOC-008"].severity, results["DOC-008"].message) == (
         "FAIL",
         "CRITICAL",
@@ -76,14 +76,14 @@ def test_reglas_de_proveedor_internacional_sin_invoice():
 def test_orden_de_compra_opcional_no_descuenta_del_score():
     required = [CFDI_XML, CFDI_PDF, APPROVAL]
     present = {"INVOICE_XML", "INVOICE_PDF", "APPROVAL"}
-    results = document_rules(present, required, NATIONAL, True, True)
+    results = document_rules(present, required, NATIONAL, True, [])
     assert by_code(results)["DOC-003"].status == "NOT_APPLICABLE"
     assert calculate_score(results)["score"] == 100
 
 
 def test_tipo_soporte_obligatorio_genera_doc_009():
     hours = doc("SOPORTE_12", "Reporte de horas")
-    results = document_rules({"FOREIGN_INVOICE"}, [FOREIGN, hours], INTERNATIONAL, True, True)
+    results = document_rules({"FOREIGN_INVOICE"}, [FOREIGN, hours], INTERNATIONAL, True, [])
     doc_009 = [r for r in results if r.rule_code == "DOC-009"]
     assert [(r.status, r.severity, r.source_document, r.message) for r in doc_009] == [
         ("FAIL", "ERROR", "SOPORTE_12", "Falta Reporte de horas")
@@ -158,17 +158,16 @@ def international():
             )
             db.add(supplier)
             db.flush()
-            db.add(
-                Contract(
-                    supplier_id=supplier.id,
-                    project_name="Consultoria internacional",
-                    project_leader="Lider Demo",
-                    authorized_technology="Power Platform",
-                    authorized_amount=Decimal("100000.00"),
-                    currency="USD",
-                    start_date=date(2026, 1, 1),
-                    end_date=date(2026, 12, 31),
-                )
+            active_contract(
+                db,
+                supplier.id,
+                project_name="Consultoria internacional",
+                project_leader="Lider Demo",
+                authorized_technology="Power Platform",
+                authorized_amount=Decimal("100000.00"),
+                currency="USD",
+                start_date=date(2026, 1, 1),
+                end_date=date(2026, 12, 31),
             )
             user = User(
                 name="Proveedor internacional",
@@ -377,7 +376,13 @@ def config_snapshot() -> tuple:
 
 def config_routes() -> list[str]:
     type_id = type_by(code="ADDITIONAL").id
-    return [URL, f"{URL}/types", f"{URL}/types/{type_id}", f"{URL}/types/{type_id}/status"]
+    return [
+        URL,
+        f"{URL}/types",
+        f"{URL}/types/{type_id}",
+        f"{URL}/types/{type_id}/status",
+        f"{URL}/types/{type_id}/delete",
+    ]
 
 
 @pytest.mark.parametrize("email", ["pmo@poc.local", "proveedor1@poc.local"])
@@ -692,6 +697,103 @@ def test_tipo_del_sistema_no_se_edita_ni_desactiva(client):
         assert response.status_code == 409
         assert "Los tipos de documento del sistema no se pueden editar ni desactivar" in response.text
     assert set_status(client, purchase_order.id, "quizas").status_code == 400
+    assert config_snapshot() == before
+
+
+def delete_type(client, type_id: int, token: str | None = "auto"):
+    data = {"csrf_token": csrf(client, URL)} if token == "auto" else ({"csrf_token": token} if token else {})
+    return client.post(f"{URL}/types/{type_id}/delete", data=data, follow_redirects=False)
+
+
+def actions_of(page: str, name: str) -> str:
+    """Celda de acciones de la fila de la tabla de configuracion con ese nombre."""
+    table = re.search(r"<h2>Configuración por origen</h2>.*?</table>", page, re.S).group(0)
+    row = re.search(rf"<tr><td><strong>{re.escape(name)}</strong>.*?</tr>", table, re.S).group(0)
+    return row
+
+
+def test_acciones_editar_y_eliminar_solo_en_tipos_soporte(client, restore_catalog):
+    hours = hours_type(client)
+    page = client.get(URL).text
+    row = actions_of(page, "Reporte de horas")
+    assert f'href="?editar={hours.id}#editar-{hours.id}"' in row and 'form="eliminar-' in row
+    assert "¿Eliminar «Reporte de horas»?" in row
+    assert f'<form id="eliminar-{hours.id}" method="post" action="{URL}/types/{hours.id}/delete" hidden>' in page
+    system = actions_of(page, "Orden de compra")
+    assert "Editar" not in system and "Eliminar" not in system
+    assert (
+        f'id="editar-{hours.id}" class="admin-create border-bottom" open' in client.get(f"{URL}?editar={hours.id}").text
+    )
+
+
+def test_edicion_de_un_tipo_inactivo(client, restore_catalog):
+    hours = hours_type(client)
+    assert set_status(client, hours.id, "false").status_code == 303
+    page = client.get(URL).text
+    inactive = re.search(r"<h2>Tipos inactivos</h2>.*", page, re.S).group(0)
+    assert f'href="?editar={hours.id}#editar-{hours.id}"' in inactive
+    assert f'id="editar-{hours.id}"' in page
+    assert edit_type(client, hours.id, "Reporte de horas mensual", ("PDF",)).status_code == 303
+    assert type_by(id=hours.id).name == "Reporte de horas mensual"
+
+
+@pytest.mark.parametrize("inactive", [False, True])
+def test_eliminacion_de_un_tipo_sin_documentos(client, restore_catalog, inactive):
+    hours = hours_type(client)
+    if inactive:
+        assert set_status(client, hours.id, "false").status_code == 303
+    response = delete_type(client, hours.id)
+    assert response.status_code == 303
+    assert response.headers["location"] == f"{URL}?ok=deleted"
+    assert type_by(id=hours.id) is None
+    page = client.get(f"{URL}?ok=deleted").text
+    assert "Tipo eliminado" in page and "Reporte de horas" not in page
+    entry = last_audit("INVOICE_DOCUMENT_TYPE_DELETED")
+    assert (entry.entity_id, entry.user_id, entry.new_value) == (str(hours.id), admin_id(), None)
+    assert entry.old_value == {
+        "code": hours.code,
+        "name": "Reporte de horas",
+        "description": "Horas dedicadas en el periodo",
+        "formats": ["PDF"],
+        "is_active": not inactive,
+        "national": "NOT_APPLICABLE",
+        "international": "REQUIRED",
+    }
+
+
+@pytest.mark.parametrize("replaced", [False, True])
+def test_eliminacion_de_un_tipo_con_documentos(client, international, restore_catalog, replaced):
+    hours = hours_type(client)
+    invoice = international_invoice(client, international)
+    assert upload(client, invoice.id, hours.code, "horas.pdf", PDF).status_code == 303
+    if replaced:
+        # Solo queda un documento reemplazado (no vigente) con la clave: tambien cuenta.
+        with SessionLocal() as db:
+            db.get(Document, current_document(invoice.id, hours.code).id).is_current = False
+            db.commit()
+    login(client)
+    before = config_snapshot()
+    response = delete_type(client, hours.id)
+    assert response.status_code == 409
+    assert "El tipo ya tiene documentos cargados; desactívelo en su lugar" in response.text
+    assert config_snapshot() == before
+
+
+def test_eliminacion_de_un_tipo_del_sistema_o_inexistente(client, restore_catalog):
+    login(client)
+    before = config_snapshot()
+    response = delete_type(client, type_by(code="PURCHASE_ORDER").id)
+    assert response.status_code == 409
+    assert "Los elementos del sistema no se pueden eliminar" in response.text
+    assert delete_type(client, 999_999).status_code == 404
+    assert config_snapshot() == before
+
+
+@pytest.mark.parametrize("token", [None, "invalido"])
+def test_eliminacion_sin_token_csrf(client, restore_catalog, token):
+    hours = hours_type(client)
+    before = config_snapshot()
+    assert delete_type(client, hours.id, token).status_code == 403
     assert config_snapshot() == before
 
 

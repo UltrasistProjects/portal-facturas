@@ -286,19 +286,167 @@ def restore_notification_recipients():
     shutil.rmtree(OUTBOX, ignore_errors=True)
 
 
+def add_expedient_documents(supplier_id: int, codes, document_date=None) -> None:
+    """Documentos vigentes del expediente (sin factura) cargados directamente en la base, sin archivo en storage/:
+    los requisitos de alta solo verifican que existan (HU-21)."""
+    from sqlalchemy import select
+
+    from app.core.constants import ProcessingStatus
+    from app.core.database import SessionLocal
+    from app.models import Document, User
+
+    with SessionLocal() as db:
+        admin_id = db.scalar(select(User.id).where(User.email == "admin@poc.local"))
+        for code in codes:
+            filename = f"{code.lower()}.pdf"
+            db.add(
+                Document(
+                    supplier_id=supplier_id,
+                    document_type=code,
+                    original_filename=filename,
+                    stored_filename=filename,
+                    path=f"suppliers/{supplier_id}/{filename}",
+                    mime_type="application/pdf",
+                    file_size=1,
+                    sha256="0" * 64,
+                    uploaded_by=admin_id,
+                    processing_status=ProcessingStatus.PROCESSED,
+                    document_date=document_date,
+                    metadata_json={"scope": "supplier"},
+                    is_current=True,
+                )
+            )
+        db.commit()
+
+
+def load_requirements(*supplier_ids: int) -> None:
+    """Completa los requisitos de alta exigibles de los proveedores con la configuracion vigente (HU-21), para las
+    pruebas que autorizan proveedores."""
+    from sqlalchemy import select
+
+    from app.core.database import SessionLocal
+    from app.models import Supplier
+    from app.services import supplier_requirements_service as requirements
+
+    with SessionLocal() as db:
+        suppliers = list(db.scalars(select(Supplier).where(Supplier.id.in_(supplier_ids))))
+        pending = requirements.pending_requirements(db, suppliers)
+    for supplier_id, types in pending.items():
+        add_expedient_documents(supplier_id, [t.code for t in types])
+
+
+def contract_document(db, contract_id: int, code: str, filename: str | None = None):
+    """Documento vigente de un contrato (HU-22), con su archivo en storage/ para que siga siendo descargable y su hash
+    coincida (los respaldos lo verifican). Es solo del contrato: sin supplier_id ni invoice_id."""
+    from sqlalchemy import select
+
+    from app.core.config import settings
+    from app.core.constants import ProcessingStatus
+    from app.models import Document, User
+
+    filename = filename or f"{code.lower()}.pdf"
+    content = f"%PDF-1.4\n%{code}\n".encode()
+    path = f"contracts/{contract_id}/{secrets.token_hex(8)}.pdf"
+    target = settings.storage_path / path
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_bytes(content)
+    document = Document(
+        contract_id=contract_id,
+        document_type=code,
+        original_filename=filename,
+        stored_filename=target.name,
+        path=path,
+        mime_type="application/pdf",
+        file_size=len(content),
+        sha256=hashlib.sha256(content).hexdigest(),
+        uploaded_by=db.scalar(select(User.id).where(User.email == "admin@poc.local")),
+        processing_status=ProcessingStatus.PROCESSED,
+        metadata_json={"scope": "contract"},
+        is_current=True,
+    )
+    db.add(document)
+    db.flush()
+    return document
+
+
+def active_contract(db, supplier_id: int, **values):
+    """Contrato Activo con su contrato firmado (HU-22), listo para facturar: el alta crea contratos Registrado y DOC-005
+    exige el contrato firmado. Se agrega a la sesion `db` sin confirmarla."""
+    from app.core.constants import SIGNED_CONTRACT_DOCUMENT, ContractStatus
+    from app.models import Contract
+
+    contract = Contract(supplier_id=supplier_id, status=ContractStatus.ACTIVE, **values)
+    db.add(contract)
+    db.flush()
+    contract_document(db, contract.id, SIGNED_CONTRACT_DOCUMENT)
+    return contract
+
+
+@pytest.fixture()
+def new_contracts():
+    """Fabrica de contratos de prueba (HU-22), por omision Registrado y del proveedor demo persona moral (Autorizado),
+    con los documentos de las claves indicadas. `track` agrega a la limpieza los contratos creados por HTTP. Al
+    terminar borra sus documentos y a ellos mismos: la base de la sesion es compartida. Los contratos no deben tener
+    facturas."""
+    from datetime import date
+    from decimal import Decimal
+
+    from sqlalchemy import delete, update
+
+    from app.core.constants import ContractStatus
+    from app.core.database import SessionLocal
+    from app.models import Contract, Document
+
+    created: list[int] = []
+
+    def make(codes=(), supplier_id: int | None = None, status=ContractStatus.REGISTERED, **overrides):
+        token = secrets.token_hex(3).upper()
+        values = {
+            "supplier_id": supplier_id or supplier_by_email("proveedor1@poc.local").id,
+            "project_name": f"Contrato HU22 {token}",
+            "project_leader": "Lider de pruebas",
+            "authorized_technology": "Power Platform",
+            "authorized_amount": Decimal("1000.00"),
+            "currency": "MXN",
+            "start_date": date(2026, 1, 1),
+            "end_date": date(2026, 12, 31),
+            "status": status,
+            **overrides,
+        }
+        with SessionLocal() as db:
+            contract = Contract(**values)
+            db.add(contract)
+            db.flush()
+            for code in codes:
+                contract_document(db, contract.id, code)
+            db.commit()
+            created.append(contract.id)
+            return contract
+
+    make.track = created.append
+    yield make
+    with SessionLocal() as db:
+        documents = Document.contract_id.in_(created)
+        db.execute(update(Document).where(documents).values(replaced_document_id=None))
+        db.execute(delete(Document).where(documents))
+        db.execute(delete(Contract).where(Contract.id.in_(created)))
+        db.commit()
+
+
 @pytest.fixture()
 def registered_suppliers():
-    """Fabrica de proveedores Registrado (HU-02). Al terminar borra sus usuarios, las sesiones y la auditoria de esos
-    usuarios, y a ellos mismos: la base de la sesion es compartida."""
+    """Fabrica de proveedores Registrado (HU-02), por omision con sus requisitos de alta completos (HU-21) para poder
+    autorizarlos; `requirements=False` los deja sin documentos. Al terminar borra sus documentos, sus usuarios, las
+    sesiones y la auditoria de esos usuarios, y a ellos mismos: la base de la sesion es compartida."""
     from sqlalchemy import delete, select
 
     from app.core.constants import SupplierStatus, SupplierType
     from app.core.database import SessionLocal
-    from app.models import AuditLog, Supplier, User, UserSession
+    from app.models import AuditLog, Document, Supplier, User, UserSession
 
     created: list[int] = []
 
-    def make(count: int = 1, **overrides) -> list[Supplier]:
+    def make(count: int = 1, requirements: bool = True, **overrides) -> list[Supplier]:
         rows = []
         with SessionLocal() as db:
             for _ in range(count):
@@ -317,6 +465,8 @@ def registered_suppliers():
                 rows.append(supplier)
             db.commit()
         created.extend(s.id for s in rows)
+        if requirements:
+            load_requirements(*(s.id for s in rows))
         return rows
 
     yield make
@@ -325,6 +475,7 @@ def registered_suppliers():
         user_ids = [u.id for u in users]
         db.execute(delete(UserSession).where(UserSession.user_id.in_(user_ids)))
         db.execute(delete(AuditLog).where(AuditLog.user_id.in_(user_ids)))
+        db.execute(delete(Document).where(Document.supplier_id.in_(created), Document.invoice_id.is_(None)))
         db.execute(delete(User).where(User.id.in_(user_ids)))
         db.execute(delete(Supplier).where(Supplier.id.in_(created)))
         db.commit()

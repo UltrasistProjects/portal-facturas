@@ -110,6 +110,23 @@ def test_pdf_danado(client):
     assert failure["level"] == "WARNING" and failure["error_type"] and failure["error"]
 
 
+def test_subida_de_documento_de_contrato_registrada(client, new_contracts):
+    contract = new_contracts()
+    login(client)
+    offset = log_offset()
+    response = client.post(
+        f"/contracts/{contract.id}/documents",
+        data={"document_type": "SIGNED_CONTRACT", "csrf_token": csrf(client, "/")},
+        files={"upload": ("contrato-confidencial.pdf", PDF, "application/octet-stream")},
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+    (entry,) = [e for e in events_since(offset) if e.get("event") == "document.uploaded"]
+    assert entry["contract_id"] == contract.id and entry["document_type"] == "SIGNED_CONTRACT"
+    assert entry["extension"] == ".pdf" and entry["size_bytes"] == len(PDF)
+    assert "contrato-confidencial" not in json.dumps(entry)
+
+
 def test_sin_datos_sensibles_en_el_log(client, restore_notification_recipients):
     offset = log_offset()
     rejected = login(client, "proveedor1@poc.local", nonce="nonce-ajeno")  # callback rechazado (LOGIN_FAILED)
@@ -313,13 +330,41 @@ def test_autorizacion_masiva_registrada(client, registered_suppliers, restore_no
     assert response.status_code == 303
     events = events_since(offset)
     [event] = [e for e in events if e.get("event") == "supplier.bulk_authorize"]
-    counts = {key: event[key] for key in ("requested", "authorized", "existing_access", "skipped", "conflicts")}
-    assert counts == {"requested": 4, "authorized": 3, "existing_access": 0, "skipped": 1, "conflicts": 0}
+    keys = ("requested", "authorized", "existing_access", "skipped", "requirements_incomplete", "conflicts")
+    counts = {key: event[key] for key in keys}
+    assert counts == {
+        "requested": 4,
+        "authorized": 3,
+        "existing_access": 0,
+        "skipped": 1,
+        "requirements_incomplete": 0,
+        "conflicts": 0,
+    }
     assert (event["credentials_sent"], event["credentials_failed"]) == (3, 0) and "duration_ms" in event
     content = json.dumps(events, ensure_ascii=False)
     for supplier in rows:
         assert supplier.email not in content and supplier.business_name not in content
     assert "Contraseña" not in content and "contrasena" not in content
+
+
+def test_autorizacion_con_requisitos_incompletos_registrada(
+    client, registered_suppliers, restore_notification_recipients
+):
+    (complete,) = registered_suppliers()
+    (incomplete,) = registered_suppliers(requirements=False)
+    login(client)
+    offset = log_offset()
+    client.post(
+        "/suppliers/authorize",
+        data={"supplier_ids": [str(complete.id), str(incomplete.id)], "csrf_token": csrf(client, "/suppliers")},
+        follow_redirects=False,
+    )
+    events = events_since(offset)
+    [event] = [e for e in events if e.get("event") == "supplier.bulk_authorize"]
+    assert (event["requested"], event["authorized"], event["requirements_incomplete"]) == (2, 1, 1)
+    # Sin nombres de requisitos ni datos del proveedor.
+    content = json.dumps(events, ensure_ascii=False)
+    assert "Poderes" not in content and "Acta constitutiva" not in content and incomplete.email not in content
 
 
 # --- Reglas de Validacion y catalogos (HU-06, HU-07) --------------------------------------------------------------

@@ -53,7 +53,7 @@ python scripts/init_db.py
 uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
-O bien `./run_local.sh`, que hace lo mismo. Abra <http://127.0.0.1:8000>: el portal lo lleva a la página de inicio de sesión de Keycloak. El health check está en <http://127.0.0.1:8000/health>.
+O bien `./run_local.sh` (desde cualquier directorio), que hace lo mismo y además crea `.venv` si falta, no lanza un segundo uvicorn si el portal ya responde y, con dos motores de Docker (el del sistema y Docker Desktop), usa el contexto cuyo `db` publica `POSTGRES_PORT` y detiene, sin borrar, la copia del proyecto que corra en el otro; para forzar uno: `DOCKER_CONTEXT=default ./run_local.sh`. Repítalo tras reiniciar la máquina: Keycloak no se reinicia solo. Abra <http://127.0.0.1:8000>: el portal lo lleva a la página de inicio de sesión de Keycloak. El health check está en <http://127.0.0.1:8000/health>.
 
 ## Cuentas demo
 
@@ -276,16 +276,16 @@ Todos los listados de registros se paginan en la base de datos (`LIMIT/OFFSET`) 
 | Audit Log (`/admin/audit`) | 50 | más recientes | — |
 
 - La búsqueda no distingue mayúsculas y trata `%` y `_` como caracteres literales.
-- **Altas:** crear un usuario, un contrato o una clave regresa al listado buscando el registro creado, con el aviso "Usuario creado", "Contrato creado" o "Clave agregada". El alta de un proveedor lleva a su expediente.
+- **Altas:** crear un usuario o una clave regresa al listado buscando el registro creado, con el aviso "Usuario creado" o "Clave agregada". El alta de un proveedor lleva a su expediente, y la de un contrato, al expediente del contrato.
 - **Acciones:** habilitar un usuario, registrar una enmienda o editar una clave regresa a la misma búsqueda y página.
 - **Transacciones:** cada alta o acción se confirma en una sola transacción de PostgreSQL con su auditoría: o queda todo o no queda nada. Los correos salen después de confirmar y un envío fallido se reenvía desde la pantalla.
 - No se paginan los formularios de configuración (archivos mínimos, reglas, plantillas, índice de catálogos) ni los resultados de un archivo (vista previa de la carga masiva).
 
 ## Reglas implementadas
 
-- `DOC-001..009`: archivos mínimos según el origen del proveedor (XML y PDF del CFDI, orden de compra, Vo.Bo., Invoice y otros tipos obligatorios; ver [Archivos mínimos por tipo de proveedor](#archivos-mínimos-por-tipo-de-proveedor)), contrato/anexo disponible, complemento y procesabilidad.
+- `DOC-001..009`: archivos mínimos según el origen del proveedor (XML y PDF del CFDI, orden de compra, Vo.Bo., Invoice y otros tipos obligatorios; ver [Archivos mínimos por tipo de proveedor](#archivos-mínimos-por-tipo-de-proveedor)), contrato/anexo disponible según los [requisitos del contrato](#requisitos-de-alta-del-contrato) (`DOC-005`: sólo cuentan los documentos del contrato), complemento y procesabilidad.
 - `XML-001..010`: parseabilidad, RFC del receptor, método y forma de pago, UsoCFDI, UUID, moneda, esenciales, razón social y código postal del receptor, con los valores de [Reglas de validación](#reglas-de-validación).
-- `SUP-001..004`: proveedor activo, contrato vigente, expediente mínimo y vigencia aproximada (`SUP-003` y `SUP-004` no aplican al proveedor internacional).
+- `SUP-001..004`: proveedor activo, contrato vigente, expediente mínimo según los [requisitos de alta](#requisitos-de-alta-del-proveedor) y vigencia aproximada (`SUP-004` no aplica al proveedor internacional; `SUP-003` tampoco, mientras no tenga requisitos de alta exigibles).
 - `CON-001..004`: contrato, proyecto, periodo y heurística mes/tecnología.
 - `DAT-001`: recepción del día 1 al 20; advertencia no fatal.
 - `FIN-001..006`: límite autorizado, consistencia, moneda, UUID/número duplicados y diferencia absoluta/porcentual. `FIN-007`: Invoice duplicado por nombre de archivo (sólo internacional).
@@ -333,7 +333,7 @@ El Administrador define en **Administración › Reglas de validación** (`/admi
 
 ## Archivos mínimos por tipo de proveedor
 
-El Administrador define en **Administración › Archivos mínimos** (`/admin/required-documents`) qué archivos debe cargar el proveedor con cada factura, por separado para el proveedor **Nacional** y el **Internacional** (`suppliers.origin`):
+El Administrador define en **Requisitos mínimos › Archivos de factura** (`/admin/required-documents`) qué archivos debe cargar el proveedor con cada factura, por separado para el proveedor **Nacional** y el **Internacional** (`suppliers.origin`):
 
 | Nivel | En la carga documental | En la verificación y el envío |
 | --- | --- | --- |
@@ -344,12 +344,47 @@ El Administrador define en **Administración › Archivos mínimos** (`/admin/re
 - **Catálogo** (`invoice_document_types`): 11 tipos del sistema, con nombre en español, descripción y formatos admitidos (PDF, PNG, JPEG, XML, TXT), más los tipos soporte que cree el Administrador. La carga documental rechaza con HTTP 400, antes de escribir el archivo, un tipo que no aplica a la factura o una extensión que el tipo no admite.
 - **Valores iniciales:** Nacional exige XML y PDF del CFDI, orden de compra y Vo.Bo., y conserva el comportamiento anterior. Internacional exige Invoice (PDF), orden de compra y Vo.Bo. Contrato, anexo y documentación adicional son opcionales para ambos; los complementos de pago sólo aplican al Nacional.
 - **Niveles fijos:** XML y PDF del CFDI son obligatorios para el Nacional y no aplican al Internacional; el Invoice, al revés. El "Acuse de cancelación" no aplica a ninguno: sólo se carga al [cancelar la factura](#cancelación-de-la-factura). La pantalla los muestra con candado, el servidor rechaza cambiarlos (409) y la base de datos los garantiza con un `CHECK`.
-- **Tipos soporte:** el Administrador los da de alta (nombre, descripción, formatos y un nivel por origen, "No aplica" por defecto), los edita y los desactiva o reactiva. Su clave es `SOPORTE_<id>`. Nunca se borran, y los documentos ya cargados siguen visibles y descargables en el detalle de la factura. Los tipos del sistema no se editan ni se desactivan.
+- **Tipos soporte:** el Administrador los da de alta (nombre, descripción, formatos y un nivel por origen, "No aplica" por defecto), los edita, los desactiva o reactiva y los elimina. Su clave es `SOPORTE_<id>`. Al desactivarlos, los documentos ya cargados siguen visibles y descargables en el detalle de la factura. Los tipos del sistema no se editan, no se desactivan ni se eliminan. Desde la fila de cada tipo del Administrador (activo o inactivo) están las acciones **Editar** y **Eliminar**; eliminar pide confirmación y sólo procede si ningún documento, vigente o reemplazado, usa su clave (si no, HTTP 409: "desactívelo en su lugar").
 - **Reglas:** DOC-001 (XML del CFDI, `CRITICAL`), DOC-002 (PDF del CFDI), DOC-003 (orden de compra) y DOC-004 (Vo.Bo.) resultan `PASS`/`FAIL` cuando su tipo es obligatorio para el origen y `NOT_APPLICABLE` en otro caso. DOC-008 evalúa el Invoice (`CRITICAL`) y DOC-009 genera un resultado por cada otro tipo obligatorio, con su clave en la fuente.
 - **Vigencia:** la configuración se lee en cada verificación y envío. Una factura que ya salió de los estados editables conserva sus resultados; una editable se evalúa con la configuración vigente al verificarse o enviarse. Si la configuración cambia, el estatus "Borrador"/"Cargada" se recalcula en la siguiente carga o en el envío.
 - **Concurrencia y auditoría:** el formulario lleva la huella `config_version`; si otro Administrador guardó antes, el guardado responde 409 sin cambios. Cada cambio queda en el Audit Log (`INVOICE_DOCUMENT_REQUIREMENTS_UPDATED`, `INVOICE_DOCUMENT_TYPE_CREATED`, `INVOICE_DOCUMENT_TYPE_UPDATED` e `INVOICE_DOCUMENT_TYPE_STATUS_CHANGED`) con los valores anterior y nuevo.
 
 **Probar con un proveedor internacional.** La demo incluye uno: `proveedor3@poc.local` (ver [Facturas de proveedores internacionales](#facturas-de-proveedores-internacionales)). En su carga documental se ofrecen el Invoice y los soportes configurados, no el XML ni el PDF del CFDI.
+
+## Requisitos de alta del proveedor
+
+El Administrador define en **Requisitos mínimos › Alta de proveedor** (`/admin/supplier-requirements`) qué documentos debe tener el expediente de un proveedor para poder autorizarlo (HU-21; Lineamientos 1.i: "cumplimiento al 100% de los requisitos detallados en el Anexo A"). Cada requisito tiene un nivel para **Persona moral** y **Persona física** (nacionales) y para **Internacional**, sin importar su tipo de persona:
+
+| Nivel | En el expediente | Al autorizar y en `SUP-003` |
+| --- | --- | --- |
+| Obligatorio | Se pide; el panel indica cuántos faltan | Si falta, el proveedor no se autoriza y `SUP-003` resulta `FAIL` |
+| Opcional | Se pide | No se exige |
+| No aplica | No se pide; el servidor rechaza la carga (400) | No se exige |
+
+- **Catálogo** (`supplier_document_types`): 13 requisitos del sistema y los que cree el Administrador. Para la persona moral son obligatorios los siete de la solicitud de negocio: Acta constitutiva, Poderes, Cédula fiscal, Identificación del representante legal, Comprobante de domicilio del representante legal, Comprobante de domicilio y Estado de cuenta bancario. Para la persona física: Identificación oficial, Cédula fiscal, Comprobante de domicilio y Estado de cuenta bancario. El internacional no tiene requisitos. Opinión de cumplimiento, Propuesta económica, Debida diligencia y Ubicación son opcionales. El Contrato (`SUPPLIER_CONTRACT`) ya no es requisito de alta: queda fijo en "No aplica" (candado y `CHECK`) y se carga en cada contrato (ver [Requisitos de alta del contrato](#requisitos-de-alta-del-contrato)); los que ya estaban cargados siguen descargables en "Otros documentos del expediente". Las preguntas abiertas con negocio (P-01 a P-07 de la HU) sólo cambian estos valores.
+- **Propuesta económica:** es exigible si el alta es por cotización o licitación y su nivel no es "No aplica". Es la única exigencia condicional.
+- **Vigencia:** un documento de cédula, opinión, comprobantes de domicilio o estado de cuenta con más de tres meses muestra "Advertencia de vigencia (+3 meses)" y `SUP-004` la reporta, pero no impide autorizar.
+- **Expediente:** el panel "Requisitos de alta" muestra primero los obligatorios, cada uno cargado (archivo y fecha) o "Pendiente", y el aviso "Faltan N requisitos obligatorios" o "Requisitos de alta completos". El formulario de carga ofrece sólo los requisitos que aplican; los documentos de requisitos que dejaron de aplicar siguen descargables en "Otros documentos del expediente". Sólo cuentan los documentos del expediente, no los de las facturas.
+- **Requisitos del Administrador:** alta (nombre y descripción, niveles en "No aplica" por defecto), edición, desactivación, reactivación y eliminación. Su clave es `REQUISITO_<id>`. Los del sistema sólo cambian de nivel. Desde la fila de cada tipo del Administrador (activo o inactivo) están las acciones **Editar** y **Eliminar**; eliminar pide confirmación y sólo procede si ningún documento, vigente o reemplazado, usa su clave (si no, HTTP 409: "desactívelo en su lugar").
+- **Concurrencia y auditoría:** como en archivos mínimos, la huella `config_version` evita sobrescribir el cambio de otro Administrador (409). Cada cambio queda en el Audit Log (`SUPPLIER_REQUIREMENTS_UPDATED`, `SUPPLIER_DOCUMENT_TYPE_CREATED`, `SUPPLIER_DOCUMENT_TYPE_UPDATED` y `SUPPLIER_DOCUMENT_TYPE_STATUS_CHANGED`).
+- **Proveedores ya autorizados:** la configuración no cambia el estatus de nadie. Si se agrega un requisito obligatorio, el listado marca con "Faltan N" a los autorizados que no lo tienen y `SUP-003` impide enviar sus facturas hasta que lo carguen. **Al desplegar** la migración `0016_supplier_document_types` en un ambiente con proveedores reales, ninguno tiene "Poderes", que es nuevo: cárguelo antes o deje "Poderes" en Opcional y vuélvalo obligatorio después (P-07). Los datos demo ya lo incluyen.
+
+## Requisitos de alta del contrato
+
+El Administrador define en **Requisitos mínimos › Alta de contrato** (`/admin/contract-requirements`) qué documentos debe tener un contrato para poder activarlo (HU-22; Lineamientos 1.i: "Debe existir contrato vigente"). Cada requisito tiene un solo nivel, igual para todos los contratos:
+
+| Nivel | En el expediente del contrato | Al activar y en `DOC-005` |
+| --- | --- | --- |
+| Obligatorio | Se pide; el panel indica cuántos faltan | Si falta, el contrato no se activa y `DOC-005` resulta `FAIL` |
+| Opcional | Se pide | No se exige |
+| No aplica | No se pide; el servidor rechaza la carga (400) | No se exige |
+
+- **Catálogo** (`contract_document_types`): Contrato (obligatorio fijo, con candado; la base de datos lo garantiza con un `CHECK`), Orden de compra y Anexos (opcionales, con varios archivos), más los que cree el Administrador (`REQ_CONTRATO_<id>`; alta, edición, desactivación, reactivación y eliminación; Editar y Eliminar están en su fila, y eliminar sólo procede si ningún documento usa su clave). "Admite varios archivos" se fija al crear el requisito.
+- **Estatus del contrato:** el alta crea el contrato **"Registrado"** y lleva a su expediente (`/contracts/{id}`), que pide sus requisitos. "Activar contrato" lo pasa a **"Activo"** sólo si su proveedor está "Autorizado" y tiene cargados sus requisitos obligatorios; lo verifica en una transacción, con la configuración vigente, y responde 409 con lo que falta. Sólo un contrato activo se ofrece al facturar y cumple `SUP-002`. Los contratos que existían al migrar siguen "Activo".
+- **Documentos del contrato:** el Administrador los carga en el expediente del contrato, "Registrado" o "Activo"; el PMO los consulta y descarga; el Proveedor no tiene acceso. Se guardan en `storage/contracts/<id>/` y son sólo del contrato (`documents.contract_id`, sin `supplier_id` ni `invoice_id`): no cuentan en el expediente del proveedor ni en la factura. Un requisito de un archivo reemplaza al vigente; uno de varios agrega, o reemplaza el elegido en "Reemplaza a". Nada se borra.
+- **Listado de contratos:** estatus en español y columna "Requisitos" ("Completos" o "Faltan N").
+- **Concurrencia y auditoría:** huella `config_version` (409) y Audit Log: `CONTRACT_REQUIREMENTS_UPDATED`, `CONTRACT_DOCUMENT_TYPE_CREATED`, `CONTRACT_DOCUMENT_TYPE_UPDATED`, `CONTRACT_DOCUMENT_TYPE_STATUS_CHANGED`, `CONTRACT_DOCUMENT_UPLOADED`/`CONTRACT_DOCUMENT_REPLACED` y `CONTRACT_STATUS_CHANGED`.
+- **Al desplegar** la migración `0017_contract_document_types` en un ambiente con contratos reales, ninguno tiene su contrato firmado: el listado los marca con "Faltan 1" y `DOC-005` impide enviar sus facturas editables hasta que se cargue (P-06 de la HU). Los datos demo ya lo incluyen.
 
 ## Facturas de proveedores internacionales
 
@@ -357,9 +392,9 @@ El proveedor extranjero (`suppliers.origin = INTERNATIONAL`) no emite CFDI: fact
 
 - **Datos del Invoice:** al registrar la factura captura la fecha, el subtotal, los impuestos, el total y la moneda (catálogo de monedas activas). El total debe ser igual al subtotal más impuestos (tolerancia 0.02, como `FIN-002`). Se guardan en las mismas columnas que el XML llena para el nacional. Mientras la factura es editable ("Borrador", "Cargada" u "Observaciones") los corrige desde la carga documental; cada cambio se audita como `INVOICE_AMOUNTS_UPDATED`.
 - **Duplicados por nombre de archivo:** al cargar un Invoice cuyo nombre (sin distinguir mayúsculas ni espacios de los extremos) ya tiene otra factura no cancelada del mismo proveedor, la carga responde 409 con el folio de esa factura y no escribe el archivo. Un bloqueo consultivo por proveedor serializa estas cargas y `FIN-007` (`CRITICAL`) lo verifica de nuevo al enviar.
-- **Validación:** `XML-001..010`, `FIN-004`, `SUP-003` y `SUP-004` resultan "No aplica a proveedores internacionales"; `SEM-001` no se evalúa. Las demás reglas se aplican con los importes capturados: por ejemplo, `FIN-001` bloquea un subtotal mayor al monto autorizado del contrato.
+- **Validación:** `XML-001..010`, `FIN-004`, `SUP-004` y, mientras no tenga [requisitos de alta](#requisitos-de-alta-del-proveedor) exigibles, `SUP-003` resultan "No aplica a proveedores internacionales"; `SEM-001` no se evalúa. Las demás reglas se aplican con los importes capturados: por ejemplo, `FIN-001` bloquea un subtotal mayor al monto autorizado del contrato.
 - **Reglas del Invoice (`INT`):** buscan en el texto del PDF, sin acentos, mayúsculas, espacios ni signos: `INT-001` el identificador fiscal del proveedor, `INT-002` la razón social de ULTRASIST, `INT-003` su código postal y `INT-004` su dirección (si está configurada). `INT-002` e `INT-003` respetan los interruptores de [Reglas de validación](#reglas-de-validación). Son advertencias: no bloquean el envío. Un PDF sin texto legible (escaneado) las deja "No evaluadas".
-- **Pendiente con negocio:** se calibrarán con las tres muestras de invoices extranjeros acordadas en la minuta. El expediente del proveedor internacional (equivalente al Anexo A) está por definir.
+- **Pendiente con negocio:** se calibrarán con las tres muestras de invoices extranjeros acordadas en la minuta. El expediente del proveedor internacional (equivalente al Anexo A) está por definir; cuando se defina, el Administrador lo configura en la columna Internacional de los requisitos de alta.
 - **Demo:** `proveedor3@poc.local` es "Global Data Services Inc. (DEMO)" (US, identificador `98-7654321`), con el contrato "Analitica Global 2026" por 20,000.00 USD y la factura `INV-2026-0042` en "Cargada", lista para enviar.
 
 ## Bandeja y revisión del PMO
@@ -487,21 +522,23 @@ Los tres modos (STARTTLS con usuario, TLS directo y certificado no confiable) se
 
 ## Autorización y acceso de proveedores
 
-Un proveedor nace **"Registrado"** (carga masiva o formulario individual), sin usuario ni acceso al portal, y no puede facturar: SUP-001 exige el estatus operativo, que ahora se muestra como **"Autorizado"** (HU-02).
+Un proveedor nace **"Registrado"** (carga masiva o formulario individual), sin usuario ni acceso al portal, y no puede facturar: SUP-001 exige el estatus operativo, que ahora se muestra como **"Autorizado"** (HU-02). Sólo se autoriza con sus [requisitos de alta](#requisitos-de-alta-del-proveedor) obligatorios cargados en su expediente (HU-21).
 
 En ambos casos, el **Origen** decide la identidad fiscal: el **Nacional** se registra con RFC y país MX; el **Internacional**, con identificador fiscal extranjero y país distinto de MX, sin RFC. El formulario individual ("+ Agregar proveedor") rechaza combinaciones incongruentes (400) y un RFC o un par (país, identificador) ya registrados (409). El origen no se edita después.
 
 Con JavaScript (`supplier_form.js`), el alta muestra sólo los campos que aplican: RFC para el Nacional; identificador fiscal extranjero y país para el Internacional; fecha de constitución sólo para persona moral. Un campo que deja de aplicar se oculta, se limpia y se deshabilita: no se valida ni se envía. Al volver a aplicar, recupera su obligatoriedad. Sin JavaScript se ven todos y el servidor valida la combinación. En la edición, el origen y el tipo de persona no cambian, y el servidor pinta sólo los campos que aplican.
 
-- **Autorización masiva:** en **Proveedores**, el Administrador filtra por "Registrado", marca las casillas (o "seleccionar todos") y pulsa "Autorizar seleccionados". Un modal pide confirmación, porque se enviarán las credenciales. Se autorizan hasta 100 proveedores por operación, en una transacción con las filas bloqueadas y un punto de guardado por proveedor:
+- **Autorización masiva:** en **Proveedores**, el Administrador filtra por "Registrado", marca las casillas (o "seleccionar todos") y pulsa "Autorizar seleccionados". Sólo tienen casilla los "Registrado" con sus requisitos de alta completos; los demás muestran "Faltan N requisitos" con la liga a su expediente, y la columna "Requisitos de alta" dice "Completos" o "Faltan N". Un modal pide confirmación, porque se enviarán las credenciales. Se autorizan hasta 100 proveedores por operación, en una transacción con las filas bloqueadas y un punto de guardado por proveedor:
   - los que no están "Registrado" se omiten;
+  - los que tienen requisitos de alta obligatorios pendientes, con la configuración vigente al autorizar, no se autorizan: no se crea su usuario, su cuenta en Keycloak ni su correo;
   - si el correo de un proveedor lo usa otro usuario, ese proveedor no se autoriza;
   - si ya tenía su propio usuario `Proveedor`, se autoriza sin credenciales nuevas;
   - si Keycloak rechaza o no responde al crear la cuenta de un proveedor, sólo ese proveedor sigue "Registrado" (auditoría `SUPPLIER_PROVISIONING_FAILED`) y los demás se procesan.
+- **Autorización desde el expediente:** el expediente de un proveedor "Registrado" tiene el botón **"Autorizar proveedor"**, con las mismas reglas, modal de confirmación y resumen. Con requisitos pendientes aparece deshabilitado ("Cargue los requisitos obligatorios para autorizar").
 - **Credenciales (HU-03):** por cada proveedor autorizado sin usuario se crea un usuario `Proveedor` del portal, sin contraseña, y su cuenta en Keycloak (o se enlaza la existente con su correo, si no pertenece a otro usuario ni tiene otro rol del portal): rol `Proveedor`, contraseña temporal aleatoria de 20 caracteres y la acción requerida `UPDATE_PASSWORD`. La contraseña sólo existe en memoria, en Keycloak y en el correo "Credenciales de acceso", que se envía después de confirmar con el usuario, la contraseña y la dirección `/login` del servidor.
-- **Resumen:** tras autorizar, el listado muestra a cada proveedor con "Credenciales enviadas", "Envío fallido" (con el error), "Ya tenía usuario", "Omitido", "No autorizado" (correo en uso) o "No autorizado: el servicio de identidad no pudo crear su cuenta". Los proveedores cuyo último envío falló llevan la marca "Credenciales no enviadas".
+- **Resumen:** tras autorizar, el listado muestra a cada proveedor con "Credenciales enviadas", "Envío fallido" (con el error), "Ya tenía usuario", "Omitido", "No autorizado: faltan requisitos de alta (…)" con los pendientes, "No autorizado" (correo en uso) o "No autorizado: el servicio de identidad no pudo crear su cuenta". Los proveedores cuyo último envío falló llevan la marca "Credenciales no enviadas".
 - **Expediente:** la sección "Acceso al portal" muestra el usuario, el último acceso, el estado de la contraseña leído de Keycloak ("Temporal, pendiente de cambio", "Cambiada por el proveedor" o "No disponible" si Keycloak no responde) y el último envío de credenciales. **"Reenviar credenciales"** fija en Keycloak una contraseña temporal nueva (la anterior deja de funcionar), sólo mientras la cuenta conserve `UPDATE_PASSWORD`, aunque ya haya entrado con la temporal.
-- **Auditoría:** `SUPPLIER_STATUS_CHANGED`, `USER_CREATED` (origen `SUPPLIER_AUTHORIZATION`, cuenta de Keycloak `created` o `linked`), `SUPPLIER_PROVISIONING_FAILED`, `SUPPLIER_BULK_AUTHORIZED` y `SUPPLIER_CREDENTIALS_RESENT`, sin contraseñas ni tokens. En el log técnico queda `supplier.bulk_authorize` sólo con contadores.
+- **Auditoría:** `SUPPLIER_STATUS_CHANGED`, `USER_CREATED` (origen `SUPPLIER_AUTHORIZATION`, cuenta de Keycloak `created` o `linked`), `SUPPLIER_PROVISIONING_FAILED`, `SUPPLIER_BULK_AUTHORIZED` y `SUPPLIER_CREDENTIALS_RESENT`, sin contraseñas ni tokens. `SUPPLIER_BULK_AUTHORIZED` incluye la lista `requirements_incomplete`. En el log técnico queda `supplier.bulk_authorize` sólo con contadores, incluido `requirements_incomplete`.
 - **Proveedor de identidad (RN-HU03-01):** las credenciales viven sólo en Keycloak; el portal no guarda contraseñas ni hashes.
 - **Primer acceso:** el proveedor debe cambiar la contraseña temporal antes de usar el portal; ver la sección siguiente.
 
@@ -608,7 +645,7 @@ Complete las variables Azure en `.env`, implemente la llamada HTTP/SDK dentro de
 
 ## Datos de demostración
 
-El seed crea 5 usuarios, 3 proveedores, 3 contratos, expedientes Anexo A, 12 facturas y Audit Log. Incluye: borrador sin documentos (`BORRADOR-001`), borrador sin Vo.Bo. (`D-SIN-VOBO`), cargadas listas para enviar (`A-CORRECTA`, `E-SEMANTICO`), cargada cuyo envío no procede porque excede el contrato (`B-EXCEDE`), enviada (`REVISION-001`), una segunda enviada por decidir (`ENVIADA-002`), autorizada, rechazada por RFC incorrecto, una devuelta con observaciones del PMO (`OBSERVACIONES-001`) y una cancelada con su acuse (`CANCELADA-001`; la siembra no envía su correo). Esas once son de `proveedor1@poc.local`; la duodécima, `INV-2026-0042`, es del proveedor internacional `proveedor3@poc.local` y está cargada, lista para enviar.
+El seed crea 5 usuarios, 3 proveedores, 3 contratos activos con su contrato firmado, expedientes Anexo A, 12 facturas y Audit Log. Incluye: borrador sin documentos (`BORRADOR-001`), borrador sin Vo.Bo. (`D-SIN-VOBO`), cargadas listas para enviar (`A-CORRECTA`, `E-SEMANTICO`), cargada cuyo envío no procede porque excede el contrato (`B-EXCEDE`), enviada (`REVISION-001`), una segunda enviada por decidir (`ENVIADA-002`), autorizada, rechazada por RFC incorrecto, una devuelta con observaciones del PMO (`OBSERVACIONES-001`) y una cancelada con su acuse (`CANCELADA-001`; la siembra no envía su correo). Esas once son de `proveedor1@poc.local`; la duodécima, `INV-2026-0042`, es del proveedor internacional `proveedor3@poc.local` y está cargada, lista para enviar.
 
 Los XML bajo `data/demo_documents/` son estructuralmente útiles para el parser, pero **no están timbrados ni son fiscalmente válidos**. El seed asigna a cada factura demo un UUID fiscal distinto y usa el PDF sintético versionado `data/demo_documents/factura_demo.pdf` (si faltara, lo genera en un directorio temporal sin modificar el repositorio).
 

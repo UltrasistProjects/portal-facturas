@@ -9,6 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.constants import (
+    DOCUMENT_REQUIREMENT_LABELS,
     SUPPLIER_CLASSIFICATION_LABELS,
     SUPPLIER_ORIGIN_LABELS,
     SUPPLIER_STATUS_LABELS,
@@ -28,11 +29,12 @@ from app.routers.common import templates
 from app.schemas import SupplierCreate, SupplierUpdate, validation_message
 from app.services import supplier_access_service as access
 from app.services import supplier_import_service, supplier_service
+from app.services import supplier_requirements_service as requirements
 from app.services.audit_service import audit
 from app.services.catalog_service import active_entries
 from app.services.file_service import LocalFileStorage, log_upload, safe_download_name
 from app.services.notification_templates import format_datetime
-from app.services.supplier_service import PROFILE_FIELDS, supplier_requirement_status
+from app.services.supplier_service import PROFILE_FIELDS
 from app.services.supplier_template import MAX_FILE_MB, MAX_ROWS, TEMPLATE_FILENAME, XLSX_MEDIA_TYPE, build_template
 
 router = APIRouter(prefix="/suppliers")
@@ -109,9 +111,12 @@ def _suppliers_page(
     stmt = search(stmt, q, Supplier.business_name, Supplier.rfc, Supplier.foreign_tax_id, Supplier.email)
     result = paginate(db, stmt, page)
     is_admin = user.role == Role.ADMINISTRADOR
+    # Requisitos de alta pendientes de los proveedores de la pagina, en dos consultas (HU-21, D8).
+    pending = requirements.pending_requirements(db, result.items)
     context = {
         "user": user,
         "suppliers": result.items,
+        "pending_counts": {supplier_id: len(types) for supplier_id, types in pending.items()},
         "page": result,
         "q": q,
         "base_query": list_query(q=q, status=status_filter),
@@ -209,12 +214,12 @@ def _supplier_detail_page(
     profile_error: str | None = None,
     profile_form: dict[str, str] | None = None,
 ):
-    docs = list(db.scalars(select(Document).where(Document.supplier_id == supplier.id, Document.invoice_id.is_(None))))
     context = {
         "user": user,
         "supplier": supplier,
         "activity_name": supplier_service.activity_name(db, supplier.main_activity),
-        "requirements": supplier_requirement_status(supplier, docs),
+        "checklist": requirements.checklist(db, supplier),
+        "requirement_labels": DOCUMENT_REQUIREMENT_LABELS,
         "access_error": access_error,
         "credentials_result": credentials_result,
         "format_datetime": format_datetime,
@@ -330,9 +335,8 @@ async def upload_supplier_document(
     supplier = db.get(Supplier, supplier_id)
     if not supplier:
         raise HTTPException(404, "Proveedor no encontrado")
-    allowed = {row["code"] for row in supplier_requirement_status(supplier, [])}
-    if document_type not in allowed:
-        raise HTTPException(400, "Tipo de Anexo A invalido")
+    # Antes de escribir el archivo: solo los requisitos de alta que aplican al proveedor (400 si no).
+    requirements.applicable_type(db, supplier, document_type)
     try:
         stored = await LocalFileStorage().save_supplier_file(supplier.id, upload)
     except ValueError as exc:

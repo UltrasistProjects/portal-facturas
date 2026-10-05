@@ -18,7 +18,7 @@ from sqlalchemy import select
 from app.core.config import settings
 from app.core.constants import (
     CANCELLATION_WINDOW,
-    SUPPLIER_REQUIREMENTS,
+    SIGNED_CONTRACT_DOCUMENT,
     DocumentType,
     InvoiceStatus,
     Role,
@@ -31,6 +31,7 @@ from app.core.demo import DEMO_ACCOUNTS
 from app.core.passwords import generate_password
 from app.models import AuditLog, Contract, Document, Invoice, Review, Supplier, User
 from app.services import identity_service as identity
+from app.services import supplier_requirements_service as requirements
 from app.services.file_service import LocalFileStorage
 from app.services.keycloak_admin import IdentityAdmin, IdentityProviderError, get_identity_admin
 from app.services.pdf_service import analyze_pdf
@@ -151,6 +152,7 @@ def seed_international(
     )
     db.add_all([user, contract])
     db.flush()
+    add_signed_contract(db, contract, admin_id, demo)
     invoice = Invoice(
         internal_folio=folio,
         supplier_id=supplier.id,
@@ -206,11 +208,24 @@ def audit_entry(user_id: int, action: str, invoice_id: int, at: datetime) -> Aud
 
 
 def add_document(
-    db, *, user_id: int, supplier_id: int, invoice_id: int | None, doc_type: str, source: Path
+    db,
+    *,
+    user_id: int,
+    supplier_id: int | None,
+    invoice_id: int | None,
+    doc_type: str,
+    source: Path,
+    contract_id: int | None = None,
 ) -> Document:
+    """Documento demo de una factura, del expediente de un proveedor o de un contrato. Uno de contrato es solo del
+    contrato: sin supplier_id ni invoice_id (HU-22)."""
     content = source.read_bytes()
     storage = LocalFileStorage()
-    folder = storage.root / ("invoices" if invoice_id else "suppliers") / str(invoice_id or supplier_id)
+    if contract_id:
+        scope, owner = "contracts", contract_id
+    else:
+        scope, owner = ("invoices", invoice_id) if invoice_id else ("suppliers", supplier_id)
+    folder = storage.root / scope / str(owner)
     folder.mkdir(parents=True, exist_ok=True)
     destination = (
         folder / f"demo_{hashlib.sha256((str(invoice_id) + doc_type).encode()).hexdigest()[:10]}{source.suffix}"
@@ -219,6 +234,7 @@ def add_document(
     doc = Document(
         invoice_id=invoice_id,
         supplier_id=supplier_id,
+        contract_id=contract_id,
         document_type=doc_type,
         original_filename=source.name,
         stored_filename=destination.name,
@@ -235,6 +251,18 @@ def add_document(
     )
     db.add(doc)
     return doc
+
+
+def add_signed_contract(db, contract: Contract, admin_id: int, demo: Path) -> Document:
+    return add_document(
+        db,
+        user_id=admin_id,
+        supplier_id=None,
+        invoice_id=None,
+        contract_id=contract.id,
+        doc_type=SIGNED_CONTRACT_DOCUMENT,
+        source=demo / "contrato_demo.txt",
+    )
 
 
 def seed_passwords(passwords: dict[str, str] | None = None) -> tuple[dict[str, str], bool]:
@@ -393,15 +421,21 @@ def _seed(passwords: dict[str, str] | None) -> None:
         ]
         db.add_all(contracts)
         db.flush()
+        # Contratos activos con su contrato firmado, que exigen la activacion y DOC-005 (HU-22).
+        for contract in contracts:
+            add_signed_contract(db, contract, users[0].id, demo)
+        # Expediente completo: un documento por cada requisito de alta que aplica al proveedor, segun el catalogo que
+        # siembra la migracion (HU-21), incluido Poderes.
+        catalog = requirements.catalog(db)
         for supplier in (moral, physical):
             uploader = users[2] if supplier is moral else users[3]
-            for requirement in SUPPLIER_REQUIREMENTS[supplier.supplier_type]:
+            for requirement in requirements.applicable(catalog, requirements.profile(supplier)):
                 add_document(
                     db,
                     user_id=uploader.id,
                     supplier_id=supplier.id,
                     invoice_id=None,
-                    doc_type=requirement,
+                    doc_type=requirement.code,
                     source=demo / "contrato_demo.txt",
                 )
         db.commit()

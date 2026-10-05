@@ -1,11 +1,11 @@
 import { expect, test } from '@playwright/test';
 import { guardarDato, leerEstado } from '../lib/estado';
 import { ejecutarHU } from '../lib/hu';
-import { texto } from '../lib/portal';
+import { abrirExpediente, cargarRequisitosAlta, texto } from '../lib/portal';
 
 test('HU-02 · Autorización masiva de proveedores', async ({ browser }, testInfo) => {
   await ejecutarHU('HU-02', browser, testInfo, async (hu) => {
-    const { run } = leerEstado();
+    const { run, fixtures } = leerEstado();
     const proveedores = hu.requiere<{ razon_social: string; correo: string }[]>('HU-01', 'hu01.proveedores');
     const admin = await hu.sesion('admin');
     let inicioAutorizacion = '';
@@ -13,8 +13,25 @@ test('HU-02 · Autorización masiva de proveedores', async ({ browser }, testInf
     await hu.escenario('Selección múltiple y autorización en una sola operación', async () => {
       await hu.paso(
         admin,
+        'Cargar desde su expediente los requisitos de alta de los proveedores cargados en HU-01 (HU-21)',
+        'Cada expediente queda con "Requisitos de alta completos"; el proveedor internacional no tiene requisitos.',
+        async () => {
+          const cargados: string[] = [];
+          for (const proveedor of proveedores) {
+            await abrirExpediente(admin, proveedor.razon_social);
+            const nombres = await cargarRequisitosAlta(admin, fixtures.requisito_alta);
+            await expect(admin.locator('.requirements-summary')).toHaveText(
+              nombres.length ? 'Requisitos de alta completos' : 'Sin requisitos de alta configurados para proveedores internacionales',
+            );
+            cargados.push(`${proveedor.razon_social}: ${nombres.length} documentos`);
+          }
+          return cargados.join('; ') + '.';
+        },
+      );
+      await hu.paso(
+        admin,
         'Filtrar el catálogo por estatus "Registrado" y seleccionar los proveedores cargados en HU-01',
-        'Sólo los proveedores "Registrado" tienen casilla; al marcar 3, el contador indica "3 seleccionados".',
+        'Sólo los proveedores "Registrado" con sus requisitos de alta completos tienen casilla; al marcar 3, el contador indica "3 seleccionados".',
         async () => {
           await admin.goto('/suppliers');
           await admin.locator('select[name=status]').selectOption('REGISTERED');

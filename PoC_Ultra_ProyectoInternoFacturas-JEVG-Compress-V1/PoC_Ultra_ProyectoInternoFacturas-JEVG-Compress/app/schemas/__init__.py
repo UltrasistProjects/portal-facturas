@@ -362,13 +362,12 @@ def parse_requirement(value) -> DocumentRequirement:
         raise ValueError(INVALID_REQUIREMENT) from None
 
 
-class DocumentTypeUpdate(BaseModel):
-    """Campos editables de un tipo de documento soporte (HU-04). Los validadores emiten frases completas, que
-    document_type_message muestra tal cual."""
+class NamedDocumentType(BaseModel):
+    """Nombre y descripcion de un tipo de documento configurable: tipo soporte de factura (HU-04) o requisito de alta
+    (HU-21). Los validadores emiten frases completas, que document_type_message muestra tal cual."""
 
     name: str
     description: str | None = None
-    formats: list[str]
 
     @field_validator("name", mode="before")
     @classmethod
@@ -385,6 +384,12 @@ class DocumentTypeUpdate(BaseModel):
         if len(description) > 300:
             raise ValueError("La descripción admite hasta 300 caracteres")
         return description or None
+
+
+class DocumentTypeUpdate(NamedDocumentType):
+    """Campos editables de un tipo de documento soporte (HU-04)."""
+
+    formats: list[str]
 
     @field_validator("formats", mode="before")
     @classmethod
@@ -408,8 +413,43 @@ class DocumentTypeCreate(DocumentTypeUpdate):
         return parse_requirement(value)
 
 
+class SupplierDocumentTypeUpdate(NamedDocumentType):
+    """Campos editables de un requisito de alta del Administrador (HU-21): nombre y descripcion."""
+
+
+class SupplierDocumentTypeCreate(SupplierDocumentTypeUpdate):
+    # "No aplica" por defecto: crear un requisito no cambia nada hasta que el Administrador decida.
+    persona_moral_requirement: DocumentRequirement = DocumentRequirement.NOT_APPLICABLE
+    persona_fisica_requirement: DocumentRequirement = DocumentRequirement.NOT_APPLICABLE
+    international_requirement: DocumentRequirement = DocumentRequirement.NOT_APPLICABLE
+
+    @field_validator(
+        "persona_moral_requirement", "persona_fisica_requirement", "international_requirement", mode="before"
+    )
+    @classmethod
+    def known_requirement(cls, value):
+        return parse_requirement(value)
+
+
+class ContractDocumentTypeUpdate(NamedDocumentType):
+    """Campos editables de un requisito del contrato del Administrador (HU-22): nombre y descripcion. Si admite
+    varios archivos se fija al crearlo."""
+
+
+class ContractDocumentTypeCreate(ContractDocumentTypeUpdate):
+    # "No aplica" y un solo archivo por defecto: crear un requisito no cambia nada hasta que el Administrador decida.
+    requirement: DocumentRequirement = DocumentRequirement.NOT_APPLICABLE
+    allows_multiple: bool = False
+
+    @field_validator("requirement", mode="before")
+    @classmethod
+    def known_requirement(cls, value):
+        return parse_requirement(value)
+
+
 def document_type_message(exc: ValidationError) -> str:
-    """Mensajes de los tipos de documento soporte: frases completas, sin prefijo de campo."""
+    """Mensajes de los tipos de documento soporte y de los requisitos de alta y del contrato: frases completas, sin
+    prefijo de campo."""
     return " ".join(dict.fromkeys(str(error.get("ctx", {}).get("error", error["msg"])) for error in exc.errors()))
 
 

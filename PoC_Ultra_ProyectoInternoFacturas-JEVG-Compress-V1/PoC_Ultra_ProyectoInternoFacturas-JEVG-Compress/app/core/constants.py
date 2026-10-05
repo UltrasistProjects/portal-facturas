@@ -57,9 +57,40 @@ FOREIGN_TAX_ID_FORMAT_MESSAGE = "use hasta 40 caracteres: letras, digitos, espac
 SUPPLIER_ORIGIN_LABELS = {SupplierOrigin.NATIONAL: "Nacional", SupplierOrigin.INTERNATIONAL: "Internacional"}
 
 
+class RequirementProfile(StrEnum):
+    """Tipo de proveedor para los requisitos de alta (HU-21): el internacional es un tipo propio, sin importar su tipo
+    de persona; el nacional se distingue por persona moral o fisica. El valor es la clave del perfil en los campos de
+    la matriz y en la auditoria."""
+
+    PERSONA_MORAL = "persona_moral"
+    PERSONA_FISICA = "persona_fisica"
+    INTERNATIONAL = "international"
+
+
+REQUIREMENT_PROFILE_LABELS = {
+    RequirementProfile.PERSONA_MORAL: "Persona moral",
+    RequirementProfile.PERSONA_FISICA: "Persona física",
+    RequirementProfile.INTERNATIONAL: "Internacional",
+}
+REQUIREMENT_PROFILE_PLURALS = {
+    RequirementProfile.PERSONA_MORAL: "personas morales",
+    RequirementProfile.PERSONA_FISICA: "personas físicas",
+    RequirementProfile.INTERNATIONAL: "proveedores internacionales",
+}
+
+
 class ContractStatus(StrEnum):
+    # El alta crea el contrato Registrado; solo la activacion, con sus requisitos completos, lo pasa a Activo (HU-22).
+    REGISTERED = "REGISTERED"
     ACTIVE = "ACTIVE"
     INACTIVE = "INACTIVE"
+
+
+CONTRACT_STATUS_LABELS = {
+    ContractStatus.REGISTERED: "Registrado",
+    ContractStatus.ACTIVE: "Activo",
+    ContractStatus.INACTIVE: "Inactivo",
+}
 
 
 class ProcessingStatus(StrEnum):
@@ -214,59 +245,26 @@ BUSINESS_RULES = {
 }
 
 
-# Expediente del proveedor (Anexo A) por tipo de persona: los documentos que se pueden cargar. Cuentan para el
-# expediente minimo (SUP-003) salvo los opcionales y la propuesta economica sin cotizacion; los comprobantes de
-# domicilio alternativos cuentan como uno.
-SUPPLIER_REQUIREMENTS = {
-    SupplierType.PERSONA_MORAL: [
-        "DUE_DILIGENCE",
-        "INCORPORATION_ACT",
-        "LEGAL_REP_ID",
-        "LEGAL_REP_ADDRESS_PROOF",
-        "TAX_STATUS",
-        "SAT_OPINION",
-        "ADDRESS_PROOF",
-        "LOCATION",
-        "BANK_STATEMENT",
-        "ECONOMIC_PROPOSAL",
-        "SUPPLIER_CONTRACT",
-    ],
-    SupplierType.PERSONA_FISICA: [
-        "OFFICIAL_ID",
-        "TAX_STATUS",
-        "SAT_OPINION",
-        "ADDRESS_PROOF",
-        "LOCATION",
-        "BANK_STATEMENT",
-        "ECONOMIC_PROPOSAL",
-        "SUPPLIER_CONTRACT",
-    ],
-}
-SUPPLIER_DOCUMENT_LABELS = {
-    "DUE_DILIGENCE": "Debida diligencia",
-    "INCORPORATION_ACT": "Acta constitutiva",
-    "LEGAL_REP_ID": "Identificación del representante legal",
-    "LEGAL_REP_ADDRESS_PROOF": "Comprobante de domicilio del representante legal",
-    "OFFICIAL_ID": "Identificación oficial",
-    "TAX_STATUS": "Cédula fiscal",
-    "SAT_OPINION": "Opinión de cumplimiento",
-    "ADDRESS_PROOF": "Comprobante de domicilio",
-    "LOCATION": "Ubicación",
-    "BANK_STATEMENT": "Estado de cuenta bancario",
-    "ECONOMIC_PROPOSAL": "Propuesta económica",
-    "SUPPLIER_CONTRACT": "Contrato",
-}
-# Dependen de la etapa del proceso (el contrato formaliza el expediente completo) o del nivel de riesgo.
-OPTIONAL_SUPPLIER_DOCUMENTS = {"SUPPLIER_CONTRACT", "DUE_DILIGENCE", "LOCATION"}
-# Obligatoria solo si el alta responde a una cotizacion o licitacion (Supplier.economic_proposal).
+# Requisitos de alta del proveedor (HU-21): el catalogo, sus nombres y sus niveles viven en supplier_document_types.
+# Aqui quedan las reglas por clave que no se configuran. La propuesta economica es exigible si el alta responde a una
+# cotizacion o licitacion (Supplier.economic_proposal) y su nivel no es "No aplica".
 QUOTATION_DOCUMENT = "ECONOMIC_PROPOSAL"
-# Requisitos que se cumplen con cualquiera de los dos documentos: el domicilio de la empresa o el del representante.
-ALTERNATIVE_SUPPLIER_DOCUMENTS = {
-    "ADDRESS_PROOF": "LEGAL_REP_ADDRESS_PROOF",
-    "LEGAL_REP_ADDRESS_PROOF": "ADDRESS_PROOF",
-}
-# Documentos con vigencia: advertencia (SUP-004) si su fecha tiene mas de tres meses.
+# Documentos con vigencia: advertencia (SUP-004) si su fecha tiene mas de tres meses; no impiden la autorizacion.
 DATED_SUPPLIER_DOCUMENTS = {"TAX_STATUS", "SAT_OPINION", "ADDRESS_PROOF", "LEGAL_REP_ADDRESS_PROOF", "BANK_STATEMENT"}
+# El contrato firmado se carga en cada contrato (HU-22): en el expediente del proveedor queda fijo en "No aplica".
+# Clave -> {perfil: nivel}. La base de datos lo garantiza con ck_supplier_document_types_fixed_levels.
+SUPPLIER_CONTRACT_DOCUMENT = "SUPPLIER_CONTRACT"
+FIXED_SUPPLIER_REQUIREMENTS: dict[str, dict[RequirementProfile, DocumentRequirement]] = {
+    SUPPLIER_CONTRACT_DOCUMENT: {profile: DocumentRequirement.NOT_APPLICABLE for profile in RequirementProfile},
+}
+FIXED_SUPPLIER_REQUIREMENT_REASONS = {SUPPLIER_CONTRACT_DOCUMENT: "Se carga en cada contrato"}
+
+
+# Requisitos de alta del contrato (HU-22): el catalogo vive en contract_document_types. El contrato firmado es
+# Obligatorio fijo; la base de datos lo garantiza con ck_contract_document_types_fixed_levels.
+SIGNED_CONTRACT_DOCUMENT = "SIGNED_CONTRACT"
+FIXED_CONTRACT_REQUIREMENTS = {SIGNED_CONTRACT_DOCUMENT: DocumentRequirement.REQUIRED}
+FIXED_CONTRACT_REQUIREMENT_REASONS = {SIGNED_CONTRACT_DOCUMENT: "Todo contrato activo tiene su contrato firmado"}
 
 
 class NotificationEvent(StrEnum):

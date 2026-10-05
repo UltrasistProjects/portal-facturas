@@ -15,7 +15,7 @@ from app.core.database import SessionLocal
 from app.core.timeutils import to_business
 from app.models import AuditLog, Contract, Document, Invoice, Supplier, User, ValidationResult, ValidationSettings
 from app.services.foreign_invoice_service import MSG_NOT_INTERNATIONAL
-from tests.conftest import csrf, identity_account, invoice_by_number, login
+from tests.conftest import active_contract, csrf, identity_account, invoice_by_number, login
 
 INTERNATIONAL = "proveedor3@poc.local"  # proveedor internacional demo del seed (D11)
 AMOUNTS = {"invoice_date": "2026-09-15", "subtotal": "1,000.00", "tax": "0.00", "total": "1000", "currency": "USD"}
@@ -143,17 +143,16 @@ def other_international():
             )
             db.add(supplier)
             db.flush()
-            db.add(
-                Contract(
-                    supplier_id=supplier.id,
-                    project_name="Consultoria Canada",
-                    project_leader="Lider Demo",
-                    authorized_technology="Data Analytics",
-                    authorized_amount=Decimal("50000.00"),
-                    currency="USD",
-                    start_date=date(2026, 1, 1),
-                    end_date=date(2026, 12, 31),
-                )
+            active_contract(
+                db,
+                supplier.id,
+                project_name="Consultoria Canada",
+                project_leader="Lider Demo",
+                authorized_technology="Data Analytics",
+                authorized_amount=Decimal("50000.00"),
+                currency="USD",
+                start_date=date(2026, 1, 1),
+                end_date=date(2026, 12, 31),
             )
             db.add(
                 User(

@@ -15,7 +15,7 @@ texto = "".join(page.get_text() for page in doc)
 xrefs = {img[0] for page in doc for img in page.get_images(full=True)}
 apariciones = sum(len(page.get_images(full=True)) for page in doc)
 capturas = sorted(p.relative_to(ROOT / "evidencias").as_posix() for p in (ROOT / "evidencias").glob("HU-*/*.png"))
-faltantes_hu = [hu["id"] for hu in catalogo["hus"] if f'{hu["id"]} — {hu["nombre"]}' not in texto.replace("\n", " ")]
+faltantes_hu = [hu["id"] for hu in catalogo["hus"] if f"{hu['id']} — {hu['nombre']}" not in texto.replace("\n", " ")]
 faltantes_cap = [c for c in capturas if f"evidencias/{c}" not in texto.replace("\n", "")]
 resultado = {
     "pymupdf": fitz.VersionBind,

@@ -162,7 +162,8 @@ class Contract(Base):
     currency: Mapped[str] = mapped_column(String(3), default="MXN")
     start_date: Mapped[date] = mapped_column(Date)
     end_date: Mapped[date] = mapped_column(Date)
-    status: Mapped[ContractStatus] = mapped_column(enum_column(ContractStatus), default=ContractStatus.ACTIVE)
+    # Nace Registrado y no se factura contra el hasta activarlo con sus requisitos completos (HU-22).
+    status: Mapped[ContractStatus] = mapped_column(enum_column(ContractStatus), default=ContractStatus.REGISTERED)
     notes: Mapped[str | None] = mapped_column(Text)
     # Trazabilidad del control financiero principal (AUDITORIA BD-09).
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=now_utc)
@@ -263,9 +264,17 @@ def _forbid_invoice_deletion(session: Session, _flush_context, _instances) -> No
 
 class Document(Base):
     __tablename__ = "documents"
+    __table_args__ = (
+        # Un documento del contrato es solo del contrato (HU-22): asi no cuenta en el expediente del proveedor, que se
+        # identifica por supplier_id con invoice_id nulo, ni en la factura.
+        CheckConstraint(
+            "contract_id IS NULL OR (invoice_id IS NULL AND supplier_id IS NULL)", name="ck_documents_contract_owner"
+        ),
+    )
     id: Mapped[int] = mapped_column(primary_key=True)
     invoice_id: Mapped[int | None] = mapped_column(restrict("invoices.id"), index=True)
     supplier_id: Mapped[int | None] = mapped_column(restrict("suppliers.id"), index=True)
+    contract_id: Mapped[int | None] = mapped_column(restrict("contracts.id"), index=True)
     document_type: Mapped[str] = mapped_column(String(60), index=True)
     original_filename: Mapped[str] = mapped_column(String(255))
     stored_filename: Mapped[str] = mapped_column(String(255))
@@ -289,7 +298,8 @@ class Document(Base):
 
 class InvoiceDocumentType(Base):
     """Tipo de documento de factura y su nivel de exigencia por origen del proveedor (HU-04). `code` es el valor de
-    documents.document_type; no hay FK porque esa columna tambien guarda claves del expediente del Anexo A."""
+    documents.document_type; no hay FK porque esa columna tambien guarda claves del expediente del proveedor
+    (supplier_document_types, HU-21) y del contrato (contract_document_types, HU-22)."""
 
     __tablename__ = "invoice_document_types"
     __table_args__ = (
@@ -332,6 +342,80 @@ class InvoiceDocumentType(Base):
 
 # Nombre unico sin distinguir mayusculas (el servicio normaliza espacios antes de guardar).
 Index("uq_invoice_document_types_name_lower", func.lower(InvoiceDocumentType.name), unique=True)
+
+
+class SupplierDocumentType(Base):
+    """Requisito de alta del proveedor (HU-21): documento de su expediente y su nivel de exigencia por tipo de proveedor
+    (persona moral, persona fisica, internacional). `code` es el valor de documents.document_type en el expediente
+    (invoice_id nulo); sin FK por la misma razon que InvoiceDocumentType."""
+
+    __tablename__ = "supplier_document_types"
+    __table_args__ = (
+        UniqueConstraint("code", name="uq_supplier_document_types_code"),
+        CheckConstraint("is_active OR NOT is_system", name="ck_supplier_document_types_system_active"),
+        # El contrato firmado se carga en cada contrato (HU-22): en el expediente queda "No aplica" fijo.
+        CheckConstraint(
+            "code <> 'SUPPLIER_CONTRACT' OR (persona_moral_requirement = 'NOT_APPLICABLE'"
+            " AND persona_fisica_requirement = 'NOT_APPLICABLE' AND international_requirement = 'NOT_APPLICABLE')",
+            name="ck_supplier_document_types_fixed_levels",
+        ),
+    )
+    id: Mapped[int] = mapped_column(primary_key=True)
+    code: Mapped[str] = mapped_column(String(60))
+    name: Mapped[str] = mapped_column(String(80))
+    description: Mapped[str | None] = mapped_column(String(300))
+    is_system: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    persona_moral_requirement: Mapped[DocumentRequirement] = mapped_column(
+        enum_column(DocumentRequirement, "ck_supplier_document_types_persona_moral_requirement"),
+        default=DocumentRequirement.NOT_APPLICABLE,
+    )
+    persona_fisica_requirement: Mapped[DocumentRequirement] = mapped_column(
+        enum_column(DocumentRequirement, "ck_supplier_document_types_persona_fisica_requirement"),
+        default=DocumentRequirement.NOT_APPLICABLE,
+    )
+    international_requirement: Mapped[DocumentRequirement] = mapped_column(
+        enum_column(DocumentRequirement, "ck_supplier_document_types_international_requirement"),
+        default=DocumentRequirement.NOT_APPLICABLE,
+    )
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=now_utc)
+    updated_at: Mapped[datetime] = mapped_column(UTCDateTime, default=now_utc, onupdate=now_utc)
+
+
+Index("uq_supplier_document_types_name_lower", func.lower(SupplierDocumentType.name), unique=True)
+
+
+class ContractDocumentType(Base):
+    """Requisito de alta del contrato (HU-22): documento del expediente del contrato, con un solo nivel de exigencia
+    para todos los contratos y si admite varios archivos. `code` es el valor de documents.document_type en los
+    documentos del contrato (contract_id); sin FK por la misma razon que InvoiceDocumentType."""
+
+    __tablename__ = "contract_document_types"
+    __table_args__ = (
+        UniqueConstraint("code", name="uq_contract_document_types_code"),
+        CheckConstraint("is_active OR NOT is_system", name="ck_contract_document_types_system_active"),
+        # Todo contrato activo tiene su contrato firmado (RD-03): Obligatorio fijo.
+        CheckConstraint(
+            "code <> 'SIGNED_CONTRACT' OR requirement = 'REQUIRED'", name="ck_contract_document_types_fixed_levels"
+        ),
+    )
+    id: Mapped[int] = mapped_column(primary_key=True)
+    code: Mapped[str] = mapped_column(String(60))
+    name: Mapped[str] = mapped_column(String(80))
+    description: Mapped[str | None] = mapped_column(String(300))
+    is_system: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    requirement: Mapped[DocumentRequirement] = mapped_column(
+        enum_column(DocumentRequirement, "ck_contract_document_types_requirement"),
+        default=DocumentRequirement.NOT_APPLICABLE,
+    )
+    # Se fija al crear el requisito: al pasar de varios archivos a uno quedarian varios vigentes (D6).
+    allows_multiple: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=now_utc)
+    updated_at: Mapped[datetime] = mapped_column(UTCDateTime, default=now_utc, onupdate=now_utc)
+
+
+Index("uq_contract_document_types_name_lower", func.lower(ContractDocumentType.name), unique=True)
 
 
 class ValidationResult(Base):
@@ -538,6 +622,8 @@ __all__ = [
     "Invoice",
     "Document",
     "InvoiceDocumentType",
+    "SupplierDocumentType",
+    "ContractDocumentType",
     "ValidationResult",
     "AuditLog",
     "Review",

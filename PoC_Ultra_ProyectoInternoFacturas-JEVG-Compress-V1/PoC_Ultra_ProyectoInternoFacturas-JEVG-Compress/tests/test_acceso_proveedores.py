@@ -12,7 +12,7 @@ import pytest
 from sqlalchemy import delete, func, or_, select, update
 
 from app.core.config import settings
-from app.core.constants import DeliveryStatus, NotificationEvent, Role, SupplierStatus
+from app.core.constants import DeliveryStatus, NotificationEvent, RequirementProfile, Role, SupplierStatus
 from app.core.database import SessionLocal
 from app.core.errors import BusinessRuleError
 from app.models import AuditLog, EmailDelivery, Supplier, User
@@ -20,6 +20,7 @@ from app.rules.supplier_rules import supplier_rules
 from app.services import mail_transport
 from app.services import supplier_access_service as access
 from app.services.keycloak_admin import UPDATE_PASSWORD
+from app.services.supplier_requirements_service import Checklist
 from tests.conftest import OUTBOX, csrf, identity_account, login, supplier_by_email
 
 pytestmark = pytest.mark.usefixtures("restore_notification_recipients")
@@ -177,7 +178,7 @@ def test_autorizacion_de_proveedores_registrados(client, registered_suppliers):
     for row in rows:
         authorized = supplier(row.id)
         assert authorized.status == SupplierStatus.ACTIVE
-        sup001 = supplier_rules(authorized, None, [])[0]
+        sup001 = supplier_rules(authorized, None, Checklist(RequirementProfile.PERSONA_MORAL, []))[0]
         assert (sup001.rule_code, sup001.status) == ("SUP-001", "PASS")
     assert len(messages()) == 3
 
@@ -477,7 +478,8 @@ def test_expediente_de_un_proveedor_registrado(client, registered_suppliers):
     login(client)
     page = client.get(f"/suppliers/{registered.id}").text
     assert "Sin usuario del portal" in page and "Sin envío registrado" in page
-    assert "El proveedor aún no está autorizado" in page and "Reenviar credenciales" not in page
+    # Con sus requisitos de alta completos se autoriza desde el propio expediente (HU-21).
+    assert "Autorizar proveedor" in page and "Reenviar credenciales" not in page
     client.post("/logout", data={"csrf_token": csrf(client, "/")})
     login(client, "pmo@poc.local")
     assert "Acceso al portal" not in client.get(f"/suppliers/{registered.id}").text
@@ -639,6 +641,7 @@ def test_auditoria_de_la_autorizacion(client, registered_suppliers):
         "authorized": [registered.id],
         "existing_access": [],
         "skipped": [],
+        "requirements_incomplete": [],
         "conflicts": [],
         "provisioning_failed": [],
     }

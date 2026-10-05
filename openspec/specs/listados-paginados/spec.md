@@ -47,11 +47,15 @@ La búsqueda SHALL combinarse con el filtro de estatus de proveedores. Sin resul
 - **THEN** ve sólo los proveedores registrados cuya razón social, identificador o correo contiene "demo"
 
 ### Requirement: El alta muestra el registro creado
-Tras crear un usuario, un contrato o una clave de catálogo, el sistema SHALL redirigir al listado buscando el registro creado (correo del usuario, proyecto del contrato o clave) con el aviso "Usuario creado", "Contrato creado" o "Clave agregada". El alta de un proveedor SHALL seguir llevando a su expediente.
+Tras crear un usuario o una clave de catálogo, el sistema SHALL redirigir al listado buscando el registro creado (correo del usuario o clave) con el aviso "Usuario creado" o "Clave agregada". El alta de un proveedor SHALL seguir llevando a su expediente, y el alta de un contrato SHALL llevar al expediente del contrato con el aviso "Contrato creado. Cargue sus requisitos para activarlo.".
 
 #### Scenario: Usuario nuevo visible
 - **WHEN** hay 40 usuarios y el Administrador crea "Joshua Bolaños Hernández" con `jobhdev@gmail.com`
 - **THEN** llega a `/admin/users?q=jobhdev%40gmail.com&ok=created`, ve "Usuario creado" y el usuario en la lista
+
+#### Scenario: Contrato nuevo
+- **WHEN** hay 40 contratos y el Administrador crea el contrato del proyecto "Portal Proveedores 2027"
+- **THEN** llega a `/contracts/{contract_id}` del contrato creado y ve "Contrato creado. Cargue sus requisitos para activarlo."
 
 ### Requirement: Las acciones conservan la página
 Habilitar o deshabilitar un usuario, registrar una enmienda de contrato, editar la descripción de una clave y desactivarla o reactivarla SHALL regresar al listado con la misma búsqueda, filtro y página desde la que se hizo la acción. Sólo se conservan `q`, `status` y `page`; cualquier otro valor del formulario se ignora.
@@ -59,4 +63,3 @@ Habilitar o deshabilitar un usuario, registrar una enmienda de contrato, editar 
 #### Scenario: Deshabilitar en la página 2
 - **WHEN** el Administrador deshabilita un usuario desde `/admin/users?q=demo&page=2`
 - **THEN** regresa a `/admin/users?q=demo&page=2`
-

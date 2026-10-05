@@ -25,10 +25,13 @@
       <a href="/admin/users" class="nav-item"><i class="bi bi-people"></i> Usuarios</a>
       <a href="/admin/rules" class="nav-item"><i class="bi bi-sliders"></i> Reglas de validación</a>
       <a href="/admin/catalogs" class="nav-item"><i class="bi bi-journal-text"></i> Catálogos</a>
-      <a href="/admin/required-documents" class="nav-item"><i class="bi bi-file-earmark-check"></i> Archivos mínimos</a>
       <a href="/admin/notification-templates" class="nav-item"><i class="bi bi-envelope"></i> Plantillas de correo</a>
       <a href="/admin/notifications" class="nav-item"><i class="bi bi-bell"></i> Notificaciones</a>
       <a href="/admin/audit" class="nav-item"><i class="bi bi-clock-history"></i> Audit Log</a>
+      <div class="nav-label">Requisitos mínimos</div>
+      <a href="/admin/required-documents" class="nav-item"><i class="bi bi-file-earmark-check"></i> Archivos de factura</a>
+      <a href="/admin/supplier-requirements" class="nav-item"><i class="bi bi-person-vcard"></i> Alta de proveedor</a>
+      <a href="/admin/contract-requirements" class="nav-item"><i class="bi bi-file-earmark-text"></i> Alta de contrato</a>
       {% endif %}
     </nav>
     <div class="sidebar-footer"><span class="role-pill">{{ user.role.value }}</span><strong>{{ user.name }}</strong><small>{{ user.email }}</small>

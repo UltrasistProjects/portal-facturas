@@ -1,9 +1,9 @@
-"""Perfil del proveedor (alta individual y edicion) y expediente del Anexo A: tipos de documento y descarga."""
+"""Perfil del proveedor (alta individual y edicion) y expediente: requisitos de alta en la pagina, carga y descarga.
+Las reglas de los requisitos de alta (HU-21) se prueban en test_requisitos_alta.py."""
 
 import html
 import re
-from datetime import date, timedelta
-from types import SimpleNamespace
+from datetime import date
 
 import pytest
 from sqlalchemy import delete, select, update
@@ -11,9 +11,7 @@ from sqlalchemy import delete, select, update
 from app.core.constants import SupplierClassification, SupplierOrigin, SupplierType
 from app.core.database import SessionLocal
 from app.models import AuditLog, CatalogEntry, Document, Supplier
-from app.rules.supplier_rules import supplier_rules
 from app.services.file_service import LocalFileStorage
-from app.services.supplier_service import supplier_requirement_status
 from tests.conftest import SUPPLIER_PROFILE_FORM, csrf, invoice_by_number, login, supplier_by_email
 
 PDF = b"%PDF-1.4\n%demo\n"
@@ -421,7 +419,7 @@ def test_detalle_de_proveedor_sin_perfil(client, registered_suppliers):
     assert "Editar datos del proveedor" not in page
 
 
-# --- Expediente del Anexo A ---------------------------------------------------------------------------------------
+# --- Expediente: requisitos de alta ----------------------------------------------------------------------------
 
 
 def document_row(supplier_id: int, document_type: str) -> Document:
@@ -436,33 +434,49 @@ def document_row(supplier_id: int, document_type: str) -> Document:
         )
 
 
-def document_rows(page: str) -> dict[str, tuple[bool, str]]:
-    """Filas del expediente en la pagina de detalle: etiqueta -> (marcado como obligatorio, estado y nota)."""
-    rows = {}
-    for label, status in re.findall(r"<strong>(.*?)</strong><small>([^<]+)</small>", html.unescape(page)):
-        rows[label.split("<span")[0]] = ("text-danger" in label, status)
-    return rows
+def requirement_rows(page: str) -> dict[str, str]:
+    """Panel "Requisitos de alta" del expediente: nombre -> "<nivel> · <estado>[ · <nota>]"."""
+    pattern = r'<strong>([^<]+)</strong><small class="requirement-status">([^<]+)</small>'
+    return dict(re.findall(pattern, html.unescape(page)))
 
 
-def test_documentos_del_expediente_por_tipo_de_persona(client):
+def test_requisitos_del_expediente_por_tipo_de_persona(client):
     moral = supplier_by_email("proveedor1@poc.local")
     physical = supplier_by_email("proveedor2@poc.local")
     login(client)
-    moral_rows = document_rows(client.get(f"/suppliers/{moral.id}").text)
+    page = html.unescape(client.get(f"/suppliers/{moral.id}").text)
+    assert "<h2>Requisitos de alta</h2>" in page and "Requisitos de alta completos" in page
+    moral_rows = requirement_rows(page)
     for label in (
-        "Cédula fiscal",
         "Acta constitutiva",
-        "Opinión de cumplimiento",
+        "Poderes",
+        "Cédula fiscal",
         "Identificación del representante legal",
+        "Comprobante de domicilio del representante legal",
+        "Comprobante de domicilio",
         "Estado de cuenta bancario",
     ):
-        assert moral_rows[label][0], label
-    for label in ("Contrato", "Debida diligencia", "Ubicación"):
-        assert not moral_rows[label][0], label
-    physical_rows = document_rows(client.get(f"/suppliers/{physical.id}").text)
-    assert physical_rows["Identificación oficial"][0] and physical_rows["Comprobante de domicilio"][0]
-    assert not physical_rows["Contrato"][0]
-    assert not [label for label in physical_rows if "representante legal" in label]
+        assert moral_rows[label].startswith("Obligatorio · "), label
+    for label in ("Opinión de cumplimiento", "Debida diligencia", "Ubicación"):
+        assert moral_rows[label].startswith("Opcional · "), label
+    # El Contrato se carga en cada contrato (HU-22).
+    assert "Identificación oficial" not in moral_rows and "Contrato" not in moral_rows
+    physical_rows = requirement_rows(client.get(f"/suppliers/{physical.id}").text)
+    assert physical_rows["Identificación oficial"].startswith("Obligatorio · ")
+    assert physical_rows["Comprobante de domicilio"].startswith("Obligatorio · ")
+    assert physical_rows["Ubicación"].startswith("Opcional · ") and "Contrato" not in physical_rows
+    assert not [label for label in physical_rows if "representante legal" in label or label == "Poderes"]
+
+
+def test_notas_de_los_requisitos_del_expediente(client):
+    moral = supplier_by_email("proveedor1@poc.local")
+    login(client)
+    rows = requirement_rows(client.get(f"/suppliers/{moral.id}").text)
+    # El proveedor demo se dio de alta por cotizacion: la propuesta economica es exigible.
+    assert rows["Propuesta económica"].startswith("Obligatorio · ")
+    assert rows["Propuesta económica"].endswith(" · Alta por cotización o licitación")
+    # Cargado: nombre del archivo vigente y fecha del documento (otras pruebas pueden reemplazarlo).
+    assert re.fullmatch(r"Obligatorio · \S+ \(\d{2}/\d{2}/\d{4}\)", rows["Cédula fiscal"])
 
 
 def upload(client, supplier_id: int, document_type: str):
@@ -478,28 +492,16 @@ def test_carga_de_los_documentos_nuevos(client):
     moral = supplier_by_email("proveedor1@poc.local")
     physical = supplier_by_email("proveedor2@poc.local")
     login(client, "proveedor1@poc.local")
-    assert upload(client, moral.id, "SUPPLIER_CONTRACT").status_code == 303
+    assert upload(client, moral.id, "LOCATION").status_code == 303
     assert upload(client, moral.id, "LEGAL_REP_ADDRESS_PROOF").status_code == 303
     assert document_row(moral.id, "LEGAL_REP_ADDRESS_PROOF").mime_type == "application/pdf"
     client.cookies.clear()
     login(client, "proveedor2@poc.local")
-    assert upload(client, physical.id, "LEGAL_REP_ADDRESS_PROOF").status_code == 400
-    assert upload(client, physical.id, "SUPPLIER_CONTRACT").status_code == 303
-
-
-def test_vigencia_del_comprobante_del_representante_legal():
-    supplier = SimpleNamespace(
-        supplier_type=SupplierType.PERSONA_MORAL, economic_proposal=False, origin=SupplierOrigin.NATIONAL
-    )
-    old = date.today() - timedelta(days=120)
-    documents = [
-        SimpleNamespace(document_type=code, is_current=True, document_date=old)
-        for code in ("LEGAL_REP_ADDRESS_PROOF", "SUPPLIER_CONTRACT")
-    ]
-    rows = {row["code"]: row for row in supplier_requirement_status(supplier, documents)}
-    assert rows["LEGAL_REP_ADDRESS_PROOF"]["expired"] is True
-    assert rows["SUPPLIER_CONTRACT"]["expired"] is False
-    assert rows["SUPPLIER_CONTRACT"]["label"] == "Contrato"
+    rejected = upload(client, physical.id, "LEGAL_REP_ADDRESS_PROOF")
+    assert rejected.status_code == 400 and "El documento no aplica a este proveedor" in rejected.text
+    assert upload(client, physical.id, "LOCATION").status_code == 303
+    # El Contrato ya no es requisito de alta: se carga en cada contrato (HU-22).
+    assert upload(client, physical.id, "SUPPLIER_CONTRACT").status_code == 400
 
 
 def download(client, supplier_id: int, document_id: int):
@@ -553,74 +555,3 @@ def test_edicion_de_las_casillas_y_la_informacion_bancaria(client, registered_su
     assert edit_supplier(client, supplier.id, **form).status_code == 303
     saved = supplier_by_rfc(supplier.rfc)
     assert (saved.confidentiality_agreement, saved.economic_proposal, saved.bank_information) == (False, False, None)
-
-
-# --- Expediente minimo (SUP-003) ----------------------------------------------------------------------------------
-
-MORAL_REQUIRED = ("INCORPORATION_ACT", "LEGAL_REP_ID", "TAX_STATUS", "SAT_OPINION", "ADDRESS_PROOF", "BANK_STATEMENT")
-PHYSICAL_REQUIRED = ("OFFICIAL_ID", "TAX_STATUS", "SAT_OPINION", "ADDRESS_PROOF", "BANK_STATEMENT")
-
-
-def minimum_file(supplier_type: SupplierType, codes, quotation: bool = False) -> str:
-    """Resultado de SUP-003 para un expediente con los documentos `codes`."""
-    supplier = SimpleNamespace(
-        supplier_type=supplier_type, economic_proposal=quotation, status="ACTIVE", origin=SupplierOrigin.NATIONAL
-    )
-    documents = [SimpleNamespace(document_type=code, is_current=True, document_date=None) for code in codes]
-    outcomes = supplier_rules(supplier, None, supplier_requirement_status(supplier, documents))
-    return next(o.status for o in outcomes if o.rule_code == "SUP-003")
-
-
-def test_expediente_minimo_sin_documentos_opcionales():
-    # Contrato, debida diligencia, ubicacion y propuesta economica (sin cotizacion) no cuentan.
-    assert minimum_file(SupplierType.PERSONA_MORAL, MORAL_REQUIRED) == "PASS"
-    assert minimum_file(SupplierType.PERSONA_FISICA, PHYSICAL_REQUIRED) == "PASS"
-    assert minimum_file(SupplierType.PERSONA_MORAL, MORAL_REQUIRED[1:]) == "FAIL"
-    assert minimum_file(SupplierType.PERSONA_FISICA, PHYSICAL_REQUIRED[:-1]) == "FAIL"
-
-
-def test_expediente_minimo_con_cualquier_comprobante_de_domicilio():
-    without_address = [code for code in MORAL_REQUIRED if code != "ADDRESS_PROOF"]
-    assert minimum_file(SupplierType.PERSONA_MORAL, [*without_address, "LEGAL_REP_ADDRESS_PROOF"]) == "PASS"
-    assert minimum_file(SupplierType.PERSONA_MORAL, without_address) == "FAIL"
-    # La persona fisica no tiene comprobante del representante legal: el suyo es obligatorio.
-    physical = [code for code in PHYSICAL_REQUIRED if code != "ADDRESS_PROOF"]
-    assert minimum_file(SupplierType.PERSONA_FISICA, [*physical, "LEGAL_REP_ADDRESS_PROOF"]) == "FAIL"
-
-
-def test_propuesta_economica_obligatoria_en_alta_por_cotizacion():
-    assert minimum_file(SupplierType.PERSONA_MORAL, MORAL_REQUIRED, quotation=True) == "FAIL"
-    assert minimum_file(SupplierType.PERSONA_MORAL, [*MORAL_REQUIRED, "ECONOMIC_PROPOSAL"], quotation=True) == "PASS"
-
-
-def test_notas_de_los_documentos_del_expediente(client):
-    moral = supplier_by_email("proveedor1@poc.local")
-    login(client)
-    page = client.get(f"/suppliers/{moral.id}").text
-    rows = {label: status for label, (_, status) in document_rows(page).items()}
-    assert "Obligatorio para el expediente mínimo" in html.unescape(page)
-    assert rows["Contrato"].endswith("· Opcional")
-    assert rows["Debida diligencia"].endswith("· Opcional")
-    company, representative = "Comprobante de domicilio", "Comprobante de domicilio del representante legal"
-    assert rows[company].endswith("· Basta este o el comprobante de domicilio del representante legal")
-    assert rows[representative].endswith("· Basta este o el comprobante de domicilio")
-    assert rows["Cédula fiscal"] in ("Disponible", "Pendiente", "Advertencia de vigencia (+3 meses)")
-
-
-def test_obligatoriedad_de_los_comprobantes_de_domicilio():
-    """Sin ninguno, los dos se marcan obligatorios; con uno, solo ese; con ambos, los dos cumplen el requisito."""
-    supplier = SimpleNamespace(
-        supplier_type=SupplierType.PERSONA_MORAL, economic_proposal=False, origin=SupplierOrigin.NATIONAL
-    )
-
-    def required(*codes):
-        documents = [SimpleNamespace(document_type=code, is_current=True, document_date=None) for code in codes]
-        rows = supplier_requirement_status(supplier, documents)
-        return {r["code"]: r["required"] for r in rows if r["code"] in ("ADDRESS_PROOF", "LEGAL_REP_ADDRESS_PROOF")}
-
-    assert required() == {"ADDRESS_PROOF": True, "LEGAL_REP_ADDRESS_PROOF": True}
-    assert required("LEGAL_REP_ADDRESS_PROOF") == {"ADDRESS_PROOF": False, "LEGAL_REP_ADDRESS_PROOF": True}
-    assert required("ADDRESS_PROOF", "LEGAL_REP_ADDRESS_PROOF") == {
-        "ADDRESS_PROOF": True,
-        "LEGAL_REP_ADDRESS_PROOF": True,
-    }

@@ -65,6 +65,7 @@ def fixtures(run: str, out: str) -> None:
         "invoice": folder / f"INV-QA-{run}.pdf",
         "invoice_otro": folder / f"INV-QA-{run}-B.pdf",
         "acuse": folder / f"acuse_cancelacion_{run}.pdf",
+        "requisito_alta": folder / f"requisito_alta_{run}.pdf",
         "texto_invalido": folder / f"no_es_xml_{run}.txt",
     }
     files["cfdi_ok"].write_text(_cfdi(uuid_ok), encoding="utf-8")
@@ -91,6 +92,10 @@ def fixtures(run: str, out: str) -> None:
         files["acuse"],
         [f"ACUSE DE CANCELACION (PRUEBA QA {run})", "Documento de prueba sin validez fiscal."],
     )
+    _pdf(
+        files["requisito_alta"],
+        [f"DOCUMENTO DEL EXPEDIENTE (PRUEBA QA {run})", "Requisito de alta del proveedor (HU-21). Sin validez legal."],
+    )
     files["texto_invalido"].write_text("Este archivo no es un XML.\n", encoding="utf-8")
     print(json.dumps({key: str(path) for key, path in files.items()} | {"uuid_ok": uuid_ok}))
 
@@ -109,23 +114,93 @@ def plantilla_proveedores(source: str, out: str, run: str, mode: str) -> None:
     domain = "proveedores-qa.example"
     if mode == "validos":
         rows = [
-            ("Nacional", "Moral", f"QA Alfa Servicios {run} SA de CV", _rfc("QAA", run, False), None, None,
-             f"alfa.{run}@{domain}".lower(), "55 1234 5678", "Sí", "Alta por prueba funcional HU-01"),
-            ("Nacional", "Física", f"QA Bravo Persona {run}", _rfc("QABR", run, True), None, None,
-             f"bravo.{run}@{domain}".lower(), None, "No", None),
-            ("Internacional", "Moral", f"QA Charlie Consulting {run} LLC", None, f"QA-{run}", "US",
-             f"charlie.{run}@{domain}".lower(), "+1 206 555 0100", "Sí", "Proveedor internacional de prueba"),
+            (
+                "Nacional",
+                "Moral",
+                f"QA Alfa Servicios {run} SA de CV",
+                _rfc("QAA", run, False),
+                None,
+                None,
+                f"alfa.{run}@{domain}".lower(),
+                "55 1234 5678",
+                "Sí",
+                "Alta por prueba funcional HU-01",
+            ),
+            (
+                "Nacional",
+                "Física",
+                f"QA Bravo Persona {run}",
+                _rfc("QABR", run, True),
+                None,
+                None,
+                f"bravo.{run}@{domain}".lower(),
+                None,
+                "No",
+                None,
+            ),
+            (
+                "Internacional",
+                "Moral",
+                f"QA Charlie Consulting {run} LLC",
+                None,
+                f"QA-{run}",
+                "US",
+                f"charlie.{run}@{domain}".lower(),
+                "+1 206 555 0100",
+                "Sí",
+                "Proveedor internacional de prueba",
+            ),
         ]
     else:
         rows = [
-            ("Nacional", "Moral", f"QA Delta Valida {run} SA de CV", _rfc("QAD", run, False), None, None,
-             f"delta.{run}@{domain}".lower(), None, "Sí", "Fila valida"),
-            ("Nacional", "Moral", f"QA Echo RFC Invalido {run}", "ABC123", None, None,
-             f"echo.{run}@{domain}".lower(), None, None, "Error: RFC con formato invalido"),
-            ("Internacional", "Moral", f"QA Foxtrot Sin ID {run}", None, None, "US",
-             f"foxtrot.{run}@{domain}".lower(), None, None, "Error: falta el identificador fiscal"),
-            ("Nacional", "Moral", f"QA Golf Correo {run}", _rfc("QAG", run, False), None, None,
-             "correo-sin-arroba.example", None, None, "Error: correo invalido"),
+            (
+                "Nacional",
+                "Moral",
+                f"QA Delta Valida {run} SA de CV",
+                _rfc("QAD", run, False),
+                None,
+                None,
+                f"delta.{run}@{domain}".lower(),
+                None,
+                "Sí",
+                "Fila valida",
+            ),
+            (
+                "Nacional",
+                "Moral",
+                f"QA Echo RFC Invalido {run}",
+                "ABC123",
+                None,
+                None,
+                f"echo.{run}@{domain}".lower(),
+                None,
+                None,
+                "Error: RFC con formato invalido",
+            ),
+            (
+                "Internacional",
+                "Moral",
+                f"QA Foxtrot Sin ID {run}",
+                None,
+                None,
+                "US",
+                f"foxtrot.{run}@{domain}".lower(),
+                None,
+                None,
+                "Error: falta el identificador fiscal",
+            ),
+            (
+                "Nacional",
+                "Moral",
+                f"QA Golf Correo {run}",
+                _rfc("QAG", run, False),
+                None,
+                None,
+                "correo-sin-arroba.example",
+                None,
+                None,
+                "Error: correo invalido",
+            ),
         ]
     for row in rows:
         sheet.append(row)

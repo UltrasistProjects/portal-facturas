@@ -55,6 +55,35 @@ export async function cargarDocumento(page: Page, tipo: string, archivo: string)
   await clicNavegando(page, page.getByRole('button', { name: 'Cargar documento' }));
 }
 
+/** Abre el expediente de un proveedor buscandolo por su razon social en el listado; devuelve su id. */
+export async function abrirExpediente(page: Page, razonSocial: string): Promise<number> {
+  await page.goto(`/suppliers?q=${encodeURIComponent(razonSocial)}`);
+  const fila = page.locator('table tbody tr').filter({ hasText: razonSocial }).first();
+  await clicNavegando(page, fila.locator('a[aria-label="Ver expediente"]'));
+  const coincidencia = page.url().match(/\/suppliers\/(\d+)/);
+  if (!coincidencia) throw new Error(`La URL no es de un expediente: ${page.url()}`);
+  return Number(coincidencia[1]);
+}
+
+/** Carga desde el expediente abierto un archivo por cada requisito de alta obligatorio pendiente (HU-21). */
+export async function cargarRequisitosAlta(page: Page, archivo: string): Promise<string[]> {
+  const pendientes = (
+    await page
+      .locator('.requirements-panel .document-row')
+      .filter({ hasText: 'Obligatorio · Pendiente' })
+      .locator('strong')
+      .allInnerTexts()
+  ).map((nombre) => nombre.trim());
+  for (const nombre of pendientes) {
+    const formulario = page.locator('details.admin-create').filter({ hasText: 'Agregar o reemplazar documento del expediente' });
+    if (!(await formulario.evaluate((el) => (el as HTMLDetailsElement).open))) await formulario.locator('summary').click();
+    await formulario.locator('#supplier-document-type').selectOption({ label: `${nombre} (obligatorio)` });
+    await formulario.locator('input[name=upload]').setInputFiles(archivo);
+    await clicNavegando(page, formulario.getByRole('button', { name: 'Guardar documento' }));
+  }
+  return pendientes;
+}
+
 export async function resumenObligatorios(page: Page): Promise<string> {
   return texto(page, '.required-summary');
 }
