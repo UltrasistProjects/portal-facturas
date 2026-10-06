@@ -1,9 +1,10 @@
 """Plantillas de correo de los eventos de estatus de factura (HU-05) y de las credenciales del proveedor (HU-03).
 
 Catalogo de eventos y variables, textos predeterminados, validacion, vista previa, guardado con bloqueo optimista y
-composicion del correo para las HU que envian notificaciones (HU-20, HU-14 y HU-03). El texto del Administrador
-nunca pasa por Jinja2: una expresion regular sustituye cada {{variable}} por su valor en una sola pasada (D2). Este
-modulo no envia correos ni registra en el log el texto de las plantillas o los valores de las variables.
+composicion del correo para las HU que envian notificaciones (HU-20, HU-14, HU-03 y HU Complemento de Pagos). El
+texto del Administrador nunca pasa por Jinja2: una expresion regular sustituye cada {{variable}} por su valor en una
+sola pasada (D2). Este modulo no envia correos ni registra en el log el texto de las plantillas o los valores de las
+variables.
 """
 
 import logging
@@ -38,6 +39,13 @@ CONCURRENT_EDIT_MESSAGE = (
 AUDIT_ACTION = "NOTIFICATION_TEMPLATE_UPDATED"
 
 
+# Valor de {{aviso_complemento}} en una factura que requiere Complemento de Pago (HU Complemento de Pagos).
+COMPLEMENT_NOTICE = (
+    "Es importante que adjunte su “Complemento de Pago” a dicha factura pagada antes del {fecha}. "
+    "Mientras no lo adjunte, el portal no le permitirá enviar nuevas facturas a validación."
+)
+
+
 @dataclass(frozen=True)
 class Variable:
     name: str
@@ -65,6 +73,12 @@ VARIABLES = {
             "Fecha límite para aceptar la cancelación: fecha de la solicitud + 72 horas",
             "28/09/2026 10:30",
         ),
+        Variable(
+            "aviso_complemento",
+            "Aviso del Complemento de Pago con su fecha límite; sólo aparece en las facturas nacionales con método "
+            "de pago PPD",
+            COMPLEMENT_NOTICE.format(fecha="28/09/2026 10:30"),
+        ),
         # Credenciales de acceso (HU-03). El ejemplo de la contrasena es ficticio: nunca se leen datos reales.
         Variable("usuario", "Correo con el que el proveedor inicia sesión", "contacto@serviciosdelnorte.mx"),
         Variable("contrasena_temporal", "Contraseña temporal generada al autorizar", "Ejemplo#Temporal2026"),
@@ -74,6 +88,9 @@ VARIABLES = {
     )
 }
 COMMON_VARIABLES = {"numero_factura", "folio_interno", "proveedor", "monto", "estatus", "fecha_estatus"}
+# Variables que el sistema solo llena cuando aplican: obligatorias en el cuerpo (el Administrador no puede quitar el
+# aviso), pero pueden llegar vacias al componer. Vacias, la linea que solo las contenia desaparece (D7).
+CONDITIONAL_VARIABLES = {"aviso_complemento"}
 
 
 def tag(name: str) -> str:
@@ -131,8 +148,8 @@ SUPPLIER_DETAILS = (
     "{{observaciones}}\n\nFolio interno: {{folio_interno}}\nFecha: {{fecha_estatus}}\n\n" + SUPPLIER_FOOTER
 )
 
-# Textos predeterminados (HU, seccion 6.4). Las migraciones 0004 y 0006 (credenciales, HU-03) los copian; una
-# prueba verifica que coinciden.
+# Textos predeterminados (HU, seccion 6.4). Las migraciones 0004, 0006 (credenciales, HU-03) y 0018 (pago y
+# complemento) los copian; una prueba verifica que coinciden. El orden es el del listado de plantillas.
 EVENTS: dict[NotificationEvent, EventSpec] = {
     spec.event: spec
     for spec in (
@@ -182,6 +199,33 @@ EVENTS: dict[NotificationEvent, EventSpec] = {
             "Folio interno: {{folio_interno}}\n"
             "Monto: {{monto}}\n"
             "Fecha de la solicitud: {{fecha_estatus}}\n\n" + RECEPTION_FOOTER,
+        ),
+        EventSpec(
+            NotificationEvent.INVOICE_PAID,
+            "Pagada",
+            SUPPLIER,
+            _variables("aviso_complemento"),
+            ("numero_factura", "aviso_complemento"),
+            "Factura {{numero_factura}} pagada",
+            "{{proveedor}}:\n\n"
+            "Su factura número {{numero_factura}} ha sido pagada.\n\n"
+            "{{aviso_complemento}}\n\n"
+            "Folio interno: {{folio_interno}}\n"
+            "Monto: {{monto}}\n"
+            "Fecha de pago: {{fecha_estatus}}\n\n" + SUPPLIER_FOOTER,
+        ),
+        EventSpec(
+            NotificationEvent.PAYMENT_COMPLEMENT,
+            "Complemento de pago adjuntado",
+            RECEPTION,
+            _variables(),
+            ("numero_factura", "proveedor"),
+            "Complemento de pago de la factura {{numero_factura}}",
+            "Recepción de Facturas:\n\n"
+            "El Complemento de Pago ha sido adjuntado a la factura {{numero_factura}} del proveedor {{proveedor}}.\n\n"
+            "Folio interno: {{folio_interno}}\n"
+            "Monto: {{monto}}\n"
+            "Fecha de carga: {{fecha_estatus}}\n\n" + RECEPTION_FOOTER,
         ),
         EventSpec(
             NotificationEvent.SUPPLIER_CREDENTIALS,
@@ -279,9 +323,28 @@ def render(text: str, values: dict[str, str]) -> str:
     return VARIABLE_PATTERN.sub(lambda match: values[match.group(1).strip()], text)
 
 
+BLANK_LINES = re.compile(r"\n{3,}")
+
+
+def _drop_empty_conditionals(body: str, values: dict[str, str]) -> str:
+    """Quita las lineas que solo contienen una variable condicional vacia y reduce a una las lineas en blanco
+    consecutivas que resulten. Sin variables condicionales vacias, el cuerpo no cambia."""
+    empty = {name for name in CONDITIONAL_VARIABLES if name in values and not values[name].strip()}
+    if not empty:
+        return body
+    kept = [
+        line
+        for line in body.split("\n")
+        if not ((match := VARIABLE_PATTERN.fullmatch(line.strip())) is not None and match.group(1).strip() in empty)
+    ]
+    return BLANK_LINES.sub("\n\n", "\n".join(kept))
+
+
 def _compose_text(subject: str, body: str, values: dict[str, str]) -> ComposedEmail:
     single_line = LINE_BREAK.sub(" ", render(subject, values))
-    return ComposedEmail(single_line[:COMPOSED_SUBJECT_MAX_LENGTH], render(body, values))
+    return ComposedEmail(
+        single_line[:COMPOSED_SUBJECT_MAX_LENGTH], render(_drop_empty_conditionals(body, values), values)
+    )
 
 
 def sample_values(spec: EventSpec) -> dict[str, str]:
@@ -336,13 +399,15 @@ def compose(
     fecha_estatus: datetime | None = None,
     observaciones: str | None = None,
     fecha_limite_cancelacion: datetime | None = None,
+    aviso_complemento: str | None = None,
     usuario: str | None = None,
     contrasena_temporal: str | None = None,
     url_portal: str | None = None,
 ) -> ComposedEmail:
     """Asunto y cuerpo del correo de `event` con la plantilla vigente (D10). Falla con NotificationDataError, sin
-    componer nada, si falta el valor de una variable del evento o si una obligatoria llega vacia. Los valores de
-    variables que el evento no admite se ignoran. No envia el correo."""
+    componer nada, si falta el valor de una variable del evento o si una obligatoria llega vacia (salvo las
+    condicionales, que pueden llegar vacias). Los valores de variables que el evento no admite se ignoran. No envia
+    el correo."""
     spec = EVENTS[NotificationEvent(event)]
     provided = {
         "numero_factura": numero_factura,
@@ -355,6 +420,7 @@ def compose(
         "fecha_limite_cancelacion": (
             format_datetime(fecha_limite_cancelacion) if fecha_limite_cancelacion is not None else None
         ),
+        "aviso_complemento": aviso_complemento,
         "usuario": usuario,
         "contrasena_temporal": contrasena_temporal,
         "url_portal": url_portal,
@@ -364,7 +430,7 @@ def compose(
         value = provided[name]
         if value is None:
             raise NotificationDataError(f"Falta el valor de la variable {name} para el evento {spec.event.value}")
-        if name in spec.required and not value.strip():
+        if name in spec.required and name not in CONDITIONAL_VARIABLES and not value.strip():
             raise NotificationDataError(f"La variable obligatoria {name} llegó vacía para el evento {spec.event.value}")
         values[name] = value
     subject, body = _current_text(db, spec)
@@ -383,7 +449,8 @@ class TemplateRow:
 
 
 def list_templates(db: Session) -> list[TemplateRow]:
-    """Las plantillas en el orden del catalogo: Autorizada, Rechazada, Observaciones y Cancelada."""
+    """Las plantillas en el orden del catalogo: Autorizada, Rechazada, Observaciones, Cancelada, Pagada, Complemento
+    de pago adjuntado y Credenciales de acceso."""
     stmt = select(NotificationTemplate).options(joinedload(NotificationTemplate.updater))
     templates = {template.event: template for template in db.scalars(stmt)}
     rows = []

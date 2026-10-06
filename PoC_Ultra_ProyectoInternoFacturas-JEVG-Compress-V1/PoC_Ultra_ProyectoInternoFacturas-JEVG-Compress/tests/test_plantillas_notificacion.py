@@ -24,6 +24,8 @@ REJECTED = NotificationEvent.INVOICE_REJECTED
 OBSERVATIONS = NotificationEvent.INVOICE_OBSERVATIONS
 CANCELLED = NotificationEvent.INVOICE_CANCELLED
 CREDENTIALS = NotificationEvent.SUPPLIER_CREDENTIALS
+PAID = NotificationEvent.INVOICE_PAID
+COMPLEMENT = NotificationEvent.PAYMENT_COMPLEMENT
 SUPPLIER_NAME = "Servicios Digitales del Norte SA de CV"
 # Valores completos de un correo; cada prueba cambia solo lo que le interesa.
 VALUES = {
@@ -35,6 +37,7 @@ VALUES = {
     "fecha_estatus": datetime(2026, 9, 25, 16, 30, tzinfo=timezone.utc),
     "observaciones": "El subtotal del XML no coincide con el de la orden de compra.",
     "fecha_limite_cancelacion": datetime(2026, 9, 28, 16, 30, tzinfo=timezone.utc),
+    "aviso_complemento": nt.COMPLEMENT_NOTICE.format(fecha="28/09/2026 10:30"),
 }
 
 
@@ -99,10 +102,10 @@ def compose(event: NotificationEvent, **overrides):
 
 def test_evento_inexistente(client):
     login(client)
-    assert client.get(f"{URL}/INVOICE_PAID").status_code == 404
+    assert client.get(f"{URL}/INVOICE_ARCHIVED").status_code == 404
     data = {"subject": "x", "body": "y", "version": 1, "csrf_token": csrf(client, "/")}
-    assert client.post(f"{URL}/INVOICE_PAID", data=data).status_code == 404
-    assert client.post(f"{URL}/INVOICE_PAID/preview", data=data).status_code == 404
+    assert client.post(f"{URL}/INVOICE_ARCHIVED", data=data).status_code == 404
+    assert client.post(f"{URL}/INVOICE_ARCHIVED/preview", data=data).status_code == 404
 
 
 @pytest.mark.parametrize("email", ["pmo@poc.local", "proveedor1@poc.local"])
@@ -152,9 +155,11 @@ def test_listado_inicial(client):
         ("Rechazada", supplier),
         ("Observaciones", supplier),
         ("Cancelada", reception),
+        ("Pagada", supplier),
+        ("Complemento de pago adjuntado", reception),
         ("Credenciales de acceso", supplier),
     ]
-    assert [modified for *_, modified in rows] == ["Predeterminada"] * 5
+    assert [modified for *_, modified in rows] == ["Predeterminada"] * 7
     assert rows[0][2] == "Factura {{numero_factura}} autorizada para pago"
 
 
@@ -444,8 +449,15 @@ def test_textos_predeterminados_conforme_a_las_reglas_de_negocio():
         REJECTED: "Factura {{numero_factura}} rechazada",
         OBSERVATIONS: "Factura {{numero_factura}} con observaciones",
         CANCELLED: "Cancelación de la factura {{numero_factura}} de {{proveedor}}",
+        PAID: "Factura {{numero_factura}} pagada",
+        COMPLEMENT: "Complemento de pago de la factura {{numero_factura}}",
         CREDENTIALS: "Acceso al Portal de Proveedores ULTRASIST",
     }
+    assert "Su factura número {{numero_factura}} ha sido pagada.\n\n{{aviso_complemento}}\n\n" in default_body(PAID)
+    assert (
+        "El Complemento de Pago ha sido adjuntado a la factura {{numero_factura}} del proveedor {{proveedor}}."
+        in default_body(COMPLEMENT)
+    )
     for line in ("Portal: {{url_portal}}", "Usuario: {{usuario}}", "Contraseña temporal: {{contrasena_temporal}}"):
         assert f"\n{line}\n" in default_body(CREDENTIALS), line
     assert (
@@ -653,3 +665,75 @@ def test_composicion_de_las_credenciales():
             assert line in email.body
         with pytest.raises(nt.NotificationDataError, match="contrasena_temporal"):
             nt.compose(db, CREDENTIALS, **{**CREDENTIAL_VALUES, "contrasena_temporal": " "})
+
+
+# --- Pagada y Complemento de pago adjuntado (HU Complemento de Pagos) --------------------------------------------
+
+
+def test_variables_de_la_plantilla_pagada(client):
+    login(client)
+    html = client.get(f"{URL}/{PAID}").text
+    rows = re.findall(r'<span class="mono">\{\{(\w+)\}\}</span>(<small>Obligatoria</small>)?', html)
+    assert [name for name, _ in rows] == [
+        "numero_factura",
+        "folio_interno",
+        "proveedor",
+        "monto",
+        "estatus",
+        "fecha_estatus",
+        "aviso_complemento",
+    ]
+    assert {name for name, required in rows if required} == {"numero_factura", "aviso_complemento"}
+    assert "PPD" in html
+
+
+def test_aviso_del_complemento_obligatorio_en_el_cuerpo(client):
+    login(client)
+    body = default_body(PAID).replace("{{aviso_complemento}}", "")
+    response = save(client, PAID, body=body)
+    assert response.status_code == 400
+    assert "Cuerpo: debe incluir la variable obligatoria {{aviso_complemento}}" in response.text
+    assert stored(PAID).version == 1
+
+
+def test_vista_previa_de_pagada(client):
+    login(client)
+    response = preview(client, PAID)
+    assert response.status_code == 200
+    block = html.unescape(preview_block(response.text))
+    assert "Factura A-1024 pagada" in response.text
+    assert "Su factura número A-1024 ha sido pagada." in block
+    notice = "Es importante que adjunte su “Complemento de Pago” a dicha factura pagada antes del 28/09/2026 10:30."
+    assert notice in block
+
+
+def test_aviso_del_complemento_vacio():
+    email = compose(PAID, aviso_complemento="")
+    assert email.subject == "Factura A-1024 pagada"
+    assert "Su factura número A-1024 ha sido pagada.\n\nFolio interno: FAC-2026-00042" in email.body
+    assert "Complemento de Pago" not in email.body
+    assert "\n\n\n" not in email.body
+
+
+def test_aviso_del_complemento_con_valor():
+    email = compose(PAID)
+    assert "ha sido pagada.\n\nEs importante que adjunte su “Complemento de Pago”" in email.body
+
+
+def test_aviso_del_complemento_ausente_falla():
+    with pytest.raises(nt.NotificationDataError, match="aviso_complemento"):
+        compose(PAID, aviso_complemento=None)
+
+
+def test_otras_variables_obligatorias_siguen_sin_admitir_vacio():
+    with pytest.raises(nt.NotificationDataError, match="numero_factura"):
+        compose(PAID, numero_factura=" ")
+
+
+def test_texto_predeterminado_de_complemento_adjuntado():
+    email = compose(COMPLEMENT)
+    assert email.subject == "Complemento de pago de la factura A-1024"
+    assert (
+        "El Complemento de Pago ha sido adjuntado a la factura A-1024 del proveedor Servicios Digitales del Norte SA "
+        "de CV."
+    ) in email.body

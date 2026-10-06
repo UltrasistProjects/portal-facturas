@@ -101,8 +101,9 @@ class ProcessingStatus(StrEnum):
 
 class InvoiceStatus(StrEnum):
     """Modelo de estatus del ERS (EP-01, DT-01). Se conservan las claves que ya significaban lo mismo; cambia la
-    etiqueta. Los pasos de ClickBalance del PoC se retiraron con HU-20: Autorizada y Rechazada solo admiten la
-    cancelacion del proveedor (HU-14), y Cancelada es final."""
+    etiqueta. Los pasos de ClickBalance del PoC se retiraron con HU-20: Autorizada solo admite el pago (HU Complemento
+    de Pagos) y la cancelacion del proveedor (HU-14), Rechazada solo la cancelacion, y Cancelada y Pagada son
+    finales."""
 
     DRAFT = "DRAFT"
     UPLOADED = "UPLOADED"
@@ -111,6 +112,7 @@ class InvoiceStatus(StrEnum):
     REJECTED = "REJECTED"
     REQUIRES_CORRECTION = "REQUIRES_CORRECTION"
     CANCELLED = "CANCELLED"
+    PAID = "PAID"
 
 
 STATUS_LABELS = {
@@ -121,11 +123,17 @@ STATUS_LABELS = {
     InvoiceStatus.REJECTED: "Rechazada",
     InvoiceStatus.REQUIRES_CORRECTION: "Observaciones",
     InvoiceStatus.CANCELLED: "Cancelada",
+    InvoiceStatus.PAID: "Pagada",
 }
 
 # Plazo que tiene Recepcion de Facturas para aceptar ante el SAT la cancelacion del CFDI (HU-14): horas naturales
 # desde la cancelacion en el portal.
 CANCELLATION_WINDOW = timedelta(hours=72)
+# Plazo del proveedor nacional con metodo de pago PPD para adjuntar el Complemento de Pago (HU Complemento de Pagos):
+# horas naturales desde que la factura se marca "Pagada". Vencido, el proveedor no puede enviar facturas.
+PAYMENT_COMPLEMENT_WINDOW = timedelta(hours=72)
+# Metodo de pago del CFDI que exige Complemento de Pago: pago en parcialidades o diferido.
+DEFERRED_PAYMENT_METHOD = "PPD"
 
 
 class DocumentType(StrEnum):
@@ -170,7 +178,8 @@ FORMAT_EXTENSIONS: dict[str, tuple[str, ...]] = {
 }
 
 # Niveles que el Administrador no puede cambiar (RD-04): el nacional factura con CFDI, el internacional con Invoice;
-# el acuse de cancelacion no se pide en la carga documental (HU-14).
+# el acuse de cancelacion no se pide en la carga documental (HU-14); el Complemento de Pago es Opcional para el
+# nacional, porque solo existe despues del pago (HU Complemento de Pagos).
 # Clave -> {origen: nivel}. La base de datos los garantiza con ck_invoice_document_types_fixed_levels.
 FIXED_REQUIREMENTS: dict[str, dict[SupplierOrigin, DocumentRequirement]] = {
     DocumentType.INVOICE_XML: {
@@ -189,13 +198,26 @@ FIXED_REQUIREMENTS: dict[str, dict[SupplierOrigin, DocumentRequirement]] = {
         SupplierOrigin.NATIONAL: DocumentRequirement.NOT_APPLICABLE,
         SupplierOrigin.INTERNATIONAL: DocumentRequirement.NOT_APPLICABLE,
     },
+    DocumentType.PAYMENT_COMPLEMENT_XML: {
+        SupplierOrigin.NATIONAL: DocumentRequirement.OPTIONAL,
+        SupplierOrigin.INTERNATIONAL: DocumentRequirement.NOT_APPLICABLE,
+    },
+    DocumentType.PAYMENT_COMPLEMENT_PDF: {
+        SupplierOrigin.NATIONAL: DocumentRequirement.OPTIONAL,
+        SupplierOrigin.INTERNATIONAL: DocumentRequirement.NOT_APPLICABLE,
+    },
 }
 FIXED_REQUIREMENT_REASONS = {
     DocumentType.INVOICE_XML: "El proveedor nacional factura con CFDI",
     DocumentType.INVOICE_PDF: "El proveedor nacional factura con CFDI",
     DocumentType.FOREIGN_INVOICE: "El proveedor internacional factura con Invoice",
     DocumentType.CANCELLATION_ACK: "Se carga al cancelar la factura",
+    DocumentType.PAYMENT_COMPLEMENT_XML: "Se carga después del pago de la factura",
+    DocumentType.PAYMENT_COMPLEMENT_PDF: "Se carga después del pago de la factura",
 }
+# Tipos del Complemento de Pago: los unicos que admite una factura "Pagada". El XML es el CFDI de pago que cuenta
+# como complemento adjuntado; el PDF es su representacion opcional.
+PAYMENT_COMPLEMENT_TYPES = (DocumentType.PAYMENT_COMPLEMENT_XML, DocumentType.PAYMENT_COMPLEMENT_PDF)
 
 
 class RuleStatus(StrEnum):
@@ -221,8 +243,9 @@ class ReviewDecision(StrEnum):
 
 
 # DRAFT <-> UPLOADED lo asigna el sistema segun los archivos obligatorios; UNDER_REVIEW, un envio que procede;
-# REQUIRES_CORRECTION ("Observaciones"), solo la decision del PMO. El proveedor cancela desde cualquier estatus
-# distinto de CANCELLED (HU-14, EP-01 P-05); CANCELLED no tiene salidas.
+# REQUIRES_CORRECTION ("Observaciones"), solo la decision del PMO; PAID, el pago de una factura autorizada (HU
+# Complemento de Pagos). El proveedor cancela desde cualquier estatus distinto de CANCELLED y PAID (HU-14, EP-01
+# P-05); CANCELLED y PAID no tienen salidas.
 ALLOWED_TRANSITIONS: dict[InvoiceStatus, set[InvoiceStatus]] = {
     InvoiceStatus.DRAFT: {InvoiceStatus.UPLOADED, InvoiceStatus.CANCELLED},
     InvoiceStatus.UPLOADED: {InvoiceStatus.DRAFT, InvoiceStatus.UNDER_REVIEW, InvoiceStatus.CANCELLED},
@@ -233,7 +256,7 @@ ALLOWED_TRANSITIONS: dict[InvoiceStatus, set[InvoiceStatus]] = {
         InvoiceStatus.REQUIRES_CORRECTION,
         InvoiceStatus.CANCELLED,
     },
-    InvoiceStatus.ACCEPTED: {InvoiceStatus.CANCELLED},
+    InvoiceStatus.ACCEPTED: {InvoiceStatus.PAID, InvoiceStatus.CANCELLED},
     InvoiceStatus.REJECTED: {InvoiceStatus.CANCELLED},
 }
 
@@ -269,13 +292,16 @@ FIXED_CONTRACT_REQUIREMENT_REASONS = {SIGNED_CONTRACT_DOCUMENT: "Todo contrato a
 
 class NotificationEvent(StrEnum):
     """Eventos con plantilla de correo (HU-05). Independientes de InvoiceStatus: HU-20 y HU-14 los disparan y hacen
-    el mapeo desde sus estatus; HU-03 envia las credenciales del proveedor autorizado. Nombre, destinatario y
-    variables viven en app/services/notification_templates.py."""
+    el mapeo desde sus estatus; HU-03 envia las credenciales del proveedor autorizado; la HU Complemento de Pagos, el
+    aviso de pago al proveedor y el de complemento adjuntado a Recepcion de Facturas. Nombre, destinatario y
+    variables viven en app/services/notification_templates.py. La columna event mide 20 caracteres."""
 
     INVOICE_AUTHORIZED = "INVOICE_AUTHORIZED"
     INVOICE_REJECTED = "INVOICE_REJECTED"
     INVOICE_OBSERVATIONS = "INVOICE_OBSERVATIONS"
     INVOICE_CANCELLED = "INVOICE_CANCELLED"
+    INVOICE_PAID = "INVOICE_PAID"
+    PAYMENT_COMPLEMENT = "PAYMENT_COMPLEMENT"
     SUPPLIER_CREDENTIALS = "SUPPLIER_CREDENTIALS"
 
 

@@ -31,3 +31,7 @@
 | HU-21 Requisitos de alta del proveedor | HU-02 Autorización masiva de proveedores |
 | HU-22 Requisitos de alta del contrato | HU-21 Requisitos de alta del proveedor |
 | HU-22 Requisitos de alta del contrato | HU-02 Autorización masiva de proveedores |
+| HU-23 Complemento de pagos | HU-20 Cambio de estatus de factura |
+| HU-23 Complemento de pagos | HU-08 Configuración de correos de notificación |
+| HU-23 Complemento de pagos | HU-04 Definición de archivos requeridos por tipo de proveedor |
+| HU-23 Complemento de pagos | HU-13 Envío de factura por proveedor nacional |

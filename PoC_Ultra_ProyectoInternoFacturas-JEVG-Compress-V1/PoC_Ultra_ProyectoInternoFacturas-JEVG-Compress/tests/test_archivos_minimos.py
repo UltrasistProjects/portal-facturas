@@ -497,6 +497,26 @@ def test_peticion_manipulada_sobre_un_nivel_fijo(client, restore_catalog):
     assert save_matrix(client, {"international__INVOICE_PDF": "NOT_APPLICABLE"}).status_code == 303
 
 
+@pytest.mark.parametrize("name", ["Complemento de pago (XML)", "Complemento de pago (PDF)"])
+def test_complemento_de_pago_con_nivel_fijo_en_la_pantalla(client, name):
+    # HU Complemento de Pagos: el complemento solo existe despues del pago, asi que es Opcional fijo para el nacional.
+    login(client)
+    page = client.get(URL).text
+    row = re.search(rf"<tr><td><strong>{re.escape(name)}</strong>.*?</tr>", page, re.S).group(0)
+    assert "<select" not in row and row.count("bi-lock-fill") == 2
+    assert re.search(r"bi-lock-fill[^<]*</i> Opcional</span><small[^>]*>Se carga después del pago de la factura", row)
+    assert "</i> No aplica</span>" in row
+
+
+def test_complemento_exigido_por_peticion_manipulada(client, restore_catalog):
+    login(client)
+    before = config_snapshot()
+    response = save_matrix(client, {"national__PAYMENT_COMPLEMENT_XML": "REQUIRED"})
+    assert response.status_code == 409
+    assert "Complemento de pago (XML) tiene un nivel fijo para proveedores nacionales" in response.text
+    assert config_snapshot() == before
+
+
 def test_dos_administradores_editan_a_la_vez(client, restore_catalog):
     from fastapi.testclient import TestClient
 

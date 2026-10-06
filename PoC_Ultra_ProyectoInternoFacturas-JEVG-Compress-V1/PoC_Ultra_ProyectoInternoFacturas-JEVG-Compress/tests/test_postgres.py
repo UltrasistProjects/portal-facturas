@@ -70,6 +70,10 @@ def test_listado_de_proveedor_usa_indice_compuesto():
         connection.execute(text("ANALYZE invoices"))
         connection.execute(text("SET LOCAL enable_seqscan = off"))
         connection.execute(text("SET LOCAL enable_bitmapscan = off"))
+        # Con una tabla de pocas paginas, el recorrido de ix_invoices_created_at sigue el orden fisico del heap y el
+        # costo por lectura aleatoria (4 por defecto) empata los dos planes; el ancho de la fila basta para inclinarlo.
+        # Con el costo de un disco SSD el resultado ya no depende del tamano de la tabla de pruebas.
+        connection.execute(text("SET LOCAL random_page_cost = 1.1"))
         plan = connection.execute(
             text("EXPLAIN SELECT * FROM invoices WHERE supplier_id = :id ORDER BY created_at DESC"),
             {"id": supplier.id},

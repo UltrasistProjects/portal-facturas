@@ -47,6 +47,13 @@ def _cfdi(uuid_value: str, postal_code: str = "03930") -> str:
     return raw.replace('DomicilioFiscalReceptor="03930"', f'DomicilioFiscalReceptor="{postal_code}"')
 
 
+def _payment_complement(related_uuid: str) -> str:
+    """CFDI de pago (tipo P) que liquida la factura `related_uuid` (HU-23), con un UUID propio."""
+    raw = (DEMO / "complemento_pago_demo.xml").read_text(encoding="utf-8")
+    raw = raw.replace("DEMO0001-0000-4000-8000-000000000001", related_uuid)
+    return re.sub(r'UUID="DEMOPAGO-[^"]*"', f'UUID="{str(uuid.uuid4()).upper()}"', raw)
+
+
 def fixtures(run: str, out: str) -> None:
     folder = Path(out)
     folder.mkdir(parents=True, exist_ok=True)
@@ -59,6 +66,9 @@ def fixtures(run: str, out: str) -> None:
         "cfdi_dup": folder / f"cfdi_{run}_uuid_repetido.xml",
         "cfdi_ok_b": folder / f"cfdi_{run}_correcto_b.xml",
         "cfdi_ok_c": folder / f"cfdi_{run}_correcto_c.xml",
+        # HU-23: CFDI nacional con MetodoPago PPD (el del demo) y su Complemento de Pago (tipo P) que lo relaciona.
+        "cfdi_ppd": folder / f"cfdi_{run}_ppd.xml",
+        "complemento_pago": folder / f"complemento_pago_{run}.xml",
         "pdf_cfdi": folder / f"factura_{run}.pdf",
         "orden_compra": folder / f"orden_compra_{run}.txt",
         "vobo": folder / f"vobo_{run}.txt",
@@ -73,6 +83,9 @@ def fixtures(run: str, out: str) -> None:
     files["cfdi_dup"].write_text(_cfdi(uuid_ok), encoding="utf-8")
     files["cfdi_ok_b"].write_text(_cfdi(str(uuid.uuid4()).upper()), encoding="utf-8")
     files["cfdi_ok_c"].write_text(_cfdi(str(uuid.uuid4()).upper()), encoding="utf-8")
+    uuid_ppd = str(uuid.uuid4()).upper()
+    files["cfdi_ppd"].write_text(_cfdi(uuid_ppd), encoding="utf-8")
+    files["complemento_pago"].write_text(_payment_complement(uuid_ppd), encoding="utf-8")
     shutil.copyfile(DEMO / "factura_demo.pdf", files["pdf_cfdi"])
     shutil.copyfile(DEMO / "orden_compra_demo.txt", files["orden_compra"])
     shutil.copyfile(DEMO / "vobo_demo.txt", files["vobo"])
@@ -97,7 +110,7 @@ def fixtures(run: str, out: str) -> None:
         [f"DOCUMENTO DEL EXPEDIENTE (PRUEBA QA {run})", "Requisito de alta del proveedor (HU-21). Sin validez legal."],
     )
     files["texto_invalido"].write_text("Este archivo no es un XML.\n", encoding="utf-8")
-    print(json.dumps({key: str(path) for key, path in files.items()} | {"uuid_ok": uuid_ok}))
+    print(json.dumps({key: str(path) for key, path in files.items()} | {"uuid_ok": uuid_ok, "uuid_ppd": uuid_ppd}))
 
 
 def _rfc(prefix: str, run: str, physical: bool) -> str:

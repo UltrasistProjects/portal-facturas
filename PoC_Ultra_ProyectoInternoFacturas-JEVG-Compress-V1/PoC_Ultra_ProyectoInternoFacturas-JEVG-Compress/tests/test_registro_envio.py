@@ -28,7 +28,8 @@ LABELS = [
     "Rechazada",
     "Observaciones",
     "Cancelada",
-]  # Sin los pasos de ClickBalance, retirados con HU-20; Cancelada, de HU-14
+    "Pagada",
+]  # Sin los pasos de ClickBalance, retirados con HU-20; Cancelada, de HU-14; Pagada, de la HU Complemento de Pagos
 
 
 def unique(prefix: str = "HU12") -> str:

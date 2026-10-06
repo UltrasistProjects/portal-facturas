@@ -18,6 +18,7 @@ from sqlalchemy import select
 from app.core.config import settings
 from app.core.constants import (
     CANCELLATION_WINDOW,
+    PAYMENT_COMPLEMENT_WINDOW,
     SIGNED_CONTRACT_DOCUMENT,
     DocumentType,
     InvoiceStatus,
@@ -456,6 +457,9 @@ def _seed(passwords: dict[str, str] | None) -> None:
             ("E-SEMANTICO", "cfdi_demo_correcto.xml", InvoiceStatus.UPLOADED, "Caso E semantico mock 0.93"),
             # HU-14: enviada y cancelada por el proveedor con su acuse; la siembra no envia el correo.
             ("CANCELADA-001", "cfdi_demo_correcto.xml", InvoiceStatus.CANCELLED, "Caso cancelado por el proveedor"),
+            # HU Complemento de Pagos: autorizada, pagada (nacional PPD) y con su complemento ya adjuntado. Un
+            # complemento pendiente venceria a las 72 horas y bloquearia los envios del proveedor demo.
+            ("PAGADA-001", "cfdi_demo_correcto.xml", InvoiceStatus.PAID, "Caso pagado con complemento"),
         ]
         submitted = {
             InvoiceStatus.UNDER_REVIEW,
@@ -463,8 +467,10 @@ def _seed(passwords: dict[str, str] | None) -> None:
             InvoiceStatus.REJECTED,
             InvoiceStatus.REQUIRES_CORRECTION,
             InvoiceStatus.CANCELLED,
+            InvoiceStatus.PAID,
         }
         decided = {InvoiceStatus.ACCEPTED, InvoiceStatus.REJECTED, InvoiceStatus.REQUIRES_CORRECTION}
+        paid = {InvoiceStatus.PAID}
         for index, (number, xml_name, final_status, note) in enumerate(scenarios, 1):
             invoice = Invoice(
                 internal_folio=f"FAC-2026-{index:05d}",
@@ -539,14 +545,14 @@ def _seed(passwords: dict[str, str] | None) -> None:
                         # Envio con su auditoria: el "Seguimiento" (HU-17) lo muestra antes de la decision.
                         invoice.submitted_at = now - timedelta(hours=2)
                         db.add(audit_entry(provider_id, "INVOICE_SUBMITTED", invoice.id, invoice.submitted_at))
-                    if final_status in decided:
+                    if final_status in decided | paid:
                         invoice.reviewed_by = pmo_id
-                        invoice.reviewed_at = now
+                        invoice.reviewed_at = now - timedelta(hours=1) if final_status in paid else now
                         db.add(
                             Review(
                                 invoice_id=invoice.id,
                                 reviewer_id=pmo_id,
-                                decision=final_status.value,
+                                decision=InvoiceStatus.ACCEPTED.value if final_status in paid else final_status.value,
                                 comments=note
                                 if final_status == InvoiceStatus.REQUIRES_CORRECTION
                                 else f"Decision demo: {note}",
@@ -568,6 +574,33 @@ def _seed(passwords: dict[str, str] | None) -> None:
                         invoice.cancelled_by = provider_id
                         invoice.cancellation_deadline = now + CANCELLATION_WINDOW
                         db.add(audit_entry(provider_id, "INVOICE_CANCELLED", invoice.id, now))
+                    if final_status in paid:
+                        complement_xml = workdir / "complemento_pago_PAGADA-001.xml"
+                        complement_xml.write_text(
+                            (demo / "complemento_pago_demo.xml")
+                            .read_text(encoding="utf-8")
+                            .replace("DEMO0001-0000-4000-8000-000000000001", invoice.uuid),
+                            encoding="utf-8",
+                        )
+                        complement = add_document(
+                            db,
+                            user_id=provider_id,
+                            supplier_id=moral.id,
+                            invoice_id=invoice.id,
+                            doc_type=DocumentType.PAYMENT_COMPLEMENT_XML.value,
+                            source=complement_xml,
+                        )
+                        invoice.paid_at = now - timedelta(minutes=30)
+                        invoice.paid_by = pmo_id
+                        invoice.payment_complement_due_at = invoice.paid_at + PAYMENT_COMPLEMENT_WINDOW
+                        invoice.payment_complement_received_at = now
+                        db.add(audit_entry(pmo_id, "INVOICE_PAID", invoice.id, invoice.paid_at))
+                        db.add(audit_entry(provider_id, "PAYMENT_COMPLEMENT_UPLOADED", invoice.id, now))
+                        complement.metadata_json = {
+                            "voucher_type": "P",
+                            "uuid": "DEMOPAGO-0000-4000-8000-000000000001",
+                            "related_uuids": [invoice.uuid],
+                        }
             db.add(
                 AuditLog(
                     user_id=users[0].id,
@@ -586,7 +619,7 @@ def _seed(passwords: dict[str, str] | None) -> None:
             users[0].id,
             f"FAC-2026-{len(scenarios) + 1:05d}",
         )
-        print("Seed completo: 5 usuarios, 3 proveedores, 3 contratos y 12 facturas demo.")
+        print("Seed completo: 5 usuarios, 3 proveedores, 3 contratos y 13 facturas demo.")
 
 
 if __name__ == "__main__":

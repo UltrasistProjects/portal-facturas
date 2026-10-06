@@ -204,6 +204,26 @@ def test_datos_de_la_cancelacion_coherentes(db, values):
         db.execute(text(f"UPDATE invoices SET {values}"))
 
 
+@pytest.mark.parametrize(
+    "values",
+    [
+        # Pagada sin fecha o sin autor.
+        "status = 'PAID'",
+        f"status = 'PAID', paid_at = {CANCELLED_AT}",
+        # Fecha limite del complemento no posterior al pago, o complemento recibido sin requerirse.
+        f"status = 'PAID', paid_at = {CANCELLED_AT}, paid_by = uploaded_by, payment_complement_due_at = {CANCELLED_AT}",
+        f"status = 'PAID', paid_at = {CANCELLED_AT}, paid_by = uploaded_by,"
+        f" payment_complement_received_at = {CANCELLED_AT}",
+        # Datos del pago en una factura no pagada.
+        f"paid_at = {CANCELLED_AT}",
+        f"payment_complement_due_at = {CANCELLED_AT}",
+    ],
+)
+def test_datos_del_pago_coherentes(db, values):
+    with pytest.raises(IntegrityError, match='violates check constraint "ck_invoices_payment"'):
+        db.execute(text(f"UPDATE invoices SET {values} WHERE id = (SELECT min(id) FROM invoices)"))
+
+
 def test_cancelada_con_sus_datos(db):
     invoice = new_invoice(db)
     db.flush()
@@ -403,6 +423,10 @@ def insert_document_type(db, name: str, formats: str = "{PDF}") -> None:
         # HU-14: el acuse de cancelacion no se exige en la carga documental.
         "UPDATE invoice_document_types SET national_requirement = 'REQUIRED' WHERE code = 'CANCELLATION_ACK'",
         "UPDATE invoice_document_types SET international_requirement = 'OPTIONAL' WHERE code = 'CANCELLATION_ACK'",
+        # HU Complemento de Pagos: el complemento es Opcional fijo para el nacional y No aplica para el internacional.
+        "UPDATE invoice_document_types SET national_requirement = 'REQUIRED' WHERE code = 'PAYMENT_COMPLEMENT_XML'",
+        "UPDATE invoice_document_types SET international_requirement = 'OPTIONAL'"
+        " WHERE code = 'PAYMENT_COMPLEMENT_PDF'",
     ],
 )
 def test_nivel_fijo_cambiado_por_sql(db, sql):
@@ -552,7 +576,9 @@ def test_borrado_sql_de_contrato_con_documentos(db):
 
 def test_evento_de_notificacion_fuera_de_catalogo(db):
     with pytest.raises(IntegrityError, match='violates check constraint "notificationevent"'):
-        db.execute(text("UPDATE notification_templates SET event = 'INVOICE_PAID' WHERE event = 'INVOICE_CANCELLED'"))
+        db.execute(
+            text("UPDATE notification_templates SET event = 'INVOICE_ARCHIVED' WHERE event = 'INVOICE_CANCELLED'")
+        )
 
 
 def test_segunda_plantilla_para_un_evento(db):
@@ -596,7 +622,7 @@ def delivery_sql(event="'INVOICE_REJECTED'", status="'SENT'", to="'{a@b.mx}'", e
     ("sql", "constraint"),
     [
         (delivery_sql(status="'QUEUED'"), "deliverystatus"),
-        (delivery_sql(event="'INVOICE_PAID'"), "notificationevent"),
+        (delivery_sql(event="'INVOICE_ARCHIVED'"), "notificationevent"),
         (delivery_sql(status="'FAILED'"), "ck_email_deliveries_failed_error"),
         (delivery_sql(to="'{}'"), "ck_email_deliveries_to_addresses"),
         ("UPDATE notification_mailboxes SET addresses = '{}'", "ck_notification_mailboxes_addresses"),

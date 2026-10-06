@@ -93,4 +93,7 @@ def transition_invoice(db: Session, invoice: Invoice, target: InvoiceStatus, use
         invoice.cancelled_at = now
         invoice.cancelled_by = user_id
         invoice.cancellation_deadline = now + CANCELLATION_WINDOW
+    if target == InvoiceStatus.PAID:
+        invoice.paid_at = now
+        invoice.paid_by = user_id
     audit(db, "STATUS_CHANGED", "Invoice", invoice.id, user_id, {"status": old.value}, {"status": target.value})

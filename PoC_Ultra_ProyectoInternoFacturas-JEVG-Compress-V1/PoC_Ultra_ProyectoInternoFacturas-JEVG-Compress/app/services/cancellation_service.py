@@ -22,6 +22,7 @@ logger = logging.getLogger(__name__)
 
 MSG_CONFIRM = "Confirme la cancelación"
 MSG_ALREADY_CANCELLED = "La factura ya está cancelada"
+MSG_PAID = "Una factura pagada no se puede cancelar"
 ENTITY = "Invoice"
 
 
@@ -30,11 +31,18 @@ def acknowledgment_type(db: Session) -> InvoiceDocumentType:
     return db.scalar(select(InvoiceDocumentType).where(InvoiceDocumentType.code == DocumentType.CANCELLATION_ACK))
 
 
-def check_request(db: Session, invoice: Invoice, confirmed: bool, filename: str | None) -> None:
-    """Antes de leer o escribir el archivo: confirmacion, acuse y formato, en ese orden (400). Un formulario viejo
-    sobre una factura ya cancelada responde 409 (cancel lo vuelve a comprobar con la fila bloqueada)."""
+def ensure_cancellable(invoice: Invoice) -> None:
+    """Cancelada y Pagada son finales (409): una factura pagada no se cancela en el portal."""
     if invoice.status == InvoiceStatus.CANCELLED:
         raise BusinessRuleError(MSG_ALREADY_CANCELLED)
+    if invoice.status == InvoiceStatus.PAID:
+        raise BusinessRuleError(MSG_PAID)
+
+
+def check_request(db: Session, invoice: Invoice, confirmed: bool, filename: str | None) -> None:
+    """Antes de leer o escribir el archivo: confirmacion, acuse y formato, en ese orden (400). Un formulario viejo
+    sobre una factura ya cancelada o pagada responde 409 (cancel lo vuelve a comprobar con la fila bloqueada)."""
+    ensure_cancellable(invoice)
     if not confirmed:
         raise InvalidInputError(MSG_CONFIRM)
     ack = acknowledgment_type(db)
@@ -48,8 +56,7 @@ async def cancel(db: Session, invoice: Invoice, upload: UploadFile, user_id: int
     simultaneas, la segunda encuentra la factura cancelada (409) sin escribir su archivo. Un archivo vacio, demasiado
     grande o cuyo contenido no corresponde a la extension es InvalidInputError (400) y nada cambia."""
     lock_invoice(db, invoice)
-    if invoice.status == InvoiceStatus.CANCELLED:
-        raise BusinessRuleError(MSG_ALREADY_CANCELLED)
+    ensure_cancellable(invoice)
     previous_status = invoice.status
     try:
         stored = await LocalFileStorage().save_invoice_file(invoice.id, upload)

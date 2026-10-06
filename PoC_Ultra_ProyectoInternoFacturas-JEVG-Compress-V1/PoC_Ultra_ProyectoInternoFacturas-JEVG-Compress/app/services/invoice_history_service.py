@@ -1,5 +1,6 @@
 """Historial de una factura (HU-19) y su seguimiento por el proveedor (HU-17): los envios del proveedor (auditoria
-INVOICE_SUBMITTED), las revisiones del PMO (tabla reviews) y la cancelacion (auditoria INVOICE_CANCELLED), en orden
+INVOICE_SUBMITTED), las revisiones del PMO (tabla reviews), la cancelacion (auditoria INVOICE_CANCELLED), el pago
+(auditoria INVOICE_PAID) y cada carga del Complemento de Pago (auditoria PAYMENT_COMPLEMENT_UPLOADED), en orden
 cronologico. Sin tablas nuevas."""
 
 from dataclasses import dataclass
@@ -14,7 +15,10 @@ from app.models import AuditLog, Invoice, Review, User
 
 SUBMITTED = "Enviada a validación"
 CANCELLED = STATUS_LABELS[InvoiceStatus.CANCELLED]
-# El proveedor ve la decision atribuida al PMO, sin el nombre del revisor (EP-02 DT-07).
+PAID = STATUS_LABELS[InvoiceStatus.PAID]
+COMPLEMENT_UPLOADED = "Complemento de pago adjuntado"
+DATE_FORMAT = "%d/%m/%Y %H:%M"
+# El proveedor ve la decision y el pago atribuidos al PMO, sin el nombre de quien los registro (EP-02 DT-07).
 PROVIDER_REVIEWER = "PMO"
 # La decision se muestra con la etiqueta del estatus al que lleva (modelo de estatus del ERS).
 DECISION_LABELS = {
@@ -44,8 +48,8 @@ def _audited(db: Session, invoice: Invoice, action: str) -> list[tuple[datetime,
 
 
 def history(db: Session, invoice: Invoice, for_provider: bool = False) -> list[HistoryEvent]:
-    """Eventos de la factura. Para el proveedor, las revisiones se atribuyen a "PMO" y se omiten los comentarios
-    internos (COMMENT) del PoC."""
+    """Eventos de la factura. Para el proveedor, las revisiones y el pago se atribuyen a "PMO" y se omiten los
+    comentarios internos (COMMENT) del PoC."""
     events = [HistoryEvent(at, SUBMITTED, name) for at, name in _audited(db, invoice, "INVOICE_SUBMITTED")]
     reviews = db.scalars(select(Review).options(joinedload(Review.reviewer)).where(Review.invoice_id == invoice.id))
     for review in reviews:
@@ -61,11 +65,21 @@ def history(db: Session, invoice: Invoice, for_provider: bool = False) -> list[H
             )
         )
     if invoice.cancellation_deadline:
-        deadline = to_business(invoice.cancellation_deadline).strftime("%d/%m/%Y %H:%M")
+        deadline = to_business(invoice.cancellation_deadline).strftime(DATE_FORMAT)
         events += [
             HistoryEvent(at, CANCELLED, name, f"Fecha límite de aceptación: {deadline}")
             for at, name in _audited(db, invoice, "INVOICE_CANCELLED")
         ]
+    if invoice.paid_at:
+        due = invoice.payment_complement_due_at
+        detail = f"Fecha límite del complemento: {to_business(due).strftime(DATE_FORMAT)}" if due else None
+        events += [
+            HistoryEvent(at, PAID, PROVIDER_REVIEWER if for_provider else name, detail)
+            for at, name in _audited(db, invoice, "INVOICE_PAID")
+        ]
+    events += [
+        HistoryEvent(at, COMPLEMENT_UPLOADED, name) for at, name in _audited(db, invoice, "PAYMENT_COMPLEMENT_UPLOADED")
+    ]
     return sorted(events, key=lambda event: event.at)
 
 

@@ -10,6 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.constants import (
     DOCUMENT_REQUIREMENT_LABELS,
     CatalogType,
@@ -35,6 +36,7 @@ from app.services import catalog_service, review_service
 from app.services import document_requirements_service as requirements
 from app.services import document_view_service as document_view
 from app.services import foreign_invoice_service as foreign
+from app.services import payment_service as payment
 from app.services.audit_service import audit
 from app.services.file_service import LocalFileStorage, log_upload, safe_download_name
 from app.services.invoice_history_service import decision_cause, history
@@ -63,7 +65,12 @@ MSG_SUPPLIER_NOT_ACTIVE = "Su proveedor no está autorizado para registrar factu
 MSG_USER_WITHOUT_SUPPLIER = "Su usuario no está vinculado a un proveedor. Contacte al Administrador"
 # Avisos que llegan por ?notice= tras una redireccion; otro valor se ignora (como en el tablero).
 NOTICES = {"submitted": "Factura enviada a validación"}
-DOCUMENT_NOTICES = {"amounts_saved": "Datos del Invoice guardados", "amounts_unchanged": "Sin cambios"}
+DOCUMENT_NOTICES = {
+    "amounts_saved": "Datos del Invoice guardados",
+    "amounts_unchanged": "Sin cambios",
+    "complement_saved": "Complemento de Pago guardado",
+}
+MSG_CONFIRM_PAYMENT = "Confirme que la factura fue pagada"
 SUBMITTABLE_STATUSES = frozenset({InvoiceStatus.UPLOADED, InvoiceStatus.REQUIRES_CORRECTION})
 
 
@@ -99,6 +106,7 @@ def invoice_list(
         "statuses": InvoiceStatus,
         "origins": SupplierOrigin,
         "warnings": warning_counts(db, [invoice.id for invoice in result.items]) if reviewer else {},
+        "pending_complements": [] if reviewer else payment.pending_notice(db, user.supplier_id),
     }
     return templates.TemplateResponse(request, "invoices/list.html", context)
 
@@ -234,14 +242,17 @@ async def create_invoice(
 
 
 def _status_delivery(db: Session, invoice: Invoice, notification: str, reviewer: bool):
-    """Envio del correo cuyo resultado se muestra (id en la URL, solo si es de esta factura). El proveedor solo ve el
-    aviso de su cancelacion, y sin direcciones (HU-14)."""
+    """Envio del correo cuyo resultado se muestra (id en la URL, solo si es de esta factura). El proveedor solo ve los
+    avisos a Recepcion de Facturas que el origino (cancelacion y complemento de pago), y sin direcciones (HU-14)."""
     if not notification.isdigit():
         return None
     delivery = review_service.invoice_delivery(db, invoice, int(notification))
-    if delivery and not reviewer and delivery.event != NotificationEvent.INVOICE_CANCELLED:
+    if delivery and not reviewer and delivery.event not in PROVIDER_EVENTS:
         return None
     return delivery
+
+
+PROVIDER_EVENTS = {NotificationEvent.INVOICE_CANCELLED, NotificationEvent.PAYMENT_COMPLEMENT}
 
 
 def _detail_page(
@@ -254,9 +265,11 @@ def _detail_page(
     status_code=200,
     notification: str = "",
     cancel_error: str | None = None,
+    payment_error: str | None = None,
 ):
     """Detalle de la factura. Tambien es la respuesta 409 de un envio que no procede (submit_blocked): muestra las
-    reglas en FAIL que se acaban de guardar; y la 400 de una cancelacion rechazada (cancel_error)."""
+    reglas en FAIL que se acaban de guardar; la 400 de una cancelacion rechazada (cancel_error) y la del pago sin
+    confirmar (payment_error)."""
     validations = list(
         db.scalars(
             select(ValidationResult)
@@ -279,7 +292,8 @@ def _detail_page(
     invoice_doc = foreign.current_invoice_document(invoice) if international else None
     reviewer = user.role != Role.PROVEEDOR
     cancelled = invoice.status == InvoiceStatus.CANCELLED
-    can_cancel = not reviewer and not cancelled
+    paid = invoice.status == InvoiceStatus.PAID
+    can_cancel = not reviewer and not cancelled and not paid
     ack_type = cancellation.acknowledgment_type(db) if can_cancel else None
     delivery = _status_delivery(db, invoice, notification, reviewer)
     return templates.TemplateResponse(
@@ -322,6 +336,13 @@ def _detail_page(
             "ack_type": ack_type,
             "ack_accept": ",".join(requirements.extensions(ack_type)) if ack_type else "",
             "ack_formats": requirements.formats_label(ack_type) if ack_type else "",
+            # Pago y Complemento de Pago (HU Complemento de Pagos): panel del PMO en "Autorizada", aviso de factura
+            # pagada, estado del complemento y enlace del proveedor para adjuntarlo.
+            "can_pay": reviewer and invoice.status == InvoiceStatus.ACCEPTED,
+            "paid": paid,
+            "complement": payment.complement_status(invoice),
+            "can_attach_complement": not reviewer and payment.is_pending(invoice),
+            "payment_error": payment_error,
             "invoice_readable": (invoice_doc.metadata_json or {}).get("has_extractable_text") if invoice_doc else None,
         },
         status_code=status_code,
@@ -350,10 +371,13 @@ def _documents_page(
     notice: str | None = None,
     amounts: dict | None = None,
     amount_errors: list[str] | None = None,
+    notification: str = "",
 ):
     """Carga documental con los tipos que aplican al origen del proveedor de la factura (HU-04) y, si es
-    internacional, el formulario de los datos del Invoice (HU-15)."""
+    internacional, el formulario de los datos del Invoice (HU-15). En una factura "Pagada", solo el Complemento de
+    Pago, su estado y el resultado del aviso a Recepcion de Facturas (HU Complemento de Pagos)."""
     international = foreign.is_international(invoice)
+    paid = invoice.status == InvoiceStatus.PAID
     items = requirements.checklist(db, invoice)
     pending = requirements.pending_required(items)
     context = {
@@ -372,18 +396,34 @@ def _documents_page(
         "amounts": amounts or (foreign.form_values(invoice) if international else {}),
         "amount_errors": amount_errors or [],
         "currencies": catalog_service.active_entries(db, CatalogType.CURRENCY) if international else [],
+        "paid": paid,
+        "complement": payment.complement_status(invoice),
+        "delivery": _status_delivery(db, invoice, notification, reviewer=False) if paid else None,
+        "delivery_error": paid and notification == "error",
     }
     return templates.TemplateResponse(request, "invoices/documents.html", context, status_code=status_code)
 
 
+def _accepts_documents(invoice: Invoice) -> bool:
+    """Editable, o "Pagada" con un Complemento de Pago requerido (lo carga aunque ya este adjuntado: reemplazo)."""
+    return is_editable(invoice) or payment.complement_required(invoice)
+
+
 @router.get("/{invoice_id}/documents")
 def documents_page(
-    invoice_id: int, request: Request, notice: str = "", db: Session = Depends(get_db), user=Depends(provider_only)
+    invoice_id: int,
+    request: Request,
+    notice: str = "",
+    notification: str = "",
+    db: Session = Depends(get_db),
+    user=Depends(provider_only),
 ):
     invoice = _invoice_or_404(db, invoice_id, user)
-    if not is_editable(invoice):
+    if invoice.status == InvoiceStatus.PAID and not payment.complement_required(invoice):
+        raise BusinessRuleError(payment.MSG_NOT_REQUIRED)
+    if not _accepts_documents(invoice):
         return RedirectResponse(f"/invoices/{invoice.id}", status_code=303)
-    return _documents_page(request, db, invoice, user, notice=notice)
+    return _documents_page(request, db, invoice, user, notice=notice, notification=notification)
 
 
 @router.post("/{invoice_id}/documents")
@@ -398,10 +438,20 @@ async def upload_document(
     await validate_csrf(request)
     invoice = _invoice_or_404(db, invoice_id, user)
     lock_invoice(db, invoice)
-    ensure_editable(invoice)
-    # Antes de leer o escribir el archivo: el tipo debe aplicar al origen del proveedor y admitir la extension.
+    if invoice.status == InvoiceStatus.PAID:
+        # Una factura pagada solo recibe su Complemento de Pago (409 si no lo requiere o si es otro tipo).
+        payment.ensure_paid_upload(invoice, document_type)
+    else:
+        ensure_editable(invoice)
+    # Antes de leer o escribir el archivo: el tipo debe aplicar al origen del proveedor y admitir la extension; el XML
+    # del Complemento de Pago debe ser un CFDI de tipo P que relacione la factura.
+    complement_data = None
     try:
         requirements.ensure_format(requirements.offered_type(db, invoice, document_type), upload.filename)
+        if document_type == DocumentType.PAYMENT_COMPLEMENT_XML.value:
+            content = await upload.read(settings.max_upload_mb * 1024 * 1024 + 1)
+            await upload.seek(0)
+            complement_data = payment.check_complement_xml(invoice, content)
     except InvalidInputError as exc:
         return _documents_page(request, db, invoice, user, exc.message, 400)
     if document_type == DocumentType.FOREIGN_INVOICE.value:
@@ -418,6 +468,8 @@ async def upload_document(
             pages = pdf["page_count"]
             metadata = {k: v for k, v in pdf.items() if k != "text"}
             metadata["text_preview"] = pdf["text"][:2000]
+        elif complement_data is not None:
+            metadata = complement_data
         elif stored.path.suffix == ".xml":
             from app.services.validation_engine import _json_safe
 
@@ -469,8 +521,16 @@ async def upload_document(
         old={"document_id": previous.id} if previous else None,
         new={"type": document_type, "sha256": stored.sha256},
     )
+    notify_reception = payment.register_complement(db, invoice, document, user.id)
     db.commit()
-    return RedirectResponse(f"/invoices/{invoice.id}/documents", status_code=303)
+    if invoice.status != InvoiceStatus.PAID:
+        return RedirectResponse(f"/invoices/{invoice.id}/documents", status_code=303)
+    # Complemento en la factura pagada: despues del commit, el aviso a Recepcion de Facturas (solo por el XML).
+    query = {"notice": "complement_saved"}
+    if notify_reception:
+        delivery = payment.notify_complement(db, invoice, document, user.id)
+        query["notification"] = delivery.id if delivery else "error"
+    return RedirectResponse(f"/invoices/{invoice.id}/documents?{urlencode(query)}", status_code=303)
 
 
 @router.post("/{invoice_id}/amounts")
@@ -660,6 +720,26 @@ async def review_action(
     review = review_service.decide(db, invoice, decision, comments, user.id)
     db.commit()
     return _notification_redirect(invoice, review_service.notify_decision(db, invoice, review))
+
+
+@router.post("/{invoice_id}/payment")
+async def mark_paid(
+    invoice_id: int,
+    request: Request,
+    confirm: str = Form(""),
+    db: Session = Depends(get_db),
+    user=Depends(reviewers_only),
+):
+    """Marca como "Pagada" una factura "Autorizada" (HU Complemento de Pagos): se confirma y despues sale el correo al
+    proveedor, con el aviso del Complemento de Pago si lo requiere; un envio fallido no revierte el pago."""
+    await validate_csrf(request)
+    invoice = _invoice_or_404(db, invoice_id, user)
+    # Sin la confirmacion, una factura que se podria pagar vuelve al detalle con el error; las demas responden 409.
+    if not confirm and invoice.status == InvoiceStatus.ACCEPTED:
+        return _detail_page(request, db, invoice, user, payment_error=MSG_CONFIRM_PAYMENT, status_code=400)
+    payment.mark_paid(db, invoice, user.id)
+    db.commit()
+    return _notification_redirect(invoice, review_service.send_notification(db, invoice, None, user.id))
 
 
 @router.post("/{invoice_id}/notification")

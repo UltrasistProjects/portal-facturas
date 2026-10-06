@@ -4,11 +4,15 @@
 Cancelación de la factura por el proveedor (HU-14, RF-09): acuse de cancelación obligatorio, estatus final "Cancelada" con la fecha límite de 72 horas para que Recepción de Facturas acepte la cancelación ante el SAT, correo a ese buzón con su reenvío y la visualización de la factura cancelada en el detalle.
 ## Requirements
 ### Requirement: Cancelación exclusiva del proveedor
-El detalle de una factura que no está "Cancelada" SHALL ofrecer al rol `Proveedor` la sección "Cancelar factura" con el campo del "Acuse de cancelación" (PDF o XML) y la confirmación "Confirmo que la factura se canceló y adjunto su acuse". `POST /invoices/{invoice_id}/cancel` SHALL exigir CSRF y el rol `Proveedor` (HTTP 403 para `PMO` y `Administrador`); una factura de otro proveedor SHALL responder HTTP 404. Los demás roles MUST NOT ver la sección.
+El detalle de una factura que no está "Cancelada" ni "Pagada" SHALL ofrecer al rol `Proveedor` la sección "Cancelar factura" con el campo del "Acuse de cancelación" (PDF o XML) y la confirmación "Confirmo que la factura se canceló y adjunto su acuse". `POST /invoices/{invoice_id}/cancel` SHALL exigir CSRF y el rol `Proveedor` (HTTP 403 para `PMO` y `Administrador`); una factura de otro proveedor SHALL responder HTTP 404. Los demás roles MUST NOT ver la sección.
 
 #### Scenario: Sección para el proveedor
 - **WHEN** el proveedor abre el detalle de su factura "Enviada"
 - **THEN** ve "Cancelar factura" con el campo del acuse y la confirmación
+
+#### Scenario: Sin cancelación en una factura pagada
+- **WHEN** el proveedor abre el detalle de su factura "Pagada"
+- **THEN** no ve la sección "Cancelar factura"
 
 #### Scenario: PMO sin cancelación
 - **WHEN** el PMO abre el detalle de una factura o envía `POST /invoices/{id}/cancel`
@@ -19,7 +23,7 @@ El detalle de una factura que no está "Cancelada" SHALL ofrecer al rol `Proveed
 - **THEN** la respuesta es HTTP 404 y la factura no cambia
 
 ### Requirement: Acuse obligatorio y confirmación
-Antes de escribir el archivo, el sistema SHALL responder HTTP 409 con "La factura ya está cancelada" si la factura ya lo está y, si no, rechazar con HTTP 400, sin cambiar la factura, en este orden:
+Antes de escribir el archivo, el sistema SHALL responder HTTP 409 con "La factura ya está cancelada" si la factura ya lo está, o con "Una factura pagada no se puede cancelar" si está "Pagada". En los demás casos SHALL rechazar con HTTP 400, sin cambiar la factura, en este orden:
 - sin la confirmación: "Confirme la cancelación";
 - sin archivo: "Cargue el Acuse de cancelación";
 - con una extensión distinta de PDF o XML: "Formato no admitido para Acuse de cancelación. Formatos admitidos: PDF, XML".
@@ -42,9 +46,13 @@ El archivo SHALL pasar las validaciones de contenido, tamaño y nombre de almace
 - **WHEN** el proveedor adjunta el acuse XML que entrega el SAT, que no es un CFDI
 - **THEN** la cancelación procede y el acuse se guarda sin intentar leerlo como CFDI
 
+#### Scenario: Cancelar una factura pagada
+- **WHEN** el proveedor envía `POST /invoices/{id}/cancel` con su acuse sobre una factura "Pagada"
+- **THEN** la respuesta es HTTP 409 con "Una factura pagada no se puede cancelar", no se escribe ningún archivo y la factura sigue "Pagada"
+
 ### Requirement: Registro de la cancelación
 Con el acuse y la confirmación válidos, el sistema SHALL bloquear la fila de la factura y, en una sola transacción:
-- responder HTTP 409 con "La factura ya está cancelada" si ya lo está;
+- responder HTTP 409 con "La factura ya está cancelada" si ya lo está, o con "Una factura pagada no se puede cancelar" si está "Pagada";
 - guardar el acuse como documento vigente de tipo `CANCELLATION_ACK`;
 - pasar la factura a "Cancelada" (`CANCELLED`) desde cualquier otro estatus, auditando `STATUS_CHANGED`;
 - registrar `cancelled_at`, `cancelled_by` y `cancellation_deadline = cancelled_at + 72 horas`;
@@ -63,6 +71,10 @@ Con el acuse y la confirmación válidos, el sistema SHALL bloquear la fila de l
 #### Scenario: Cancelación repetida
 - **WHEN** el proveedor envía la cancelación de una factura ya "Cancelada"
 - **THEN** la respuesta es HTTP 409 con "La factura ya está cancelada" y no se agrega ningún documento
+
+#### Scenario: Pago y cancelación simultáneos
+- **WHEN** el PMO marca como pagada una factura "Autorizada" mientras el proveedor la cancela
+- **THEN** sólo una de las dos operaciones se aplica y la otra recibe HTTP 409, sin documentos ni correos de la operación rechazada
 
 #### Scenario: Factura cancelada no se edita ni se envía
 - **WHEN** el proveedor intenta cargar un documento o enviar una factura "Cancelada"

@@ -266,9 +266,12 @@ def test_instalacion_nueva_con_las_plantillas_predeterminadas(empty_db):
     from app.services.notification_templates import EVENTS
 
     command.upgrade(alembic_config(empty_db), "head")
-    rows = query(empty_db, "SELECT event, subject, body, version, updated_by FROM notification_templates ORDER BY id")
-    # La migracion copia los textos (no importa app): deben coincidir con el catalogo del servicio.
-    assert rows == [(event.value, spec.default_subject, spec.default_body, 1, None) for event, spec in EVENTS.items()]
+    rows = query(empty_db, "SELECT event, subject, body, version, updated_by FROM notification_templates")
+    # La migracion copia los textos (no importa app): deben coincidir con el catalogo del servicio. Las plantillas
+    # llegan en varias revisiones, asi que el orden de insercion no es el del listado.
+    assert sorted(rows) == sorted(
+        (event.value, spec.default_subject, spec.default_body, 1, None) for event, spec in EVENTS.items()
+    )
 
 
 def test_downgrade_de_plantillas_sin_cambios(empty_db):
@@ -303,7 +306,14 @@ def test_instalacion_nueva_con_el_buzon_de_recepcion(empty_db):
         ("INVOICE_RECEPTION", "Recepción de Facturas", ["recepcionfacturas@ultrasist.com.mx"], None)
     ]
     copies = query(empty_db, "SELECT event, addresses, updated_by FROM notification_copies ORDER BY id")
-    events = ["INVOICE_AUTHORIZED", "INVOICE_REJECTED", "INVOICE_OBSERVATIONS", "INVOICE_CANCELLED"]
+    events = [
+        "INVOICE_AUTHORIZED",
+        "INVOICE_REJECTED",
+        "INVOICE_OBSERVATIONS",
+        "INVOICE_CANCELLED",
+        "INVOICE_PAID",
+        "PAYMENT_COMPLEMENT",
+    ]
     assert copies == [(event, [], None) for event in events]
     assert query(empty_db, "SELECT count(*) FROM email_deliveries") == [(0,)]
 
@@ -1086,3 +1096,76 @@ def test_downgrade_de_requisitos_del_contrato_con_datos_nuevos(empty_db, data):
         command.downgrade(config, SUPPLIER_REQUIREMENTS)
     assert "contract_document_types" in tables(empty_db)
     assert query(empty_db, "SELECT version_num FROM alembic_version") == [(CONTRACT_REQUIREMENTS,)]
+
+
+INVOICE_PAYMENT = "0018_invoice_payment"
+PAY_SQL = (
+    "UPDATE invoices SET status = 'PAID', paid_at = now(), paid_by = uploaded_by,"
+    " payment_complement_due_at = now() + interval '72 hours'"
+)
+
+
+def test_pago_en_el_esquema(empty_db):
+    config = alembic_config(empty_db)
+    command.upgrade(config, CONTRACT_REQUIREMENTS)
+    insert_supplier_documents(empty_db)
+    add_invoice(empty_db, "AUTORIZADA", "ACCEPTED", NATIONAL_REQUIRED, ("ACCEPTED",))
+    command.upgrade(config, INVOICE_PAYMENT)
+    columns = "paid_at, paid_by, payment_complement_due_at, payment_complement_received_at"
+    assert query(empty_db, f"SELECT {columns} FROM invoices") == [(None, None, None, None)]
+    with pytest.raises(IntegrityError, match="ck_invoices_payment"):
+        execute(empty_db, "UPDATE invoices SET status = 'PAID'")
+    execute(empty_db, PAY_SQL)
+    assert invoice_statuses(empty_db) == {"AUTORIZADA": "PAID"}
+    events = {event for (event,) in query(empty_db, "SELECT event FROM notification_copies")}
+    assert {"INVOICE_PAID", "PAYMENT_COMPLEMENT"} <= events
+
+
+def test_niveles_del_complemento_normalizados(empty_db):
+    config = alembic_config(empty_db)
+    command.upgrade(config, CONTRACT_REQUIREMENTS)
+    execute(
+        empty_db,
+        "UPDATE invoice_document_types SET national_requirement = 'NOT_APPLICABLE'"
+        " WHERE code = 'PAYMENT_COMPLEMENT_PDF'",
+    )
+    command.upgrade(config, INVOICE_PAYMENT)
+    levels = catalog(empty_db)
+    assert levels["PAYMENT_COMPLEMENT_PDF"][2:4] == ["OPTIONAL", "NOT_APPLICABLE"]
+    assert levels["PAYMENT_COMPLEMENT_XML"][2:4] == ["OPTIONAL", "NOT_APPLICABLE"]
+    [(user, old, new)] = query(
+        empty_db,
+        "SELECT user_id, old_value, new_value FROM audit_logs WHERE action = 'INVOICE_DOCUMENT_REQUIREMENTS_UPDATED'",
+    )
+    assert user is None
+    assert old == {"PAYMENT_COMPLEMENT_PDF": {"national": "NOT_APPLICABLE"}}
+    assert new == {"PAYMENT_COMPLEMENT_PDF": {"national": "OPTIONAL"}}
+
+
+def test_sin_cambios_en_los_niveles_no_audita(empty_db):
+    command.upgrade(alembic_config(empty_db), INVOICE_PAYMENT)
+    assert query(
+        empty_db, "SELECT count(*) FROM audit_logs WHERE action = 'INVOICE_DOCUMENT_REQUIREMENTS_UPDATED'"
+    ) == [(0,)]
+
+
+def test_downgrade_del_pago(empty_db):
+    config = alembic_config(empty_db)
+    command.upgrade(config, INVOICE_PAYMENT)
+    insert_supplier_documents(empty_db)
+    add_invoice(empty_db, "PAGADA", "ACCEPTED", NATIONAL_REQUIRED, ("ACCEPTED",))
+    execute(empty_db, PAY_SQL)
+    with pytest.raises(NotImplementedError, match="Hay facturas pagadas"):
+        command.downgrade(config, CONTRACT_REQUIREMENTS)
+    assert query(empty_db, "SELECT version_num FROM alembic_version") == [(INVOICE_PAYMENT,)]
+    execute(
+        empty_db,
+        "UPDATE invoices SET status = 'ACCEPTED', paid_at = NULL, paid_by = NULL, payment_complement_due_at = NULL",
+    )
+    command.downgrade(config, CONTRACT_REQUIREMENTS)
+    templates = {event for (event,) in query(empty_db, "SELECT event FROM notification_templates")}
+    assert "INVOICE_PAID" not in templates and "PAYMENT_COMPLEMENT" not in templates
+    with pytest.raises(IntegrityError, match="invoicestatus"):
+        execute(empty_db, "UPDATE invoices SET status = 'PAID'")
+    command.upgrade(config, "head")
+    command.check(config)

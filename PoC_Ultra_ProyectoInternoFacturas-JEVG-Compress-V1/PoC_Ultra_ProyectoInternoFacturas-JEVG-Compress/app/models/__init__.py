@@ -17,6 +17,7 @@ from sqlalchemy import (
     event,
     false,
     func,
+    text,
 )
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
@@ -197,6 +198,19 @@ INVOICE_CANCELLATION_CHECK = (
     " AND cancellation_deadline IS NOT NULL AND cancellation_deadline > cancelled_at)"
     " OR (status <> 'CANCELLED' AND cancelled_at IS NULL AND cancelled_by IS NULL AND cancellation_deadline IS NULL)"
 )
+# Una factura pagada tiene fecha y autor; la fecha limite del complemento, si lo requiere, es posterior al pago, y
+# solo se recibe un complemento requerido. Las demas facturas no tienen ningun dato del pago (HU Complemento de Pagos).
+INVOICE_PAYMENT_CHECK = (
+    "(status = 'PAID' AND paid_at IS NOT NULL AND paid_by IS NOT NULL"
+    " AND (payment_complement_due_at IS NULL OR payment_complement_due_at > paid_at)"
+    " AND (payment_complement_received_at IS NULL OR payment_complement_due_at IS NOT NULL))"
+    " OR (status <> 'PAID' AND paid_at IS NULL AND paid_by IS NULL"
+    " AND payment_complement_due_at IS NULL AND payment_complement_received_at IS NULL)"
+)
+# Complementos pendientes: los consulta cada envio a validacion del proveedor y su tablero.
+PENDING_COMPLEMENT_WHERE = (
+    "status = 'PAID' AND payment_complement_due_at IS NOT NULL AND payment_complement_received_at IS NULL"
+)
 
 
 class Invoice(Base):
@@ -215,6 +229,13 @@ class Invoice(Base):
         ),
         # Una factura cancelada tiene fecha, autor y fecha limite posterior; las demas, ninguno (HU-14).
         CheckConstraint(INVOICE_CANCELLATION_CHECK, name="ck_invoices_cancellation"),
+        CheckConstraint(INVOICE_PAYMENT_CHECK, name="ck_invoices_payment"),
+        Index(
+            "ix_invoices_pending_complement",
+            "supplier_id",
+            "payment_complement_due_at",
+            postgresql_where=text(PENDING_COMPLEMENT_WHERE),
+        ),
     )
     id: Mapped[int] = mapped_column(primary_key=True)
     internal_folio: Mapped[str] = mapped_column(String(30), unique=True, index=True)
@@ -242,6 +263,12 @@ class Invoice(Base):
     cancelled_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
     cancelled_by: Mapped[int | None] = mapped_column(restrict("users.id"), index=True)
     cancellation_deadline: Mapped[datetime | None] = mapped_column(UTCDateTime)
+    paid_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
+    paid_by: Mapped[int | None] = mapped_column(restrict("users.id"), index=True)
+    # Fecha limite del Complemento de Pago: solo si la factura lo requiere (nacional con MetodoPago PPD), fijada al
+    # pagar. received_at es la primera carga valida del XML del complemento.
+    payment_complement_due_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
+    payment_complement_received_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
     supplier: Mapped[Supplier] = relationship(back_populates="invoices")
     contract: Mapped[Contract | None] = relationship()
     # Sin delete/delete-orphan: documentos, validaciones y revisiones son evidencia fiscal (AUDITORIA BD-12).
@@ -310,14 +337,16 @@ class InvoiceDocumentType(Base):
         ),
         CheckConstraint("is_active OR NOT is_system", name="ck_invoice_document_types_system_active"),
         # Niveles fijos (RD-04): el nacional factura con CFDI y el internacional con Invoice; el acuse de
-        # cancelacion solo se carga al cancelar (HU-14).
+        # cancelacion solo se carga al cancelar (HU-14); el Complemento de Pago es Opcional para el nacional.
         CheckConstraint(
             "(code NOT IN ('INVOICE_XML', 'INVOICE_PDF')"
             " OR (national_requirement = 'REQUIRED' AND international_requirement = 'NOT_APPLICABLE'))"
             " AND (code <> 'FOREIGN_INVOICE'"
             " OR (national_requirement = 'NOT_APPLICABLE' AND international_requirement = 'REQUIRED'))"
             " AND (code <> 'CANCELLATION_ACK'"
-            " OR (national_requirement = 'NOT_APPLICABLE' AND international_requirement = 'NOT_APPLICABLE'))",
+            " OR (national_requirement = 'NOT_APPLICABLE' AND international_requirement = 'NOT_APPLICABLE'))"
+            " AND (code NOT IN ('PAYMENT_COMPLEMENT_XML', 'PAYMENT_COMPLEMENT_PDF')"
+            " OR (national_requirement = 'OPTIONAL' AND international_requirement = 'NOT_APPLICABLE'))",
             name="ck_invoice_document_types_fixed_levels",
         ),
     )
@@ -485,7 +514,7 @@ class Review(Base):
 
 
 class NotificationTemplate(Base):
-    """Plantilla de correo de un evento de estatus de factura (HU-05). Las cuatro filas las crea la migracion y la
+    """Plantilla de correo de un evento de notificacion (HU-05). Las filas las crea la migracion y la
     interfaz solo las edita. `version` es el bloqueo optimista; `updated_by` es NULL si nunca se ha modificado."""
 
     __tablename__ = "notification_templates"

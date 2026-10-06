@@ -1,5 +1,5 @@
 """Decision del PMO sobre una factura "Enviada" y los correos de cambio de estatus (HU-20, RF-10, RN-HU20-01 a
-RN-HU20-03), tambien el de la cancelacion del proveedor (HU-14) y su reenvio.
+RN-HU20-03), tambien el de la cancelacion del proveedor (HU-14), el del pago (HU Complemento de Pagos) y su reenvio.
 
 Ningun servicio hace commit: el endpoint confirma la decision, la cancelacion o el reenvio y despues envia el correo,
 de modo que un envio fallido no la revierte.
@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 from app.core.constants import DeliveryStatus, InvoiceStatus, NotificationEvent, ReviewDecision
 from app.core.errors import BusinessRuleError, InvalidInputError
 from app.models import EmailDelivery, Invoice, Review
-from app.services import notification_service
+from app.services import notification_service, payment_service
 from app.services.audit_service import audit
 from app.services.invoice_history_service import last_decision
 from app.services.invoice_service import ensure_can_accept, lock_invoice, transition_invoice
@@ -37,13 +37,14 @@ DECISIONS = {
 }
 DECIDED = frozenset(DECISIONS.values())
 WITH_OBSERVATIONS = {InvoiceStatus.REJECTED, InvoiceStatus.REQUIRES_CORRECTION}
-# Correo de cada estatus (D4): Autorizada y Cancelada van al buzon de Recepcion de Facturas, Rechazada y
-# Observaciones al proveedor.
+# Correo de cada estatus (D4): Autorizada y Cancelada van al buzon de Recepcion de Facturas; Rechazada, Observaciones
+# y Pagada, al proveedor. El Complemento de pago adjuntado (payment_service) no es el correo de un estatus.
 EVENTS = {
     InvoiceStatus.ACCEPTED: NotificationEvent.INVOICE_AUTHORIZED,
     InvoiceStatus.REJECTED: NotificationEvent.INVOICE_REJECTED,
     InvoiceStatus.REQUIRES_CORRECTION: NotificationEvent.INVOICE_OBSERVATIONS,
     InvoiceStatus.CANCELLED: NotificationEvent.INVOICE_CANCELLED,
+    InvoiceStatus.PAID: NotificationEvent.INVOICE_PAID,
 }
 MAILBOX_EVENTS = {NotificationEvent.INVOICE_AUTHORIZED, NotificationEvent.INVOICE_CANCELLED}
 
@@ -83,22 +84,26 @@ def decide(db: Session, invoice: Invoice, value: str, observations: str, reviewe
 
 
 def send_notification(db: Session, invoice: Invoice, observations: str | None, user_id: int) -> EmailDelivery | None:
-    """Correo del estatus actual de la factura (decision o cancelacion). Llamar despues de confirmar la
+    """Correo del estatus actual de la factura (decision, cancelacion o pago). Llamar despues de confirmar la
     transaccion."""
     event = EVENTS[invoice.status]
     cancelled = invoice.status == InvoiceStatus.CANCELLED
+    paid = invoice.status == InvoiceStatus.PAID
     values = {
         "numero_factura": invoice.invoice_number,
         "folio_interno": invoice.internal_folio,
         "proveedor": invoice.supplier.business_name,
         "monto": invoice.total,
         "moneda": invoice.currency,
-        "fecha_estatus": invoice.cancelled_at if cancelled else invoice.reviewed_at,
+        "fecha_estatus": invoice.cancelled_at if cancelled else invoice.paid_at if paid else invoice.reviewed_at,
     }
     if invoice.status in WITH_OBSERVATIONS:
         values["observaciones"] = observations
     if cancelled:
         values["fecha_limite_cancelacion"] = invoice.cancellation_deadline
+    if paid:
+        # Reproduce la fecha limite registrada al pagar: el reenvio da el mismo aviso.
+        values["aviso_complemento"] = payment_service.complement_notice(invoice)
     try:
         return notification_service.notify(
             db,
@@ -156,9 +161,9 @@ def invoice_delivery(db: Session, invoice: Invoice, delivery_id: int | None) -> 
 
 
 def prepare_resend(db: Session, invoice: Invoice, user_id: int) -> str | None:
-    """Reenvio de la notificacion de la decision o de la cancelacion (D5): bloquea, exige que el ultimo envio haya
-    fallado, audita y devuelve las observaciones de la ultima revision (la cancelacion no las usa). El endpoint
-    confirma y despues llama a send_notification."""
+    """Reenvio de la notificacion de la decision, de la cancelacion o del pago (D5): bloquea, exige que el ultimo
+    envio haya fallado, audita y devuelve las observaciones de la ultima revision (la cancelacion y el pago no las
+    usan). El endpoint confirma y despues llama a send_notification."""
     lock_invoice(db, invoice)
     if not can_resend(db, invoice):
         raise BusinessRuleError(MSG_NOTHING_TO_RESEND)

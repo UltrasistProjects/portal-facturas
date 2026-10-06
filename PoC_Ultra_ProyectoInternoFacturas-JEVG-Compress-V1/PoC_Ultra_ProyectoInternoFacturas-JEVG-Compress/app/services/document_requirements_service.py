@@ -20,7 +20,14 @@ from sqlalchemy import func, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.core.constants import FIXED_REQUIREMENTS, FORMAT_EXTENSIONS, DocumentRequirement, SupplierOrigin
+from app.core.constants import (
+    FIXED_REQUIREMENTS,
+    FORMAT_EXTENSIONS,
+    PAYMENT_COMPLEMENT_TYPES,
+    DocumentRequirement,
+    InvoiceStatus,
+    SupplierOrigin,
+)
 from app.core.errors import BusinessRuleError, InvalidInputError, NotFoundError
 from app.models import Document, Invoice, InvoiceDocumentType
 from app.schemas import (
@@ -81,6 +88,15 @@ def offered_types(db: Session, origin: SupplierOrigin) -> list[InvoiceDocumentTy
     return [t for t in catalog(db) if t.is_active and requirement(t, origin) != DocumentRequirement.NOT_APPLICABLE]
 
 
+def invoice_types(db: Session, invoice: Invoice) -> list[InvoiceDocumentType]:
+    """Tipos que se ofrecen en la carga documental de la factura. Una factura "Pagada" solo admite su Complemento de
+    Pago (HU Complemento de Pagos)."""
+    types = offered_types(db, invoice.supplier.origin)
+    if invoice.status == InvoiceStatus.PAID:
+        return [t for t in types if t.code in PAYMENT_COMPLEMENT_TYPES]
+    return types
+
+
 def required_types(db: Session, origin: SupplierOrigin) -> list[InvoiceDocumentType]:
     """Tipos que exige la prevalidacion: activos y Obligatorios para el origen."""
     return [t for t in catalog(db) if t.is_active and requirement(t, origin) == DocumentRequirement.REQUIRED]
@@ -120,7 +136,7 @@ def checklist(db: Session, invoice: Invoice) -> list[ChecklistItem]:
     catalogo. Los documentos de tipos que ya no se ofrecen no aparecen (siguen en el detalle de la factura)."""
     origin = invoice.supplier.origin
     current = {d.document_type: d for d in invoice.documents if d.is_current}
-    items = [ChecklistItem(t, requirement(t, origin), current.get(t.code)) for t in offered_types(db, origin)]
+    items = [ChecklistItem(t, requirement(t, origin), current.get(t.code)) for t in invoice_types(db, invoice)]
     return sorted(items, key=lambda item: item.level != DocumentRequirement.REQUIRED)
 
 
@@ -138,7 +154,7 @@ def pending_label(pending: int) -> str:
 
 def offered_type(db: Session, invoice: Invoice, code: str) -> InvoiceDocumentType:
     """Tipo que se puede cargar en la factura; 400 si no existe, esta inactivo o no aplica al origen del proveedor."""
-    offered = next((t for t in offered_types(db, invoice.supplier.origin) if t.code == code), None)
+    offered = next((t for t in invoice_types(db, invoice) if t.code == code), None)
     if offered is None:
         raise InvalidInputError(MSG_NOT_OFFERED)
     _share_lock(db, InvoiceDocumentType, offered.id)

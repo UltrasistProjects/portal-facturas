@@ -3,11 +3,12 @@ from dataclasses import dataclass
 from fastapi import APIRouter, Depends, Request
 from sqlalchemy.orm import Session
 
-from app.core.constants import InvoiceStatus
+from app.core.constants import InvoiceStatus, Role
 from app.core.database import get_db
 from app.core.security import get_current_user
 from app.repositories.invoice_repository import search_invoices, status_counts, total_amount
 from app.routers.common import templates
+from app.services import payment_service
 
 router = APIRouter()
 RECENT_INVOICES = 10
@@ -29,6 +30,7 @@ STATUS_KPIS = [
     (InvoiceStatus.UNDER_REVIEW, "Enviadas", "En validación del PMO", ""),
     (InvoiceStatus.REQUIRES_CORRECTION, "Observaciones", "Por corregir y reenviar", "warning"),
     (InvoiceStatus.ACCEPTED, "Autorizadas", "Para su pago", "success"),
+    (InvoiceStatus.PAID, "Pagadas", "Pago registrado", "success"),
     (InvoiceStatus.REJECTED, "Rechazadas", "Decisión definitiva", "danger"),
     (InvoiceStatus.CANCELLED, "Canceladas", "Con acuse de cancelación", "muted"),
 ]
@@ -47,5 +49,9 @@ def dashboard(request: Request, notice: str = "", db: Session = Depends(get_db),
         "amount": total_amount(db, user),
         "kpis": kpis,
         "notice": NOTICES.get(notice),
+        # Complementos de pago pendientes del proveedor (HU Complemento de Pagos).
+        "pending_complements": (
+            payment_service.pending_notice(db, user.supplier_id) if user.role == Role.PROVEEDOR else []
+        ),
     }
     return templates.TemplateResponse(request, "dashboard.html", context)

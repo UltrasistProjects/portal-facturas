@@ -214,7 +214,7 @@ tests/           pruebas críticas automatizadas
 
 ## Flujo funcional
 
-Login → alta de factura → carga/reemplazo documental → "Verificar" (opcional) → "Enviar a validación" (parser XML/PDF, reglas, score y evidencia) → decisión del PMO: autorizar, rechazar u observaciones, con su correo (Recepción de Facturas o el proveedor). En cualquier momento, el proveedor puede cancelar la factura con su acuse; Recepción de Facturas recibe el aviso.
+Login → alta de factura → carga/reemplazo documental → "Verificar" (opcional) → "Enviar a validación" (parser XML/PDF, reglas, score y evidencia) → decisión del PMO: autorizar, rechazar u observaciones, con su correo (Recepción de Facturas o el proveedor) → el PMO marca la factura autorizada como pagada y el proveedor recibe el aviso; si es nacional con método PPD, adjunta su Complemento de Pago y Recepción de Facturas recibe el aviso. Antes del pago, el proveedor puede cancelar la factura con su acuse; Recepción de Facturas recibe el aviso.
 
 El proveedor registra, carga, verifica y envía sus facturas, y sólo ve las suyas. `PMO` revisa y decide. `Administrador` añade administración de usuarios, proveedores, contratos, reglas visibles y Audit Log. `PMO` y `Administrador` consultan las facturas y descargan sus documentos, pero no las registran, cargan, verifican ni envían (403).
 
@@ -233,6 +233,7 @@ Modelo del ERS (§3.6), fijado por EP-01 para el proveedor y el PMO:
 | Rechazada | `REJECTED` | Decisión del PMO; no admite otra decisión | No |
 | Observaciones | `REQUIRES_CORRECTION` | El PMO pidió correcciones | Sí: corrige y reenvía |
 | Cancelada | `CANCELLED` | El proveedor la canceló con su acuse; es final | No |
+| Pagada | `PAID` | El PMO o el Administrador registraron el pago de la factura autorizada; es final | Sólo adjunta su Complemento de Pago, si lo requiere |
 
 - **Registro (HU-12):** el formulario usa el proveedor del usuario y sólo ofrece sus contratos activos; los de otros proveedores nunca llegan al navegador. Un proveedor que no está "Autorizado" no puede registrar (409). La factura nace en "Borrador" y cada carga o reemplazo de documento la pasa a "Cargada" o de vuelta a "Borrador" según los [archivos mínimos](#archivos-mínimos-por-tipo-de-proveedor); con los obligatorios completos, la carga documental avisa "Factura cargada. Ya puede enviarla a validación". "Observaciones" no se recalcula.
 - **Verificar:** ejecuta el motor y guarda sus resultados sin cambiar el estatus. El detalle lista las "Reglas que impiden el envío".
@@ -243,7 +244,7 @@ Modelo del ERS (§3.6), fijado por EP-01 para el proveedor y el PMO:
 
 ### Cancelación de la factura
 
-El proveedor cancela su factura desde cualquier estatus excepto "Cancelada" (HU-14, RF-09), también si ya está "Autorizada" o "Rechazada": en México el receptor del CFDI tiene 72 horas para aceptar la cancelación ante el SAT.
+El proveedor cancela su factura desde cualquier estatus excepto "Cancelada" y "Pagada" (HU-14, RF-09; una factura pagada responde 409 "Una factura pagada no se puede cancelar"), también si ya está "Autorizada" o "Rechazada": en México el receptor del CFDI tiene 72 horas para aceptar la cancelación ante el SAT.
 
 - **Sección "Cancelar factura"** al final del detalle, sólo para el proveedor. Pide el "Acuse de cancelación" (PDF o XML) y la casilla "Confirmo que la factura se canceló y adjunto su acuse". Sin confirmación, sin acuse o con otro formato responde 400 antes de escribir el archivo, y la factura no cambia. El acuse XML del SAT no se procesa como CFDI; al proveedor internacional le basta un PDF que documente la cancelación.
 - **Registro:** bloquea la fila, guarda el acuse como documento `CANCELLATION_ACK` y pasa la factura a "Cancelada" con `cancelled_at`, `cancelled_by` y `cancellation_deadline` (`cancelled_at` + 72 horas naturales). Audita `STATUS_CHANGED` e `INVOICE_CANCELLED` con el estatus anterior, el acuse y la fecha límite. Una segunda cancelación responde 409 "La factura ya está cancelada".
@@ -252,14 +253,27 @@ El proveedor cancela su factura desde cualquier estatus excepto "Cancelada" (HU-
 - **Fuera de alcance:** registrar en el portal la aceptación de la cancelación (ocurre ante el SAT), el motivo SAT, la consulta del estatus del CFDI y revertir una cancelación.
 - **Migración `0012_invoice_cancellation`:** agrega las columnas con el `CHECK ck_invoices_cancellation`, el estatus `CANCELLED` y el tipo del sistema "Acuse de cancelación". Se detiene si un tipo soporte ya usa ese nombre; el downgrade se niega si hay facturas canceladas.
 
+### Pago y Complemento de Pago
+
+HU Complemento de Pagos: el PMO o el Administrador registran el pago y, en las facturas nacionales con método de pago PPD (`MetodoPago` del CFDI, pago en parcialidades o diferido), el proveedor tiene 72 horas para adjuntar su Complemento de Pago.
+
+- **Marcar como pagada:** panel "Pago" en el detalle de una factura "Autorizada", sólo para `PMO` y `Administrador`, con la casilla "Confirmo que la factura … fue pagada. Se notificará al proveedor." (`POST /invoices/{id}/payment`, CSRF). Bloquea la fila: sin confirmación responde 400; otro estatus, 409 ("Sólo una factura autorizada se puede marcar como pagada" o "La factura ya fue pagada"). Registra `paid_at` y `paid_by` y audita `STATUS_CHANGED` e `INVOICE_PAID`.
+- **¿Requiere complemento?** Sí, si el proveedor es nacional y el XML del CFDI vigente trae `MetodoPago="PPD"` (el dato que extrajo el motor). Se decide una vez, al pagar, y queda en `payment_complement_due_at` (`paid_at` + 72 horas naturales). PUE, sin XML o internacional: no lo requiere.
+- **Correo "Pagada"** (`INVOICE_PAID`) al correo del proveedor en el catálogo, después del commit: "Su factura número … ha sido pagada." Si requiere complemento y aún no lo adjunta, agrega "Es importante que adjunte su “Complemento de Pago” a dicha factura pagada antes del …". Si el envío falla, el PMO ve "Reenviar notificación".
+- **Adjuntar el complemento:** en la factura "Pagada", la carga documental sólo ofrece "Complemento de pago (XML)" y "(PDF)" (otro tipo: 409). El XML debe ser un CFDI con `TipoDeComprobante="P"` cuyo `DoctoRelacionado` relacione el UUID de la factura; si no, responde 400 sin escribir el archivo (la misma verificación aplica a un complemento cargado antes del pago). La primera carga válida del XML registra `payment_complement_received_at`; cada una audita `PAYMENT_COMPLEMENT_UPLOADED` y envía a Recepción de Facturas el correo `PAYMENT_COMPLEMENT` ("El Complemento de Pago ha sido adjuntado a la factura …"). El PDF es opcional y no envía correo.
+- **Bloqueo:** cada "Enviar a validación" verifica, antes del motor, si el proveedor tiene complementos vencidos (requeridos, sin adjuntar y con la fecha límite pasada). Si los tiene, responde 409 "No puede enviar facturas a validación: tiene complementos de pago vencidos de las facturas …" sin ejecutar el motor. Se calcula en cada envío, sin tareas programadas, y se levanta al adjuntar. No impide dar de alta facturas, cargar documentos ni verificar.
+- **Vistas:** el detalle muestra "Pagada el …" y el bloque "Complemento de pago" (No requerido, Pendiente, Vencido o Adjuntado, con sus fechas) y, al proveedor, "Adjuntar Complemento de Pago". El tablero y el listado del proveedor avisan "Tiene complementos de pago pendientes", primero los vencidos. El tablero agrega el indicador "Pagadas" y el historial, el pago y cada complemento.
+- **Fuera de alcance:** capturar fecha, monto o referencia del pago, pagos parciales, revertir un pago, recordatorios automáticos, validar el complemento ante el SAT y reenviar el aviso del complemento.
+- **Migración `0018_invoice_payment`:** agrega las columnas del pago con `ck_invoices_payment` y el índice parcial `ix_invoices_pending_complement`, el estatus `PAID`, los eventos y plantillas nuevos con sus copias vacías, y deja fijos los niveles del complemento (si el Administrador los había cambiado, los normaliza y lo audita). El downgrade se niega si hay facturas pagadas o correos de los eventos nuevos.
+
 ### Seguimiento del proveedor
 
 El proveedor da seguimiento a sus facturas (HU-17, RF-16):
 
-- **Tablero:** total de facturas con su monto acumulado e indicadores Enviadas, Observaciones, Autorizadas, Rechazadas y Canceladas. Cada indicador abre el listado filtrado por su estatus. El PMO y el Administrador ven los mismos indicadores sobre todas las facturas.
-- **Listado:** sólo sus facturas, con búsqueda, filtro por los siete estatus y 25 por página. Una factura de otro proveedor responde 404.
+- **Tablero:** total de facturas con su monto acumulado e indicadores Enviadas, Observaciones, Autorizadas, Pagadas, Rechazadas y Canceladas. Cada indicador abre el listado filtrado por su estatus. El PMO y el Administrador ven los mismos indicadores sobre todas las facturas.
+- **Listado:** sólo sus facturas, con búsqueda, filtro por los ocho estatus y 25 por página. Una factura de otro proveedor responde 404.
 - **Causa de la decisión:** en "Rechazada" el detalle destaca "Motivo del rechazo" y en "Observaciones", "Observaciones del PMO", con el texto de la última decisión: el mismo del correo. En "Observaciones" añade "Corrija lo indicado y vuelva a enviar la factura" con el enlace a la carga documental. En los demás estatus no hay aviso de observaciones: las de rondas anteriores quedan en el seguimiento.
-- **Seguimiento:** sus envíos, las decisiones del PMO (atribuidas a "PMO", sin el nombre del revisor ni los comentarios internos) y la cancelación con su fecha límite, en orden cronológico.
+- **Seguimiento:** sus envíos, las decisiones del PMO (atribuidas a "PMO", sin el nombre del revisor ni los comentarios internos), la cancelación con su fecha límite, el pago (atribuido a "PMO") y cada Complemento de Pago, en orden cronológico.
 
 ## Listados
 
@@ -343,7 +357,7 @@ El Administrador define en **Requisitos mínimos › Archivos de factura** (`/ad
 
 - **Catálogo** (`invoice_document_types`): 11 tipos del sistema, con nombre en español, descripción y formatos admitidos (PDF, PNG, JPEG, XML, TXT), más los tipos soporte que cree el Administrador. La carga documental rechaza con HTTP 400, antes de escribir el archivo, un tipo que no aplica a la factura o una extensión que el tipo no admite.
 - **Valores iniciales:** Nacional exige XML y PDF del CFDI, orden de compra y Vo.Bo., y conserva el comportamiento anterior. Internacional exige Invoice (PDF), orden de compra y Vo.Bo. Contrato, anexo y documentación adicional son opcionales para ambos; los complementos de pago sólo aplican al Nacional.
-- **Niveles fijos:** XML y PDF del CFDI son obligatorios para el Nacional y no aplican al Internacional; el Invoice, al revés. El "Acuse de cancelación" no aplica a ninguno: sólo se carga al [cancelar la factura](#cancelación-de-la-factura). La pantalla los muestra con candado, el servidor rechaza cambiarlos (409) y la base de datos los garantiza con un `CHECK`.
+- **Niveles fijos:** XML y PDF del CFDI son obligatorios para el Nacional y no aplican al Internacional; el Invoice, al revés. El "Acuse de cancelación" no aplica a ninguno: sólo se carga al [cancelar la factura](#cancelación-de-la-factura). El "Complemento de pago" (XML y PDF) es Opcional para el Nacional y no aplica al Internacional, porque sólo existe después del [pago](#pago-y-complemento-de-pago). La pantalla los muestra con candado, el servidor rechaza cambiarlos (409) y la base de datos los garantiza con un `CHECK`.
 - **Tipos soporte:** el Administrador los da de alta (nombre, descripción, formatos y un nivel por origen, "No aplica" por defecto), los edita, los desactiva o reactiva y los elimina. Su clave es `SOPORTE_<id>`. Al desactivarlos, los documentos ya cargados siguen visibles y descargables en el detalle de la factura. Los tipos del sistema no se editan, no se desactivan ni se eliminan. Desde la fila de cada tipo del Administrador (activo o inactivo) están las acciones **Editar** y **Eliminar**; eliminar pide confirmación y sólo procede si ningún documento, vigente o reemplazado, usa su clave (si no, HTTP 409: "desactívelo en su lugar").
 - **Reglas:** DOC-001 (XML del CFDI, `CRITICAL`), DOC-002 (PDF del CFDI), DOC-003 (orden de compra) y DOC-004 (Vo.Bo.) resultan `PASS`/`FAIL` cuando su tipo es obligatorio para el origen y `NOT_APPLICABLE` en otro caso. DOC-008 evalúa el Invoice (`CRITICAL`) y DOC-009 genera un resultado por cada otro tipo obligatorio, con su clave en la fuente.
 - **Vigencia:** la configuración se lee en cada verificación y envío. Una factura que ya salió de los estados editables conserva sus resultados; una editable se evalúa con la configuración vigente al verificarse o enviarse. Si la configuración cambia, el estatus "Borrador"/"Cargada" se recalcula en la siguiente carga o en el envío.
@@ -413,7 +427,7 @@ El PMO (rol `PMO`) y el Administrador (rol `Administrador`) revisan las facturas
 
 ## Plantillas de correo
 
-El Administrador define en **Administración › Plantillas de correo** (`/admin/notification-templates`) el asunto y el cuerpo de los correos que se envían cuando una factura cambia de estatus. Hay exactamente una plantilla por evento, creada por la migración `0004_notification_templates` con un texto predeterminado que reproduce las reglas de negocio. Las plantillas no se crean, eliminan ni desactivan, y el destinatario lo fija la regla de negocio de cada evento:
+El Administrador define en **Administración › Plantillas de correo** (`/admin/notification-templates`) el asunto y el cuerpo de los correos que se envían cuando una factura cambia de estatus. Hay exactamente una plantilla por evento, creada por las migraciones `0004_notification_templates`, `0006_supplier_credentials` y `0018_invoice_payment` con un texto predeterminado que reproduce las reglas de negocio. Las plantillas no se crean, eliminan ni desactivan, y el destinatario lo fija la regla de negocio de cada evento:
 
 | Evento | Lo dispara | Destinatario | Obligatorias en el cuerpo | Otras variables |
 | --- | --- | --- | --- | --- |
@@ -421,6 +435,8 @@ El Administrador define en **Administración › Plantillas de correo** (`/admin
 | Rechazada (`INVOICE_REJECTED`) | HU-20 (RN-HU20-03) | Proveedor (correo del catálogo) | `numero_factura`, `observaciones` | `folio_interno`, `proveedor`, `monto`, `estatus`, `fecha_estatus` |
 | Observaciones (`INVOICE_OBSERVATIONS`) | HU-20 (RN-HU20-03) | Proveedor (correo del catálogo) | `numero_factura`, `observaciones` | `folio_interno`, `proveedor`, `monto`, `estatus`, `fecha_estatus` |
 | Cancelada (`INVOICE_CANCELLED`) | HU-14 | Recepción de Facturas | `numero_factura`, `proveedor`, `fecha_limite_cancelacion` | `folio_interno`, `monto`, `estatus`, `fecha_estatus` |
+| Pagada (`INVOICE_PAID`) | HU Complemento de Pagos, al registrar el pago | Proveedor (correo del catálogo) | `numero_factura`, `aviso_complemento` | `folio_interno`, `proveedor`, `monto`, `estatus`, `fecha_estatus` |
+| Complemento de pago adjuntado (`PAYMENT_COMPLEMENT`) | HU Complemento de Pagos, al adjuntar el XML | Recepción de Facturas | `numero_factura`, `proveedor` | `folio_interno`, `monto`, `estatus`, `fecha_estatus` |
 | Credenciales de acceso (`SUPPLIER_CREDENTIALS`) | HU-03, al autorizar al proveedor | Proveedor (correo del catálogo), sin copias | `usuario`, `contrasena_temporal`, `url_portal` | `proveedor` |
 
 | Variable | Contenido | Ejemplo de la vista previa |
@@ -433,11 +449,12 @@ El Administrador define en **Administración › Plantillas de correo** (`/admin
 | `fecha_estatus` | Fecha y hora del cambio de estatus (`dd/mm/aaaa HH:MM`, zona de negocio) | `25/09/2026 10:30` |
 | `observaciones` | Causa que capturó el PMO | `El subtotal del XML no coincide con el de la orden de compra.` |
 | `fecha_limite_cancelacion` | Fecha de la solicitud de cancelación + 72 horas | `28/09/2026 10:30` |
+| `aviso_complemento` | Aviso del Complemento de Pago con su fecha límite; vacío si la factura no lo requiere o ya lo adjuntó | `Es importante que adjunte su “Complemento de Pago” a dicha factura pagada antes del 28/09/2026 10:30. …` |
 | `usuario` | Correo con el que el proveedor inicia sesión | `contacto@serviciosdelnorte.mx` |
 | `contrasena_temporal` | Contraseña temporal generada al autorizar | `Ejemplo#Temporal2026` |
 | `url_portal` | Dirección de inicio de sesión del portal | `https://proveedores.ultrasist.com.mx/login` |
 
-- **Texto:** plano, sin HTML. Una variable se escribe `{{numero_factura}}` (se admiten espacios interiores) y sólo se reemplaza por su valor: no hay expresiones, filtros ni condiciones, y el texto nunca pasa por Jinja2. Una llave sencilla es texto normal. El asunto ocupa una línea de hasta 200 caracteres; el cuerpo, hasta 5000. Al guardar se recortan los espacios de los extremos y `CRLF` pasa a `LF`.
+- **Texto:** plano, sin HTML. Una variable se escribe `{{numero_factura}}` (se admiten espacios interiores) y sólo se reemplaza por su valor: no hay expresiones, filtros ni condiciones, y el texto nunca pasa por Jinja2. La única variable condicional es `{{aviso_complemento}}`: obligatoria en el cuerpo de "Pagada", pero puede llegar vacía; entonces desaparece la línea que sólo la contenía y no quedan líneas en blanco repetidas. Una llave sencilla es texto normal. El asunto ocupa una línea de hasta 200 caracteres; el cuerpo, hasta 5000. Al guardar se recortan los espacios de los extremos y `CRLF` pasa a `LF`.
 - **Validación:** al guardar y en la vista previa se reportan juntos, con HTTP 400 y el formato "Campo: mensaje", los campos vacíos o demasiado largos, las variables sin cerrar, las que no son de la plantilla y las obligatorias que faltan en el cuerpo.
 - **Vista previa:** compone el borrador con los datos de ejemplo de la tabla, sin JavaScript y sin guardar ni auditar. Muestra el correo tal como se envía, su versión HTML en un `iframe` aislado (`sandbox`, `srcdoc`), y debajo, plegada, la versión de texto plano.
 - **Texto predeterminado:** "Cargar texto predeterminado" lo pone en el formulario; la plantilla no cambia hasta pulsar Guardar.
@@ -453,8 +470,8 @@ El Administrador define en **Administración › Plantillas de correo** (`/admin
 
 El Administrador define en **Administración › Notificaciones** (`/admin/notifications`) a qué direcciones llegan los avisos (HU-08). El destinatario principal de cada evento lo fija su regla de negocio; la pantalla configura:
 
-- **Buzón "Recepción de Facturas":** de 1 a 10 correos. La migración `0005_notification_recipients` lo siembra con `recepcionfacturas@ultrasist.com.mx`. Recibe los avisos de facturas Autorizadas y Canceladas.
-- **Copias por evento:** de 0 a 10 correos en `Cc` para Autorizada, Rechazada, Observaciones y Cancelada. Se omiten las que ya están en "Para".
+- **Buzón "Recepción de Facturas":** de 1 a 10 correos. La migración `0005_notification_recipients` lo siembra con `recepcionfacturas@ultrasist.com.mx`. Recibe los avisos de facturas Autorizadas y Canceladas, y el de Complemento de pago adjuntado.
+- **Copias por evento:** de 0 a 10 correos en `Cc` para Autorizada, Rechazada, Observaciones, Cancelada, Pagada y Complemento de pago adjuntado. Se omiten las que ya están en "Para".
 - **Correo de prueba** a una dirección que indique el Administrador, con un texto fijo.
 - **Transporte** vigente en solo lectura, sin usuario ni contraseña, y la **bitácora de envíos** completa, paginada de 25 en 25, con su resultado.
 
@@ -645,7 +662,7 @@ Complete las variables Azure en `.env`, implemente la llamada HTTP/SDK dentro de
 
 ## Datos de demostración
 
-El seed crea 5 usuarios, 3 proveedores, 3 contratos activos con su contrato firmado, expedientes Anexo A, 12 facturas y Audit Log. Incluye: borrador sin documentos (`BORRADOR-001`), borrador sin Vo.Bo. (`D-SIN-VOBO`), cargadas listas para enviar (`A-CORRECTA`, `E-SEMANTICO`), cargada cuyo envío no procede porque excede el contrato (`B-EXCEDE`), enviada (`REVISION-001`), una segunda enviada por decidir (`ENVIADA-002`), autorizada, rechazada por RFC incorrecto, una devuelta con observaciones del PMO (`OBSERVACIONES-001`) y una cancelada con su acuse (`CANCELADA-001`; la siembra no envía su correo). Esas once son de `proveedor1@poc.local`; la duodécima, `INV-2026-0042`, es del proveedor internacional `proveedor3@poc.local` y está cargada, lista para enviar.
+El seed crea 5 usuarios, 3 proveedores, 3 contratos activos con su contrato firmado, expedientes Anexo A, 13 facturas y Audit Log. Incluye: borrador sin documentos (`BORRADOR-001`), borrador sin Vo.Bo. (`D-SIN-VOBO`), cargadas listas para enviar (`A-CORRECTA`, `E-SEMANTICO`), cargada cuyo envío no procede porque excede el contrato (`B-EXCEDE`), enviada (`REVISION-001`), una segunda enviada por decidir (`ENVIADA-002`), autorizada, rechazada por RFC incorrecto, una devuelta con observaciones del PMO (`OBSERVACIONES-001`), una cancelada con su acuse (`CANCELADA-001`; la siembra no envía su correo) y una pagada, nacional PPD, con su Complemento de Pago ya adjuntado (`PAGADA-001`; uno pendiente vencería a las 72 horas y bloquearía los envíos del proveedor demo). Esas doce son de `proveedor1@poc.local`; la decimotercera, `INV-2026-0042`, es del proveedor internacional `proveedor3@poc.local` y está cargada, lista para enviar.
 
 Los XML bajo `data/demo_documents/` son estructuralmente útiles para el parser, pero **no están timbrados ni son fiscalmente válidos**. El seed asigna a cada factura demo un UUID fiscal distinto y usa el PDF sintético versionado `data/demo_documents/factura_demo.pdf` (si faltara, lo genera en un directorio temporal sin modificar el repositorio).
 

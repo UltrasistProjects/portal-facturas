@@ -195,6 +195,19 @@
         "El Contrato sale de los requisitos de alta del proveedor (RN-HU22-04)."
       ],
       "dependencias": ["HU-21", "HU-02"]
+    },
+    {
+      "id": "HU-23", "nombre": "Complemento de pagos", "rol": "PMO / Administrador", "rf": "Por definir (propuesto)", "rn": [],
+      "objetivo": "Yo como PMO o Administrador del sistema requiero que, al actualizar como “Pagada” una factura de un proveedor nacional o internacional, se avise al proveedor que su factura fue pagada y, si es nacional con método de pago PPD, se le pida adjuntar su “Complemento de Pago”, para que Recepción de Facturas reciba el aviso cuando se adjunte y el sistema bloquee el envío de facturas subsecuentes si no se adjunta en un máximo de 72 horas.",
+      "criterios": [
+        "El PMO o el Administrador deberán poder marcar como \"Pagada\" una factura \"Autorizada\"; \"Pagada\" es final.",
+        "Al pagar se deberá enviar al correo del proveedor el aviso \"Su factura número XX ha sido pagada\".",
+        "Sólo si el proveedor es nacional y el método de pago del CFDI es PPD, el aviso deberá pedir adjuntar el \"Complemento de Pago\" dentro de 72 horas.",
+        "Al adjuntar el Complemento de Pago (CFDI de tipo P que relaciona la factura) se deberá avisar a \"Recepción de Facturas\" que fue adjuntado a la factura XX.",
+        "Con un complemento vencido (más de 72 horas sin adjuntar), el sistema deberá bloquear el envío de nuevas facturas del proveedor.",
+        "En la configuración de requisitos de la factura, el \"Complemento de pago\" deberá quedar como Opcional."
+      ],
+      "dependencias": ["HU-20", "HU-08", "HU-04", "HU-13"]
     }
   ]
 }

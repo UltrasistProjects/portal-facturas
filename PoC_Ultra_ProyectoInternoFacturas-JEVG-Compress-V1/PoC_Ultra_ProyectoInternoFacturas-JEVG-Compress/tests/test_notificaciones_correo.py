@@ -30,6 +30,8 @@ AUTHORIZED = NotificationEvent.INVOICE_AUTHORIZED
 REJECTED = NotificationEvent.INVOICE_REJECTED
 OBSERVATIONS = NotificationEvent.INVOICE_OBSERVATIONS
 CANCELLED = NotificationEvent.INVOICE_CANCELLED
+PAID = NotificationEvent.INVOICE_PAID
+COMPLEMENT = NotificationEvent.PAYMENT_COMPLEMENT
 # Valores completos de un correo de factura; cada prueba cambia solo lo que le interesa.
 VALUES = {
     "numero_factura": "A-1024",
@@ -207,7 +209,7 @@ def test_instalacion_nueva():
     lists = configuration()
     assert lists[RECEPTION] == RECEPTION_SEED
     assert [key for key in lists if key != RECEPTION] == [
-        e.value for e in (AUTHORIZED, REJECTED, OBSERVATIONS, CANCELLED)
+        e.value for e in (AUTHORIZED, REJECTED, OBSERVATIONS, CANCELLED, PAID, COMPLEMENT)
     ]
     assert all(addresses == [] for key, addresses in lists.items() if key != RECEPTION)
 
@@ -240,8 +242,10 @@ def test_copias_iniciales(client):
         ("Rechazada", "Proveedor (correo del catálogo)"),
         ("Observaciones", "Proveedor (correo del catálogo)"),
         ("Cancelada", "Recepción de Facturas"),
+        ("Pagada", "Proveedor (correo del catálogo)"),
+        ("Complemento de pago adjuntado", "Recepción de Facturas"),
     ]
-    for event in (AUTHORIZED, REJECTED, OBSERVATIONS, CANCELLED):
+    for event in (AUTHORIZED, REJECTED, OBSERVATIONS, CANCELLED, PAID, COMPLEMENT):
         assert re.search(rf'name="{event}"[^>]*></textarea>', page)
 
 
@@ -335,6 +339,22 @@ def test_evento_dirigido_al_proveedor():
     with SessionLocal() as db:
         recipients = ns.recipients_for(db, REJECTED, " Contacto@Proveedor.mx ")
     assert recipients.to == ("contacto@proveedor.mx",)
+    assert recipients.cc == ("pmo@ultrasist.com.mx",)
+
+
+def test_aviso_de_pago_al_proveedor():
+    set_lists(INVOICE_PAID=["cxp@ultrasist.com.mx"])
+    with SessionLocal() as db:
+        recipients = ns.recipients_for(db, PAID, "contacto@proveedor.mx")
+    assert recipients.to == ("contacto@proveedor.mx",)
+    assert recipients.cc == ("cxp@ultrasist.com.mx",)
+
+
+def test_complemento_adjuntado_a_recepcion():
+    set_lists(PAYMENT_COMPLEMENT=["pmo@ultrasist.com.mx"])
+    with SessionLocal() as db:
+        recipients = ns.recipients_for(db, COMPLEMENT)
+    assert recipients.to == tuple(RECEPTION_SEED)
     assert recipients.cc == ("pmo@ultrasist.com.mx",)
 
 

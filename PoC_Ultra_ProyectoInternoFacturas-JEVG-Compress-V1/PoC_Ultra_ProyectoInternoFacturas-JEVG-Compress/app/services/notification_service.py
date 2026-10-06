@@ -47,6 +47,8 @@ COPY_EVENTS = (
     NotificationEvent.INVOICE_REJECTED,
     NotificationEvent.INVOICE_OBSERVATIONS,
     NotificationEvent.INVOICE_CANCELLED,
+    NotificationEvent.INVOICE_PAID,
+    NotificationEvent.PAYMENT_COMPLEMENT,
 )
 
 MSG_CHANGED = "La configuración cambió mientras la editaba. Recargue la página."

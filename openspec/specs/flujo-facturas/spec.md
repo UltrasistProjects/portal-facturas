@@ -99,7 +99,7 @@ El listado SHALL aplicar la búsqueda, el filtro por estado, el filtro por orige
 ### Requirement: Indicadores del tablero agregados en la base de datos
 El tablero SHALL calcular el conteo por estado con `COUNT ... GROUP BY status` y el monto total con `SUM` sobre centavos, respetando el alcance por proveedor. MUST NOT cargar todas las facturas en memoria.
 
-SHALL mostrar el total de facturas y un indicador por cada estatus de seguimiento: "Enviadas", "Observaciones", "Autorizadas", "Rechazadas" y "Canceladas" (EP-01 DT-01). Cada indicador SHALL enlazar al listado filtrado por su estatus (`/invoices?status=<clave>`) y el total, al listado con "Todos los estados" (`/invoices?status=`).
+SHALL mostrar el total de facturas y un indicador por cada estatus de seguimiento: "Enviadas", "Observaciones", "Autorizadas", "Pagadas", "Rechazadas" y "Canceladas" (EP-01 DT-01). Cada indicador SHALL enlazar al listado filtrado por su estatus (`/invoices?status=<clave>`) y el total, al listado con "Todos los estados" (`/invoices?status=`).
 
 #### Scenario: KPIs del proveedor
 - **WHEN** un Proveedor abre el tablero
@@ -108,6 +108,10 @@ SHALL mostrar el total de facturas y un indicador por cada estatus de seguimient
 #### Scenario: Indicador enlazado
 - **WHEN** el proveedor con una factura rechazada pulsa el indicador "Rechazadas"
 - **THEN** llega al listado filtrado por "Rechazada", que muestra sólo sus facturas rechazadas
+
+#### Scenario: Indicador de pagadas
+- **WHEN** el PMO marca como pagada una factura y abre el tablero
+- **THEN** el indicador "Pagadas" cuenta esa factura y el de "Autorizadas" ya no la cuenta
 
 ### Requirement: Límite transaccional en la capa HTTP
 Los servicios (`run_validation`, `transition_invoice`, `audit` y los demás) MUST NOT ejecutar `commit`. Cada endpoint mutable SHALL confirmar o revertir su transacción completa.
@@ -135,20 +139,22 @@ El estatus de la factura SHALL pertenecer a este catálogo, con estas etiquetas 
 | `REJECTED` | Rechazada |
 | `REQUIRES_CORRECTION` | Observaciones |
 | `CANCELLED` | Cancelada |
+| `PAID` | Pagada |
 
 Las únicas transiciones permitidas SHALL ser:
 - `DRAFT → UPLOADED` y `UPLOADED → DRAFT`, que asigna el sistema según los archivos obligatorios;
 - `UPLOADED → UNDER_REVIEW` y `REQUIRES_CORRECTION → UNDER_REVIEW`, por un envío que procede;
 - `UNDER_REVIEW → ACCEPTED | REJECTED | REQUIRES_CORRECTION`, por la decisión del PMO;
-- de cualquier estatus distinto de `CANCELLED` a `CANCELLED`, por la cancelación del proveedor (HU-14).
+- `ACCEPTED → PAID`, cuando el PMO o el Administrador marcan la factura como pagada (spec `pago-facturas`);
+- de cualquier estatus distinto de `CANCELLED` y `PAID` a `CANCELLED`, por la cancelación del proveedor (HU-14).
 
-"Autorizada" y "Rechazada" no admiten otra decisión del PMO: los pasos de ClickBalance del PoC se retiraron (HU-20). "Cancelada" es final.
+"Autorizada" sólo admite el pago y la cancelación; "Rechazada" sólo admite la cancelación: los pasos de ClickBalance del PoC se retiraron (HU-20). "Cancelada" y "Pagada" son finales.
 
 Cualquier otra transición SHALL rechazarse con HTTP 409 sin cambios. Cada transición SHALL auditarse como `STATUS_CHANGED` con el estatus anterior y el nuevo. Sólo la decisión del PMO SHALL asignar `REQUIRES_CORRECTION`.
 
 #### Scenario: Etiquetas en el listado
 - **WHEN** un usuario abre el listado de facturas
-- **THEN** el filtro de estatus ofrece "Borrador", "Cargada", "Enviada", "Autorizada", "Rechazada", "Observaciones" y "Cancelada", y ninguna otra opción
+- **THEN** el filtro de estatus ofrece "Borrador", "Cargada", "Enviada", "Autorizada", "Rechazada", "Observaciones", "Cancelada" y "Pagada", y ninguna otra opción
 
 #### Scenario: El PMO pide correcciones
 - **WHEN** un usuario PMO envía la decisión `REQUIRES_CORRECTION` sobre una factura "Enviada"
@@ -158,13 +164,17 @@ Cualquier otra transición SHALL rechazarse con HTTP 409 sin cambios. Cada trans
 - **WHEN** el proveedor envía una factura "Cargada" cuyo XML falla XML-002
 - **THEN** la factura sigue "Cargada"
 
-#### Scenario: Autorizada sólo admite la cancelación
-- **WHEN** se intenta desde una factura "Autorizada" cualquier transición distinta de la cancelación
+#### Scenario: Autorizada sólo admite el pago y la cancelación
+- **WHEN** se intenta desde una factura "Autorizada" cualquier transición distinta del pago y de la cancelación
 - **THEN** la respuesta es HTTP 409 y la factura sigue "Autorizada"
 
 #### Scenario: Cancelada es final
 - **WHEN** se intenta cualquier transición desde una factura "Cancelada"
 - **THEN** la respuesta es HTTP 409 y la factura sigue "Cancelada"
+
+#### Scenario: Pagada es final
+- **WHEN** se intenta cualquier transición desde una factura "Pagada", incluida la cancelación
+- **THEN** la respuesta es HTTP 409 y la factura sigue "Pagada"
 
 #### Scenario: Migración de ClickBalance
 - **WHEN** se aplica `0011_retire_clickbalance` sobre una base con facturas "Lista para ClickBalance" y "Cargada a ClickBalance"
@@ -186,7 +196,7 @@ Una factura SHALL crearse en "Borrador". Cada carga o reemplazo de documento SHA
 - **THEN** la factura sigue en "Observaciones"
 
 ### Requirement: Envío a validación
-`POST /invoices/{id}/submit` SHALL proceder sólo desde "Cargada" u "Observaciones". Antes de validar, SHALL recalcular "Borrador"/"Cargada"; si la factura queda en "Borrador", SHALL responder HTTP 409 "Faltan archivos obligatorios. Cárguelos antes de enviar" sin ejecutar el motor. Desde cualquier otro estatus SHALL responder HTTP 409 "La factura no puede enviarse en su estatus actual".
+`POST /invoices/{id}/submit` SHALL proceder sólo desde "Cargada" u "Observaciones". Desde cualquier otro estatus SHALL responder HTTP 409 "La factura no puede enviarse en su estatus actual". Después SHALL verificar los complementos de pago vencidos del proveedor (spec `pago-facturas`): si los tiene, SHALL responder HTTP 409 con el mensaje de complementos vencidos sin recalcular ni ejecutar el motor. Antes de validar, SHALL recalcular "Borrador"/"Cargada"; si la factura queda en "Borrador", SHALL responder HTTP 409 "Faltan archivos obligatorios. Cárguelos antes de enviar" sin ejecutar el motor.
 
 El envío SHALL ejecutar el motor de validación con la configuración vigente en ese momento y guardar sus resultados:
 - si ningún resultado es `FAIL`, la factura SHALL pasar a "Enviada", registrar `submitted_at`, auditar `INVOICE_SUBMITTED` y redirigir al detalle con el aviso "Factura enviada a validación";
@@ -221,6 +231,10 @@ Un resultado `WARNING` SHALL NOT impedir el envío. La factura SHALL leerse con 
 #### Scenario: Advertencias no bloquean
 - **WHEN** el proveedor envía una factura "Cargada" sin resultados `FAIL` y con DAT-001 en `WARNING`
 - **THEN** la factura pasa a "Enviada"
+
+#### Scenario: Complemento de pago vencido
+- **WHEN** el proveedor tiene un complemento de pago vencido y envía una factura "Cargada"
+- **THEN** la respuesta es HTTP 409 con el mensaje de complementos vencidos, la factura sigue "Cargada" y no se ejecuta el motor
 
 ### Requirement: Verificación sin cambio de estatus
 `POST /invoices/{id}/validation` ("Verificar") SHALL ejecutar el motor sobre una factura en "Borrador", "Cargada" u "Observaciones", guardar sus resultados y redirigir al detalle sin cambiar el estatus. En otro estatus SHALL responder HTTP 409. Mientras la factura esté en un estatus editable, el detalle SHALL listar en "Reglas que impiden el envío" cada resultado en `FAIL`.

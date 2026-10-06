@@ -14,6 +14,7 @@ from app.core.constants import InvoiceStatus, RuleStatus
 from app.core.errors import BusinessRuleError
 from app.models import Invoice
 from app.services import document_requirements_service as requirements
+from app.services import payment_service as payment
 from app.services.audit_service import audit
 from app.services.invoice_service import is_editable, lock_invoice, sync_upload_status, transition_invoice
 from app.services.validation_engine import run_validation
@@ -38,11 +39,13 @@ class SubmissionResult:
 def submit_invoice(db: Session, invoice: Invoice, user_id: int) -> SubmissionResult:
     """Envia desde "Cargada" u "Observaciones" si el motor, con la configuracion vigente, no registra ningun FAIL.
 
-    Orden: bloqueo de fila, estatus editable (409 si no), recalculo de "Borrador"/"Cargada" (en "Borrador" no se
-    ejecuta el motor), motor y, sin FAIL, transicion a UNDER_REVIEW (asigna submitted_at) e INVOICE_SUBMITTED."""
+    Orden: bloqueo de fila, estatus editable (409 si no), complementos de pago vencidos del proveedor (409, HU
+    Complemento de Pagos), recalculo de "Borrador"/"Cargada" (en "Borrador" no se ejecuta el motor), motor y, sin
+    FAIL, transicion a UNDER_REVIEW (asigna submitted_at) e INVOICE_SUBMITTED."""
     lock_invoice(db, invoice)
     if not is_editable(invoice):
         raise BusinessRuleError(MSG_NOT_SUBMITTABLE)
+    payment.ensure_no_overdue_complements(db, invoice.supplier_id)
     complete = requirements.pending_required(requirements.checklist(db, invoice)) == 0
     sync_upload_status(db, invoice, complete, user_id)
     if invoice.status == InvoiceStatus.DRAFT:
