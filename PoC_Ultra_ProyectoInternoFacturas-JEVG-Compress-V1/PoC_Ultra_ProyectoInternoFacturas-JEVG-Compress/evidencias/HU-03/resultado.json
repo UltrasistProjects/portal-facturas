@@ -1,8 +1,8 @@
 {
   "id": "HU-03",
-  "run": "RMUQ7SGCJ",
-  "inicio": "2026-10-02T00:18:14.704Z",
-  "fin": "2026-10-02T00:18:17.386Z",
+  "run": "RMUVVRQW1",
+  "inicio": "2026-10-05T23:28:26.905Z",
+  "fin": "2026-10-05T23:28:29.739Z",
   "estado": "PASS",
   "bloqueo": null,
   "notas": [],
@@ -18,7 +18,7 @@
         {
           "paso": "Abrir Administración › Notificaciones y revisar la bitácora de envíos",
           "esperado": "La bitácora registra un envío \"Credenciales de acceso\" con resultado \"Enviado\" para cada proveedor autorizado en HU-02.",
-          "obtenido": "Bitácora con 3 envíos \"Credenciales de acceso\" en estado \"Enviado\" para: alfa.rmuq7sgcj@proveedores-qa.example, bravo.rmuq7sgcj@proveedores-qa.example, charlie.rmuq7sgcj@proveedores-qa.example.",
+          "obtenido": "Bitácora con 3 envíos \"Credenciales de acceso\" en estado \"Enviado\" para: alfa.rmuvvrqw1@proveedores-qa.example, bravo.rmuvvrqw1@proveedores-qa.example, charlie.rmuvvrqw1@proveedores-qa.example.",
           "estado": "PASS",
           "evidencias": [
             {
@@ -29,14 +29,14 @@
           ]
         },
         {
-          "paso": "Abrir el correo generado para alfa.rmuq7sgcj@proveedores-qa.example",
+          "paso": "Abrir el correo generado para alfa.rmuvvrqw1@proveedores-qa.example",
           "esperado": "El correo va al correo del proveedor e incluye el usuario, la contraseña temporal y la dirección de inicio de sesión del portal.",
-          "obtenido": "Correo \"Acceso al Portal de Proveedores ULTRASIST\" para alfa.rmuq7sgcj@proveedores-qa.example: incluye \"Usuario: alfa.rmuq7sgcj@proveedores-qa.example\", una contraseña temporal de 20 caracteres y \"Portal: http://127.0.0.1:8000/login\".",
+          "obtenido": "Correo \"Acceso al Portal de Proveedores ULTRASIST\" para alfa.rmuvvrqw1@proveedores-qa.example: incluye \"Usuario: alfa.rmuvvrqw1@proveedores-qa.example\", una contraseña temporal de 20 caracteres y \"Portal: http://127.0.0.1:8000/login\".",
           "estado": "PASS",
           "evidencias": [
             {
               "archivo": "HU-03/02-correo-credenciales.png",
-              "descripcion": "Correo \"Credenciales de acceso\" generado por el portal para alfa.rmuq7sgcj@proveedores-qa.example.",
+              "descripcion": "Correo \"Credenciales de acceso\" generado por el portal para alfa.rmuvvrqw1@proveedores-qa.example.",
               "tipo": "correo"
             }
           ]
@@ -48,9 +48,9 @@
       "estado": "PASS",
       "pasos": [
         {
-          "paso": "Abrir el expediente de QA Alfa Servicios RMUQ7SGCJ SA de CV",
+          "paso": "Abrir el expediente de QA Alfa Servicios RMUVVRQW1 SA de CV",
           "esperado": "La sección \"Acceso al portal\" muestra el usuario, la contraseña \"Temporal, pendiente de cambio\" (leída de Keycloak) y \"Credenciales enviadas el …\".",
-          "obtenido": "Acceso al portal: Usuario del portal alfa.rmuq7sgcj@proveedores-qa.example Último acceso Nunca Contraseña Temporal, pendiente de cambio Credenciales Credenciales enviadas el 01/10/2026 18:18",
+          "obtenido": "Acceso al portal: Usuario del portal alfa.rmuvvrqw1@proveedores-qa.example Último acceso Nunca Contraseña Temporal, pendiente de cambio Credenciales Credenciales enviadas el 05/10/2026 17:28",
           "estado": "PASS",
           "evidencias": [
             {
@@ -67,9 +67,9 @@
       "estado": "PASS",
       "pasos": [
         {
-          "paso": "Consultar en la base del portal el usuario alfa.rmuq7sgcj@proveedores-qa.example (sólo lectura)",
+          "paso": "Consultar en la base del portal el usuario alfa.rmuvvrqw1@proveedores-qa.example (sólo lectura)",
           "esperado": "El usuario existe con rol Proveedor, enlazado a Keycloak por su \"sub\", sin contraseña ni hash guardados (password_hash vacío).",
-          "obtenido": "Usuario alfa.rmuq7sgcj@proveedores-qa.example: rol Proveedor, keycloak_sub registrado = true, password_hash vacío = true.",
+          "obtenido": "Usuario alfa.rmuvvrqw1@proveedores-qa.example: rol Proveedor, keycloak_sub registrado = true, password_hash vacío = true.",
           "estado": "PASS",
           "evidencias": []
         }

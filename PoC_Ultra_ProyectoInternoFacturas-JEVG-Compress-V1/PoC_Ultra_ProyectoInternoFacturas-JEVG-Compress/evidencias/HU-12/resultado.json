@@ -1,8 +1,8 @@
 {
   "id": "HU-12",
-  "run": "RMUQ7SGCJ",
-  "inicio": "2026-10-02T00:18:54.943Z",
-  "fin": "2026-10-02T00:18:58.324Z",
+  "run": "RMUVVRQW1",
+  "inicio": "2026-10-05T23:29:11.915Z",
+  "fin": "2026-10-05T23:29:15.382Z",
   "estado": "PASS",
   "bloqueo": null,
   "notas": [],
@@ -48,9 +48,9 @@
       "estado": "PASS",
       "pasos": [
         {
-          "paso": "Registrar la factura QA-RMUQ7SGCJ-N1 con periodo 08/2026",
+          "paso": "Registrar la factura QA-RMUVVRQW1-N1 con periodo 08/2026",
           "esperado": "Se crea la factura y se abre la carga documental (paso 2 de 3) con los 4 obligatorios del Nacional pendientes; la factura queda en \"Borrador\".",
-          "obtenido": "Factura #39 creada; checklist \"Faltan 4 archivos obligatorios\"; estatus en el detalle \"Borrador\".",
+          "obtenido": "Factura #78 creada; checklist \"Faltan 4 archivos obligatorios\"; estatus en el detalle \"Borrador\".",
           "estado": "PASS",
           "evidencias": [
             {
@@ -107,7 +107,7 @@
           "evidencias": [
             {
               "archivo": "HU-12/07-detalle-cargada.png",
-              "descripcion": "Detalle de QA-RMUQ7SGCJ-N1: estatus \"Cargada\".",
+              "descripcion": "Detalle de QA-RMUVVRQW1-N1: estatus \"Cargada\".",
               "tipo": "aplicacion"
             }
           ]

@@ -1,120 +1,129 @@
 {
-  "run": "RMUQ7SGCJ",
-  "inicio": "2026-10-02T00:18:05.826Z",
+  "run": "RMUVVRQW1",
+  "inicio": "2026-10-05T23:28:14.494Z",
   "ambiente": {
     "portal": true,
     "keycloak": true,
     "detalle": "http://127.0.0.1:8000/health → HTTP 200 · http://127.0.0.1:58080/realms/ultrasist-portal/.well-known/openid-configuration → HTTP 200"
   },
   "fixtures": {
-    "cfdi_ok": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/evidencias/_datos-prueba/RMUQ7SGCJ/cfdi_RMUQ7SGCJ_correcto.xml",
-    "cfdi_cp": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/evidencias/_datos-prueba/RMUQ7SGCJ/cfdi_RMUQ7SGCJ_cp_06600.xml",
-    "cfdi_dup": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/evidencias/_datos-prueba/RMUQ7SGCJ/cfdi_RMUQ7SGCJ_uuid_repetido.xml",
-    "cfdi_ok_b": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/evidencias/_datos-prueba/RMUQ7SGCJ/cfdi_RMUQ7SGCJ_correcto_b.xml",
-    "cfdi_ok_c": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/evidencias/_datos-prueba/RMUQ7SGCJ/cfdi_RMUQ7SGCJ_correcto_c.xml",
-    "pdf_cfdi": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/evidencias/_datos-prueba/RMUQ7SGCJ/factura_RMUQ7SGCJ.pdf",
-    "orden_compra": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/evidencias/_datos-prueba/RMUQ7SGCJ/orden_compra_RMUQ7SGCJ.txt",
-    "vobo": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/evidencias/_datos-prueba/RMUQ7SGCJ/vobo_RMUQ7SGCJ.txt",
-    "invoice": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/evidencias/_datos-prueba/RMUQ7SGCJ/INV-QA-RMUQ7SGCJ.pdf",
-    "invoice_otro": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/evidencias/_datos-prueba/RMUQ7SGCJ/INV-QA-RMUQ7SGCJ-B.pdf",
-    "acuse": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/evidencias/_datos-prueba/RMUQ7SGCJ/acuse_cancelacion_RMUQ7SGCJ.pdf",
-    "texto_invalido": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/evidencias/_datos-prueba/RMUQ7SGCJ/no_es_xml_RMUQ7SGCJ.txt",
-    "uuid_ok": "4C1DE32C-92F3-4E0D-A096-8BCD5986BDAE"
+    "cfdi_ok": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/evidencias/_datos-prueba/RMUVVRQW1/cfdi_RMUVVRQW1_correcto.xml",
+    "cfdi_cp": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/evidencias/_datos-prueba/RMUVVRQW1/cfdi_RMUVVRQW1_cp_06600.xml",
+    "cfdi_dup": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/evidencias/_datos-prueba/RMUVVRQW1/cfdi_RMUVVRQW1_uuid_repetido.xml",
+    "cfdi_ok_b": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/evidencias/_datos-prueba/RMUVVRQW1/cfdi_RMUVVRQW1_correcto_b.xml",
+    "cfdi_ok_c": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/evidencias/_datos-prueba/RMUVVRQW1/cfdi_RMUVVRQW1_correcto_c.xml",
+    "cfdi_ppd": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/evidencias/_datos-prueba/RMUVVRQW1/cfdi_RMUVVRQW1_ppd.xml",
+    "complemento_pago": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/evidencias/_datos-prueba/RMUVVRQW1/complemento_pago_RMUVVRQW1.xml",
+    "pdf_cfdi": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/evidencias/_datos-prueba/RMUVVRQW1/factura_RMUVVRQW1.pdf",
+    "orden_compra": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/evidencias/_datos-prueba/RMUVVRQW1/orden_compra_RMUVVRQW1.txt",
+    "vobo": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/evidencias/_datos-prueba/RMUVVRQW1/vobo_RMUVVRQW1.txt",
+    "invoice": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/evidencias/_datos-prueba/RMUVVRQW1/INV-QA-RMUVVRQW1.pdf",
+    "invoice_otro": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/evidencias/_datos-prueba/RMUVVRQW1/INV-QA-RMUVVRQW1-B.pdf",
+    "acuse": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/evidencias/_datos-prueba/RMUVVRQW1/acuse_cancelacion_RMUVVRQW1.pdf",
+    "requisito_alta": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/evidencias/_datos-prueba/RMUVVRQW1/requisito_alta_RMUVVRQW1.pdf",
+    "texto_invalido": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/evidencias/_datos-prueba/RMUVVRQW1/no_es_xml_RMUVVRQW1.txt",
+    "uuid_ok": "5DEBF31E-628E-456D-B454-ACA3465713DE",
+    "uuid_ppd": "7EE9D835-9E8D-4401-A9DE-850B826F2582"
   },
   "datos": {
     "hu01.proveedores": [
       {
-        "razon_social": "QA Alfa Servicios RMUQ7SGCJ SA de CV",
-        "rfc": "QAA260101GCJ",
+        "razon_social": "QA Alfa Servicios RMUVVRQW1 SA de CV",
+        "rfc": "QAA260101QW1",
         "id_fiscal": null,
-        "correo": "alfa.rmuq7sgcj@proveedores-qa.example"
+        "correo": "alfa.rmuvvrqw1@proveedores-qa.example"
       },
       {
-        "razon_social": "QA Bravo Persona RMUQ7SGCJ",
-        "rfc": "QABR260101GCJ",
+        "razon_social": "QA Bravo Persona RMUVVRQW1",
+        "rfc": "QABR260101QW1",
         "id_fiscal": null,
-        "correo": "bravo.rmuq7sgcj@proveedores-qa.example"
+        "correo": "bravo.rmuvvrqw1@proveedores-qa.example"
       },
       {
-        "razon_social": "QA Charlie Consulting RMUQ7SGCJ LLC",
+        "razon_social": "QA Charlie Consulting RMUVVRQW1 LLC",
         "rfc": null,
-        "id_fiscal": "QA-RMUQ7SGCJ",
-        "correo": "charlie.rmuq7sgcj@proveedores-qa.example"
+        "id_fiscal": "QA-RMUVVRQW1",
+        "correo": "charlie.rmuvvrqw1@proveedores-qa.example"
       }
     ],
     "hu02.autorizados": {
       "proveedores": [
         {
-          "razon_social": "QA Alfa Servicios RMUQ7SGCJ SA de CV",
-          "rfc": "QAA260101GCJ",
+          "razon_social": "QA Alfa Servicios RMUVVRQW1 SA de CV",
+          "rfc": "QAA260101QW1",
           "id_fiscal": null,
-          "correo": "alfa.rmuq7sgcj@proveedores-qa.example"
+          "correo": "alfa.rmuvvrqw1@proveedores-qa.example"
         },
         {
-          "razon_social": "QA Bravo Persona RMUQ7SGCJ",
-          "rfc": "QABR260101GCJ",
+          "razon_social": "QA Bravo Persona RMUVVRQW1",
+          "rfc": "QABR260101QW1",
           "id_fiscal": null,
-          "correo": "bravo.rmuq7sgcj@proveedores-qa.example"
+          "correo": "bravo.rmuvvrqw1@proveedores-qa.example"
         },
         {
-          "razon_social": "QA Charlie Consulting RMUQ7SGCJ LLC",
+          "razon_social": "QA Charlie Consulting RMUVVRQW1 LLC",
           "rfc": null,
-          "id_fiscal": "QA-RMUQ7SGCJ",
-          "correo": "charlie.rmuq7sgcj@proveedores-qa.example"
+          "id_fiscal": "QA-RMUVVRQW1",
+          "correo": "charlie.rmuvvrqw1@proveedores-qa.example"
         }
       ],
-      "desde": "2026-10-02T00:18:11.073Z"
+      "desde": "2026-10-05T23:28:23.075Z"
     },
     "hu03.credencial": {
-      "correo": "alfa.rmuq7sgcj@proveedores-qa.example",
-      "razon_social": "QA Alfa Servicios RMUQ7SGCJ SA de CV",
-      "desde": "2026-10-02T00:18:11.073Z"
+      "correo": "alfa.rmuvvrqw1@proveedores-qa.example",
+      "razon_social": "QA Alfa Servicios RMUVVRQW1 SA de CV",
+      "desde": "2026-10-05T23:28:23.075Z"
     },
-    "hu06.direccion": "Av. Insurgentes Sur 1000, Col. Del Valle, Benito Juárez, CDMX (QA RMUQ7SGCJ)",
+    "hu06.direccion": "Av. Insurgentes Sur 1000, Col. Del Valle, Benito Juárez, CDMX (QA RMUVVRQW1)",
     "hu08.recepcion": [
       "recepcionfacturas@ultrasist.com.mx",
-      "recepcion.qa.rmuq7sgcj@ultrasist-qa.example"
+      "recepcion.qa.rmuvvrqw1@ultrasist-qa.example"
     ],
-    "hu08.copiaCancelada": "auditoria.qa.rmuq7sgcj@ultrasist-qa.example",
+    "hu08.copiaCancelada": "auditoria.qa.rmuvvrqw1@ultrasist-qa.example",
     "hu12.factura": {
-      "id": 39,
-      "numero": "QA-RMUQ7SGCJ-N1"
+      "id": 78,
+      "numero": "QA-RMUVVRQW1-N1"
     },
     "hu13.enviada": {
-      "id": 39,
-      "numero": "QA-RMUQ7SGCJ-N1"
+      "id": 78,
+      "numero": "QA-RMUVVRQW1-N1"
     },
     "hu13.noEnviada": {
-      "id": 40,
-      "numero": "QA-RMUQ7SGCJ-N2"
+      "id": 79,
+      "numero": "QA-RMUVVRQW1-N2"
     },
     "hu15.factura": {
-      "id": 42,
-      "numero": "QA-RMUQ7SGCJ-I1"
+      "id": 81,
+      "numero": "QA-RMUVVRQW1-I1"
     },
     "hu16.enviada": {
-      "id": 42,
-      "numero": "QA-RMUQ7SGCJ-I1"
+      "id": 81,
+      "numero": "QA-RMUVVRQW1-I1"
     },
     "hu14.cancelada": {
-      "id": 40,
-      "numero": "QA-RMUQ7SGCJ-N2",
-      "cancelada": "01/10/2026 18:19",
-      "limite": "04/10/2026 18:19"
+      "id": 79,
+      "numero": "QA-RMUVVRQW1-N2",
+      "cancelada": "05/10/2026 17:29",
+      "limite": "08/10/2026 17:29"
     },
     "hu20.rechazada": {
-      "id": 44,
-      "numero": "QA-RMUQ7SGCJ-N4",
-      "texto": "QA RMUQ7SGCJ: el subtotal del XML no coincide con la orden de compra OC-QA-RMUQ7SGCJ."
+      "id": 83,
+      "numero": "QA-RMUVVRQW1-N4",
+      "texto": "QA RMUVVRQW1: el subtotal del XML no coincide con la orden de compra OC-QA-RMUVVRQW1."
     },
     "hu20.observaciones": {
-      "id": 45,
-      "numero": "QA-RMUQ7SGCJ-N5",
-      "texto": "QA RMUQ7SGCJ: falta el Vo.Bo. firmado por el líder de proyecto; corrija y reenvíe."
+      "id": 84,
+      "numero": "QA-RMUVVRQW1-N5",
+      "texto": "QA RMUVVRQW1: falta el Vo.Bo. firmado por el líder de proyecto; corrija y reenvíe."
     },
     "hu20.autorizada": {
-      "id": 39,
-      "numero": "QA-RMUQ7SGCJ-N1"
+      "id": 78,
+      "numero": "QA-RMUVVRQW1-N1"
+    },
+    "hu23.pagada": {
+      "id": 85,
+      "numero": "QA-RMUVVRQW1-PAGO",
+      "limite": "08/10/2026 17:30"
     }
   },
   "hus": {
@@ -135,6 +144,9 @@
     "HU-18": "PASS",
     "HU-19": "PASS",
     "HU-20": "PASS",
-    "HU-17": "PASS"
+    "HU-17": "PASS",
+    "HU-21": "PASS",
+    "HU-22": "PASS",
+    "HU-23": "PASS"
   }
 }

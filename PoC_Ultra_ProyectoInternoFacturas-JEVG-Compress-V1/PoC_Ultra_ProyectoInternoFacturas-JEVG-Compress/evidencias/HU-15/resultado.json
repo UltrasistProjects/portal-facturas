@@ -1,8 +1,8 @@
 {
   "id": "HU-15",
-  "run": "RMUQ7SGCJ",
-  "inicio": "2026-10-02T00:19:04.602Z",
-  "fin": "2026-10-02T00:19:08.389Z",
+  "run": "RMUVVRQW1",
+  "inicio": "2026-10-05T23:29:21.823Z",
+  "fin": "2026-10-05T23:29:25.790Z",
   "estado": "PASS",
   "bloqueo": null,
   "notas": [],
@@ -48,9 +48,9 @@
       "estado": "PASS",
       "pasos": [
         {
-          "paso": "Registrar QA-RMUQ7SGCJ-I1 con importes consistentes (1,000.00 USD)",
+          "paso": "Registrar QA-RMUVVRQW1-I1 con importes consistentes (1,000.00 USD)",
           "esperado": "Se abre la carga documental: se ofrecen Invoice (PDF) y los soportes, no el XML ni el PDF del CFDI; faltan 3 obligatorios (Invoice, Orden de compra y Vo.Bo.).",
-          "obtenido": "Factura #42; tipos ofrecidos: Invoice, Orden de compra, Vo.Bo. del líder de proyecto, Contrato, Anexo del contrato, Documentación adicional; checklist \"Faltan 3 archivos obligatorios\".",
+          "obtenido": "Factura #81; tipos ofrecidos: Invoice, Orden de compra, Vo.Bo. del líder de proyecto, Contrato, Anexo del contrato, Documentación adicional; checklist \"Faltan 3 archivos obligatorios\".",
           "estado": "PASS",
           "evidencias": [
             {
@@ -61,7 +61,7 @@
           ]
         },
         {
-          "paso": "Cargar el Invoice \"INV-QA-RMUQ7SGCJ.pdf\", la Orden de compra y el Vo.Bo.",
+          "paso": "Cargar el Invoice \"INV-QA-RMUVVRQW1.pdf\", la Orden de compra y el Vo.Bo.",
           "esperado": "Obligatorios completos (\"Factura cargada. Ya puede enviarla a validación.\") y la factura queda \"Cargada\".",
           "obtenido": "Checklist \"Archivos obligatorios completos Factura cargada. Ya puede enviarla a validación.\"; estatus \"Cargada\".",
           "estado": "PASS",
@@ -73,7 +73,7 @@
             },
             {
               "archivo": "HU-15/05-detalle-cargada.png",
-              "descripcion": "Detalle de QA-RMUQ7SGCJ-I1 en \"Cargada\" con los \"Datos del Invoice\".",
+              "descripcion": "Detalle de QA-RMUVVRQW1-I1 en \"Cargada\" con los \"Datos del Invoice\".",
               "tipo": "aplicacion"
             }
           ]
@@ -85,9 +85,9 @@
       "estado": "PASS",
       "pasos": [
         {
-          "paso": "Registrar QA-RMUQ7SGCJ-I2 e intentar cargar un Invoice con el mismo nombre de archivo (\"INV-QA-RMUQ7SGCJ.pdf\")",
+          "paso": "Registrar QA-RMUVVRQW1-I2 e intentar cargar un Invoice con el mismo nombre de archivo (\"INV-QA-RMUVVRQW1.pdf\")",
           "esperado": "La carga se rechaza (Invoice duplicado, indicando el folio de la otra factura) y el Invoice sigue pendiente.",
-          "obtenido": "Rechazado: \"Ya existe una factura con un Invoice llamado «INV-QA-RMUQ7SGCJ.pdf»: FAC-2026-00042\"; Invoice sigue \"Pendiente\".",
+          "obtenido": "Rechazado: \"Ya existe una factura con un Invoice llamado «INV-QA-RMUVVRQW1.pdf»: FAC-2026-00081\"; Invoice sigue \"Pendiente\".",
           "estado": "PASS",
           "evidencias": [
             {
@@ -98,7 +98,7 @@
           ]
         },
         {
-          "paso": "Cargar en QA-RMUQ7SGCJ-I2 un Invoice con otro nombre (\"INV-QA-RMUQ7SGCJ-B.pdf\")",
+          "paso": "Cargar en QA-RMUVVRQW1-I2 un Invoice con otro nombre (\"INV-QA-RMUVVRQW1-B.pdf\")",
           "esperado": "La carga se acepta: el control de duplicados es por nombre de archivo.",
           "obtenido": "Aceptado; checklist \"Faltan 2 archivos obligatorios\".",
           "estado": "PASS",

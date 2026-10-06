@@ -1,8 +1,8 @@
 {
   "id": "HU-07",
-  "run": "RMUQ7SGCJ",
-  "inicio": "2026-10-02T00:18:44.749Z",
-  "fin": "2026-10-02T00:18:49.803Z",
+  "run": "RMUVVRQW1",
+  "inicio": "2026-10-05T23:29:01.238Z",
+  "fin": "2026-10-05T23:29:06.514Z",
   "estado": "PASS",
   "bloqueo": null,
   "notas": [],
@@ -18,7 +18,7 @@
         {
           "paso": "Abrir Administración › Catálogos",
           "esperado": "Se listan los catálogos administrables (monedas, usos de CFDI, formas y métodos de pago, regímenes fiscales y actividades económicas) con sus claves activas y totales.",
-          "obtenido": "Catálogos: Monedas (CURRENCY): 9 activas de 9; Usos (de (CFDI (CFDI_USE): 24 activas de 24; Formas (de (pago (PAYMENT_FORM): 22 activas de 22; Métodos (de (pago (PAYMENT_METHOD): 2 activas de 2; Regímenes (fiscales (TAX_REGIME): 19 activas de 19; Actividades (económicas (INDUSTRY): 20 activas de 20.",
+          "obtenido": "Catálogos: Monedas (CURRENCY): 17 activas de 17; Usos (de (CFDI (CFDI_USE): 24 activas de 24; Formas (de (pago (PAYMENT_FORM): 22 activas de 22; Métodos (de (pago (PAYMENT_METHOD): 2 activas de 2; Regímenes (fiscales (TAX_REGIME): 19 activas de 19; Actividades (económicas (INDUSTRY): 20 activas de 20.",
           "estado": "PASS",
           "evidencias": [
             {
@@ -31,7 +31,7 @@
         {
           "paso": "Abrir el catálogo de Monedas",
           "esperado": "Se muestran las claves vigentes (MXN, USD, EUR) con su estado.",
-          "obtenido": "Catálogo \"Monedas\": 9 activas de 9.",
+          "obtenido": "Catálogo \"Monedas\": 17 activas de 17.",
           "estado": "PASS",
           "evidencias": [
             {
@@ -48,27 +48,27 @@
       "estado": "PASS",
       "pasos": [
         {
-          "paso": "Agregar la clave \"QWP\" con la descripción \"Moneda de prueba QA RMUQ7SGCJ\"",
+          "paso": "Agregar la clave \"QXJ\" con la descripción \"Moneda de prueba QA RMUVVRQW1\"",
           "esperado": "Se agrega la clave (\"Clave agregada\") y aparece activa en el listado.",
-          "obtenido": "Aviso \"Clave agregada\"; fila: QWP Moneda de prueba QA RMUQ7SGCJ Activa Desactivar.",
+          "obtenido": "Aviso \"Clave agregada\"; fila: QXJ Moneda de prueba QA RMUVVRQW1 Activa Desactivar.",
           "estado": "PASS",
           "evidencias": [
             {
               "archivo": "HU-07/03-clave-agregada.png",
-              "descripcion": "Clave QWP agregada y activa.",
+              "descripcion": "Clave QXJ agregada y activa.",
               "tipo": "aplicacion"
             }
           ]
         },
         {
-          "paso": "Intentar agregar otra vez la clave \"QWP\"",
+          "paso": "Intentar agregar otra vez la clave \"QXJ\"",
           "esperado": "Se rechaza porque la clave ya existe.",
-          "obtenido": "Rechazado: \"La clave QWP ya existe en este catálogo\".",
+          "obtenido": "Rechazado: \"La clave QXJ ya existe en este catálogo\".",
           "estado": "PASS",
           "evidencias": [
             {
               "archivo": "HU-07/04-clave-duplicada.png",
-              "descripcion": "Intento de agregar de nuevo la clave QWP: rechazado.",
+              "descripcion": "Intento de agregar de nuevo la clave QXJ: rechazado.",
               "tipo": "aplicacion"
             }
           ]
@@ -80,33 +80,33 @@
       "estado": "PASS",
       "pasos": [
         {
-          "paso": "Editar la descripción de \"QWP\"",
+          "paso": "Editar la descripción de \"QXJ\"",
           "esperado": "Se guarda (\"Descripción actualizada\").",
-          "obtenido": "Aviso \"Descripción actualizada\"; nueva descripción \"Moneda QA RMUQ7SGCJ (editada)\".",
+          "obtenido": "Aviso \"Descripción actualizada\"; nueva descripción \"Moneda QA RMUVVRQW1 (editada)\".",
           "estado": "PASS",
           "evidencias": [
             {
               "archivo": "HU-07/05-descripcion-actualizada.png",
-              "descripcion": "Descripción de QWP actualizada.",
+              "descripcion": "Descripción de QXJ actualizada.",
               "tipo": "aplicacion"
             }
           ]
         },
         {
-          "paso": "Desactivar \"QWP\"",
+          "paso": "Desactivar \"QXJ\"",
           "esperado": "La clave queda \"Inactiva\" (nunca se borra).",
           "obtenido": "Aviso \"Estado de la clave actualizado\"; estado \"Inactiva\".",
           "estado": "PASS",
           "evidencias": [
             {
               "archivo": "HU-07/06-clave-inactiva.png",
-              "descripcion": "Clave QWP desactivada: estado \"Inactiva\".",
+              "descripcion": "Clave QXJ desactivada: estado \"Inactiva\".",
               "tipo": "aplicacion"
             }
           ]
         },
         {
-          "paso": "Reactivar \"QWP\"",
+          "paso": "Reactivar \"QXJ\"",
           "esperado": "La clave vuelve a \"Activa\".",
           "obtenido": "Estado \"Activa\".",
           "estado": "PASS",
@@ -140,24 +140,24 @@
         {
           "paso": "Descargar la plantilla con las claves vigentes del catálogo de Monedas",
           "esperado": "Se descarga un .xlsx con la hoja \"Catalogo\" (Clave, Descripción, Activo) y una fila por clave vigente.",
-          "obtenido": "Descargado \"catalogo_currency.xlsx\": hoja Catalogo, encabezados Clave | Descripción | Activo, 10 claves (= 10 del catálogo).",
+          "obtenido": "Descargado \"catalogo_currency.xlsx\": hoja Catalogo, encabezados Clave | Descripción | Activo, 18 claves (= 18 del catálogo).",
           "estado": "PASS",
           "evidencias": []
         },
         {
-          "paso": "Agregar en el archivo la clave \"QTF\" y cargarlo",
+          "paso": "Agregar en el archivo la clave \"QDE\" y cargarlo",
           "esperado": "La carga se aplica (\"Carga aplicada: …\") y la clave nueva aparece activa en el catálogo.",
-          "obtenido": "Aviso \"Carga aplicada: 1 agregada, 0 actualizadas, 10 sin cambios.\"; QTF activa con la descripción \"Moneda por Excel QA RMUQ7SGCJ\".",
+          "obtenido": "Aviso \"Carga aplicada: 1 agregada, 0 actualizadas, 18 sin cambios.\"; QDE activa con la descripción \"Moneda por Excel QA RMUVVRQW1\".",
           "estado": "PASS",
           "evidencias": [
             {
               "archivo": "HU-07/08-carga-excel-aplicada.png",
-              "descripcion": "Resultado de la carga desde Excel con la clave QTF.",
+              "descripcion": "Resultado de la carga desde Excel con la clave QDE.",
               "tipo": "aplicacion"
             },
             {
               "archivo": "HU-07/09-clave-desde-excel.png",
-              "descripcion": "Clave QTF registrada desde el archivo de Excel.",
+              "descripcion": "Clave QDE registrada desde el archivo de Excel.",
               "tipo": "aplicacion"
             }
           ]

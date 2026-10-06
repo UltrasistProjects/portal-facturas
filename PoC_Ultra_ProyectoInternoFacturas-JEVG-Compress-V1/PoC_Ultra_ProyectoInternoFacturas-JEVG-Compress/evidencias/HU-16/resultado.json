@@ -1,8 +1,8 @@
 {
   "id": "HU-16",
-  "run": "RMUQ7SGCJ",
-  "inicio": "2026-10-02T00:19:08.588Z",
-  "fin": "2026-10-02T00:19:11.734Z",
+  "run": "RMUVVRQW1",
+  "inicio": "2026-10-05T23:29:25.973Z",
+  "fin": "2026-10-05T23:29:29.151Z",
   "estado": "PASS",
   "bloqueo": null,
   "notas": [
@@ -18,9 +18,9 @@
       "estado": "PASS",
       "pasos": [
         {
-          "paso": "Abrir QA-RMUQ7SGCJ-I1 (\"Cargada\") y pulsar \"Verificar\"",
+          "paso": "Abrir QA-RMUVVRQW1-I1 (\"Cargada\") y pulsar \"Verificar\"",
           "esperado": "El motor evalúa el texto del Invoice contra los datos del proveedor y de ULTRASIST (INT-001 a INT-004, advertencias) y las reglas XML del CFDI resultan \"No aplica a proveedores internacionales\".",
-          "obtenido": "INT-001 PASS (Identificador fiscal del proveedor presente en el Invoice; esperado \"98-7654321\"); INT-002 WARNING (No se encontró la razón social de ULTRASIST en el Invoice; esperado \"ULTRASIST\"); INT-003 PASS (Código postal de ULTRASIST presente en el Invoice; esperado \"03930\"); INT-004 WARNING (No se encontró la dirección de ULTRASIST en el Invoice; esperado \"Av. Insurgentes Sur 1000, Col. Del Valle, Benito Juárez, CDMX (QA RMUQ7SGCJ)\"). XML-002: NOT_APPLICABLE (No aplica a proveedores internacionales).",
+          "obtenido": "INT-001 PASS (Identificador fiscal del proveedor presente en el Invoice; esperado \"98-7654321\"); INT-002 WARNING (No se encontró la razón social de ULTRASIST en el Invoice; esperado \"ULTRASIST\"); INT-003 PASS (Código postal de ULTRASIST presente en el Invoice; esperado \"03930\"); INT-004 WARNING (No se encontró la dirección de ULTRASIST en el Invoice; esperado \"Av. Insurgentes Sur 1000, Col. Del Valle, Benito Juárez, CDMX (QA RMUVVRQW1)\"). XML-002: NOT_APPLICABLE (No aplica a proveedores internacionales).",
           "estado": "PASS",
           "evidencias": [
             {
@@ -49,7 +49,7 @@
           "evidencias": [
             {
               "archivo": "HU-16/03-invoice-enviado.png",
-              "descripcion": "QA-RMUQ7SGCJ-I1 en \"Enviada\" tras el envío.",
+              "descripcion": "QA-RMUVVRQW1-I1 en \"Enviada\" tras el envío.",
               "tipo": "aplicacion"
             }
           ]
@@ -57,7 +57,7 @@
         {
           "paso": "Revisar \"Datos del Invoice\" y el seguimiento",
           "esperado": "Se muestran los importes capturados (1,000.00 USD), el texto del Invoice \"Legible\" y el envío en el seguimiento.",
-          "obtenido": "Datos del Invoice: Fecha 31/08/2026 Subtotal $1,000.00 USD Impuestos $0.00 USD Total $1,000.00 USD Proveedor US · 98-7654321 Texto del Invoice Legible; seguimiento: 01/10/2026 18:19 Enviada a validación Proveedor Internacional Demo.",
+          "obtenido": "Datos del Invoice: Fecha 31/08/2026 Subtotal $1,000.00 USD Impuestos $0.00 USD Total $1,000.00 USD Proveedor US · 98-7654321 Texto del Invoice Legible; seguimiento: 05/10/2026 17:29 Enviada a validación Proveedor Internacional Demo.",
           "estado": "PASS",
           "evidencias": [
             {

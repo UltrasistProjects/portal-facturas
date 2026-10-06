@@ -1,8 +1,8 @@
 {
   "id": "HU-19",
-  "run": "RMUQ7SGCJ",
-  "inicio": "2026-10-02T00:19:19.242Z",
-  "fin": "2026-10-02T00:19:24.768Z",
+  "run": "RMUVVRQW1",
+  "inicio": "2026-10-05T23:29:36.799Z",
+  "fin": "2026-10-05T23:29:42.397Z",
   "estado": "PASS",
   "bloqueo": null,
   "notas": [],
@@ -16,14 +16,14 @@
       "estado": "PASS",
       "pasos": [
         {
-          "paso": "Abrir el detalle de QA-RMUQ7SGCJ-N1",
+          "paso": "Abrir el detalle de QA-RMUVVRQW1-N1",
           "esperado": "Se muestran el estatus \"Enviada\", los datos principales (número, UUID, proyecto, total), los datos del CFDI (emisor y receptor), el bloque \"Proveedor\" y el \"Historial\".",
-          "obtenido": "Metadatos: FACTURA QA-RMUQ7SGCJ-N1 UUID 4C1DE32C-92F3-4E0D-A096-8BCD5986BDAE PROYECTO Automatizacion Operativa 2026 PERIODO 08/2026 TOTAL $116,000.00 MXN CONTRATO Automatizacion Operativa 2026; Proveedor: Razón social Tecnologia Integral del Centro SA de CV Origen Nacional Identificador fiscal TIC210101ABC Correo proveedor1@poc.local Estatus Autorizado; Historial: 01/10/2026 18:18 Enviada a validación Proveedor Moral Demo.",
+          "obtenido": "Metadatos: FACTURA QA-RMUVVRQW1-N1 UUID 5DEBF31E-628E-456D-B454-ACA3465713DE PROYECTO Automatizacion Operativa 2026 PERIODO 08/2026 TOTAL $116,000.00 MXN CONTRATO Automatizacion Operativa 2026; Proveedor: Razón social Tecnologia Integral del Centro SA de CV Origen Nacional Identificador fiscal TIC210101ABC Correo proveedor1@poc.local Estatus Autorizado; Historial: 05/10/2026 17:29 Enviada a validación Proveedor Moral Demo.",
           "estado": "PASS",
           "evidencias": [
             {
               "archivo": "HU-19/01-detalle-encabezado.png",
-              "descripcion": "Detalle de QA-RMUQ7SGCJ-N1: estatus, score, datos principales, documentos y datos del CFDI.",
+              "descripcion": "Detalle de QA-RMUVVRQW1-N1: estatus, score, datos principales, documentos y datos del CFDI.",
               "tipo": "aplicacion"
             },
             {
@@ -42,7 +42,7 @@
         {
           "paso": "Pulsar \"Ver\" (ojo) en el PDF del CFDI",
           "esperado": "Se abre una pestaña del portal con las páginas del PDF renderizadas.",
-          "obtenido": "Pestaña \"FAC-2026-00039\" › visor con 1 página(s) renderizada(s) del PDF del CFDI.",
+          "obtenido": "Pestaña \"FAC-2026-00078\" › visor con 1 página(s) renderizada(s) del PDF del CFDI.",
           "estado": "PASS",
           "evidencias": [
             {
@@ -109,14 +109,14 @@
       "estado": "PASS",
       "pasos": [
         {
-          "paso": "Abrir el detalle de QA-RMUQ7SGCJ-I1",
+          "paso": "Abrir el detalle de QA-RMUVVRQW1-I1",
           "esperado": "Se muestran \"Datos del Invoice\" (importes capturados) y los resultados INT-001 a INT-004.",
           "obtenido": "Datos del Invoice: Fecha 31/08/2026 Subtotal $1,000.00 USD Impuestos $0.00 USD Total $1,000.00 USD Proveedor US · 98-7654321 Texto del Invoice Legible; INT-001 PASS, INT-002 WARNING, INT-003 PASS, INT-004 WARNING.",
           "estado": "PASS",
           "evidencias": [
             {
               "archivo": "HU-19/08-detalle-internacional.png",
-              "descripcion": "Detalle de QA-RMUQ7SGCJ-I1: documentos y \"Datos del Invoice\".",
+              "descripcion": "Detalle de QA-RMUVVRQW1-I1: documentos y \"Datos del Invoice\".",
               "tipo": "aplicacion"
             },
             {
@@ -146,7 +146,7 @@
       "estado": "PASS",
       "pasos": [
         {
-          "paso": "En QA-RMUQ7SGCJ-N1, pulsar \"Decidir\"",
+          "paso": "En QA-RMUVVRQW1-N1, pulsar \"Decidir\"",
           "esperado": "Se llega al panel \"Decisión\" con los botones Autorizar, Observaciones y Rechazar.",
           "obtenido": "Panel \"Decisión\" con botones: Autorizar, Observaciones, Rechazar.",
           "estado": "PASS",

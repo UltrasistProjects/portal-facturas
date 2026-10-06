@@ -1,8 +1,8 @@
 {
   "id": "HU-08",
-  "run": "RMUQ7SGCJ",
-  "inicio": "2026-10-02T00:18:50.010Z",
-  "fin": "2026-10-02T00:18:54.751Z",
+  "run": "RMUVVRQW1",
+  "inicio": "2026-10-05T23:29:06.757Z",
+  "fin": "2026-10-05T23:29:11.689Z",
   "estado": "PASS",
   "bloqueo": null,
   "notas": [],
@@ -18,7 +18,7 @@
         {
           "paso": "Abrir Administración › Notificaciones",
           "esperado": "Se muestra el buzón \"Recepción de Facturas\" (recepcionfacturas@ultrasist.com.mx), las copias por evento (Autorizada, Rechazada, Observaciones, Cancelada) y el transporte vigente.",
-          "obtenido": "Buzón: \"recepcionfacturas@ultrasist.com.mx\nrecepcion.qa.rmuq7mm3b@ultrasist-qa.example\"; eventos con copias: Autorizada, Rechazada, Observaciones, Cancelada; transporte: Transporte Archivo (no se envían correos) Directorio de salida /home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/evidencias/_correos Remitente Portal de Proveedores ULTRASIST <no-reply@portal.local>.",
+          "obtenido": "Buzón: \"recepcionfacturas@ultrasist.com.mx\nrecepcion.qa.rmuvve30f@ultrasist-qa.example\"; eventos con copias: Autorizada, Rechazada, Observaciones, Cancelada, Pagada, Complemento de pago adjuntado; transporte: Transporte Archivo (no se envían correos) Directorio de salida /home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/evidencias/_correos Remitente Portal de Proveedores ULTRASIST <no-reply@portal.local>.",
           "estado": "PASS",
           "evidencias": [
             {
@@ -42,7 +42,7 @@
         {
           "paso": "Agregar \"correo-sin-arroba\" al buzón y guardar",
           "esperado": "El guardado se rechaza con un error de dirección inválida y la configuración no cambia.",
-          "obtenido": "Errores: Recepción de Facturas: «correo-sin-arroba» no es un correo válido. Al recargar, el buzón conserva su valor anterior: \"recepcionfacturas@ultrasist.com.mx, recepcion.qa.rmuq7mm3b@ultrasist-qa.example\".",
+          "obtenido": "Errores: Recepción de Facturas: «correo-sin-arroba» no es un correo válido. Al recargar, el buzón conserva su valor anterior: \"recepcionfacturas@ultrasist.com.mx, recepcion.qa.rmuvve30f@ultrasist-qa.example\".",
           "estado": "PASS",
           "evidencias": [
             {
@@ -59,9 +59,9 @@
       "estado": "PASS",
       "pasos": [
         {
-          "paso": "Agregar recepcion.qa.rmuq7sgcj@ultrasist-qa.example al buzón y auditoria.qa.rmuq7sgcj@ultrasist-qa.example como copia de \"Cancelada\"; guardar",
+          "paso": "Agregar recepcion.qa.rmuvvrqw1@ultrasist-qa.example al buzón y auditoria.qa.rmuvvrqw1@ultrasist-qa.example como copia de \"Cancelada\"; guardar",
           "esperado": "Se guarda la configuración (\"Configuración guardada\") con ambas listas.",
-          "obtenido": "Aviso \"Configuración guardada\"; buzón: recepcionfacturas@ultrasist.com.mx, recepcion.qa.rmuq7sgcj@ultrasist-qa.example; Cc Cancelada: auditoria.qa.rmuq7sgcj@ultrasist-qa.example.",
+          "obtenido": "Aviso \"Configuración guardada\"; buzón: recepcionfacturas@ultrasist.com.mx, recepcion.qa.rmuvvrqw1@ultrasist-qa.example; Cc Cancelada: auditoria.qa.rmuvvrqw1@ultrasist-qa.example.",
           "estado": "PASS",
           "evidencias": [
             {
@@ -78,9 +78,9 @@
       "estado": "PASS",
       "pasos": [
         {
-          "paso": "Enviar un correo de prueba a prueba.qa.rmuq7sgcj@ultrasist-qa.example",
+          "paso": "Enviar un correo de prueba a prueba.qa.rmuvvrqw1@ultrasist-qa.example",
           "esperado": "Se informa \"Correo de prueba enviado a …\" y la bitácora registra el envío.",
-          "obtenido": "Aviso \"Correo de prueba enviado a prueba.qa.rmuq7sgcj@ultrasist-qa.example\"; bitácora: 01/10/2026 18:18 Prueba prueba.qa.rmuq7sgcj@ultrasist-qa.example Enviado.",
+          "obtenido": "Aviso \"Correo de prueba enviado a prueba.qa.rmuvvrqw1@ultrasist-qa.example\"; bitácora: 05/10/2026 17:29 Prueba prueba.qa.rmuvvrqw1@ultrasist-qa.example Enviado.",
           "estado": "PASS",
           "evidencias": [
             {
@@ -102,22 +102,22 @@
       "estado": "PASS",
       "pasos": [
         {
-          "paso": "El proveedor registra la factura QA-RMUQ7SGCJ-H08 y la cancela cargando el acuse (dispara el aviso \"Cancelada\" a Recepción de Facturas)",
+          "paso": "El proveedor registra la factura QA-RMUVVRQW1-H08 y la cancela cargando el acuse (dispara el aviso \"Cancelada\" a Recepción de Facturas)",
           "esperado": "La factura queda \"Cancelada\" y se notifica a Recepción de Facturas.",
           "obtenido": "\"Factura cancelada. Se notificó a Recepción de Facturas.\"; estatus \"Cancelada\".",
           "estado": "PASS",
           "evidencias": [
             {
               "archivo": "HU-08/07-cancelacion-notificada.png",
-              "descripcion": "Factura QA-RMUQ7SGCJ-H08 cancelada: \"Se notificó a Recepción de Facturas\".",
+              "descripcion": "Factura QA-RMUVVRQW1-H08 cancelada: \"Se notificó a Recepción de Facturas\".",
               "tipo": "aplicacion"
             }
           ]
         },
         {
           "paso": "Revisar el correo \"Cancelada\" generado",
-          "esperado": "El correo va a recepcionfacturas@ultrasist.com.mx y recepcion.qa.rmuq7sgcj@ultrasist-qa.example (Para) con copia a auditoria.qa.rmuq7sgcj@ultrasist-qa.example (Cc), tal como se configuró.",
-          "obtenido": "Para: recepcion.qa.rmuq7sgcj@ultrasist-qa.example, recepcionfacturas@ultrasist.com.mx; Cc: auditoria.qa.rmuq7sgcj@ultrasist-qa.example; asunto \"Cancelación de la factura QA-RMUQ7SGCJ-H08 de Tecnologia Integral del Centro SA de CV\".",
+          "esperado": "El correo va a recepcionfacturas@ultrasist.com.mx y recepcion.qa.rmuvvrqw1@ultrasist-qa.example (Para) con copia a auditoria.qa.rmuvvrqw1@ultrasist-qa.example (Cc), tal como se configuró.",
+          "obtenido": "Para: recepcion.qa.rmuvvrqw1@ultrasist-qa.example, recepcionfacturas@ultrasist.com.mx; Cc: auditoria.qa.rmuvvrqw1@ultrasist-qa.example; asunto \"Cancelación de la factura QA-RMUVVRQW1-H08 de Tecnologia Integral del Centro SA de CV\".",
           "estado": "PASS",
           "evidencias": [
             {

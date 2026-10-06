@@ -1,8 +1,8 @@
 {
   "id": "HU-01",
-  "run": "RMUQ7SGCJ",
-  "inicio": "2026-10-02T00:18:06.952Z",
-  "fin": "2026-10-02T00:18:11.446Z",
+  "run": "RMUVVRQW1",
+  "inicio": "2026-10-05T23:28:15.353Z",
+  "fin": "2026-10-05T23:28:20.068Z",
   "estado": "PASS",
   "bloqueo": null,
   "notas": [],
@@ -62,7 +62,7 @@
         {
           "paso": "Elegir \"No, corregir primero (Recomendado)\"",
           "esperado": "Se cierra la ventana, se listan los errores por fila y columna, y el catálogo no cambia.",
-          "obtenido": "Errores listados (3): Fila 3 · RFC: tiene un formato inválido / Fila 4 · Identificador fiscal extranjero: es obligatorio para proveedores internacionales / Fila 5 · Correo electrónico: no es un correo válido. La búsqueda del RFC QAD260101GCJ no devuelve proveedores.",
+          "obtenido": "Errores listados (3): Fila 3 · RFC: tiene un formato inválido / Fila 4 · Identificador fiscal extranjero: es obligatorio para proveedores internacionales / Fila 5 · Correo electrónico: no es un correo válido. La búsqueda del RFC QAD260101QW1 no devuelve proveedores.",
           "estado": "PASS",
           "evidencias": [
             {
@@ -72,7 +72,7 @@
             },
             {
               "archivo": "HU-01/05-catalogo-sin-cambios.png",
-              "descripcion": "Búsqueda del RFC de la fila válida (QAD260101GCJ): sin resultados, el catálogo no cambió.",
+              "descripcion": "Búsqueda del RFC de la fila válida (QAD260101QW1): sin resultados, el catálogo no cambió.",
               "tipo": "aplicacion"
             }
           ]
@@ -118,12 +118,12 @@
         {
           "paso": "Consultar el catálogo filtrado por estatus \"Registrado\"",
           "esperado": "Los 3 proveedores aparecen con estatus \"Registrado\" (sin acceso al portal), con su RFC o identificador fiscal y tipo de persona.",
-          "obtenido": "Encontrados 3 proveedores en \"Registrado\": QA Alfa Servicios RMUQ7SGCJ SA de CV (QAA260101GCJ); QA Bravo Persona RMUQ7SGCJ (QABR260101GCJ); QA Charlie Consulting RMUQ7SGCJ LLC (QA-RMUQ7SGCJ).",
+          "obtenido": "Encontrados 3 proveedores en \"Registrado\": QA Alfa Servicios RMUVVRQW1 SA de CV (QAA260101QW1); QA Bravo Persona RMUVVRQW1 (QABR260101QW1); QA Charlie Consulting RMUVVRQW1 LLC (QA-RMUVVRQW1).",
           "estado": "PASS",
           "evidencias": [
             {
               "archivo": "HU-01/08-catalogo-registrados.png",
-              "descripcion": "Catálogo filtrado (búsqueda \"RMUQ7SGCJ\", estatus Registrado) con los proveedores cargados.",
+              "descripcion": "Catálogo filtrado (búsqueda \"RMUVVRQW1\", estatus Registrado) con los proveedores cargados.",
               "tipo": "aplicacion"
             }
           ]
@@ -131,7 +131,7 @@
         {
           "paso": "Abrir el expediente del proveedor internacional",
           "esperado": "El expediente muestra el origen Internacional, el identificador fiscal extranjero, el correo y el estatus \"Registrado\" (mapeo de columnas).",
-          "obtenido": "Expediente: \"US QA-RMUQ7SGCJ · Internacional · Persona Moral\", estatus \"Registrado\", correo charlie.rmuq7sgcj@proveedores-qa.example.",
+          "obtenido": "Expediente: \"US QA-RMUVVRQW1 · Internacional · Persona Moral\", estatus \"Registrado\", correo charlie.rmuvvrqw1@proveedores-qa.example.",
           "estado": "PASS",
           "evidencias": [
             {

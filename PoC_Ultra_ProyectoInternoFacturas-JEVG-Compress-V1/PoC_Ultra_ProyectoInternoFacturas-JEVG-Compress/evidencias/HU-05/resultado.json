@@ -1,8 +1,8 @@
 {
   "id": "HU-05",
-  "run": "RMUQ7SGCJ",
-  "inicio": "2026-10-02T00:18:31.095Z",
-  "fin": "2026-10-02T00:18:36.174Z",
+  "run": "RMUVVRQW1",
+  "inicio": "2026-10-05T23:28:47.154Z",
+  "fin": "2026-10-05T23:28:52.416Z",
   "estado": "PASS",
   "bloqueo": null,
   "notas": [],
@@ -93,9 +93,9 @@
       "estado": "PASS",
       "pasos": [
         {
-          "paso": "Cambiar el asunto a \"Factura {{numero_factura}} rechazada (QA RMUQ7SGCJ)\" y guardar",
+          "paso": "Cambiar el asunto a \"Factura {{numero_factura}} rechazada (QA RMUVVRQW1)\" y guardar",
           "esperado": "Se guarda la plantilla (\"Plantilla actualizada: Rechazada.\") y el listado muestra el nuevo asunto y quién la modificó.",
-          "obtenido": "Aviso \"Plantilla actualizada: Rechazada.\"; fila Rechazada: Rechazada Proveedor (correo del catálogo) Factura {{numero_factura}} rechazada (QA RMUQ7SGCJ) 01/10/2026 18:18 Administrador Demo Editar.",
+          "obtenido": "Aviso \"Plantilla actualizada: Rechazada.\"; fila Rechazada: Rechazada Proveedor (correo del catálogo) Factura {{numero_factura}} rechazada (QA RMUVVRQW1) 05/10/2026 17:28 Administrador Demo Editar.",
           "estado": "PASS",
           "evidencias": [
             {
@@ -130,14 +130,14 @@
       "estado": "PASS",
       "pasos": [
         {
-          "paso": "Agregar \"[QA RMUQ7SGCJ]\" al asunto de la plantilla \"Cancelada\" y guardar",
+          "paso": "Agregar \"[QA RMUVVRQW1]\" al asunto de la plantilla \"Cancelada\" y guardar",
           "esperado": "La plantilla \"Cancelada\" queda guardada con el asunto modificado.",
-          "obtenido": "Asunto guardado: \"Cancelación de la factura {{numero_factura}} de {{proveedor}} [QA RMUQ7SGCJ]\".",
+          "obtenido": "Asunto guardado: \"Cancelación de la factura {{numero_factura}} de {{proveedor}} [QA RMUVVRQW1]\".",
           "estado": "PASS",
           "evidencias": []
         },
         {
-          "paso": "El proveedor registra QA-RMUQ7SGCJ-H05 y la cancela con su acuse (dispara el correo \"Cancelada\")",
+          "paso": "El proveedor registra QA-RMUVVRQW1-H05 y la cancela con su acuse (dispara el correo \"Cancelada\")",
           "esperado": "La factura queda \"Cancelada\" y se notifica a Recepción de Facturas.",
           "obtenido": "\"Factura cancelada. Se notificó a Recepción de Facturas.\".",
           "estado": "PASS",
@@ -145,8 +145,8 @@
         },
         {
           "paso": "Abrir el correo \"Cancelada\" generado",
-          "esperado": "El asunto del correo enviado incluye \"[QA RMUQ7SGCJ]\": se compuso con la plantilla guardada.",
-          "obtenido": "Asunto del correo: \"Cancelación de la factura QA-RMUQ7SGCJ-H05 de Tecnologia Integral del Centro SA de CV [QA RMUQ7SGCJ]\".",
+          "esperado": "El asunto del correo enviado incluye \"[QA RMUVVRQW1]\": se compuso con la plantilla guardada.",
+          "obtenido": "Asunto del correo: \"Cancelación de la factura QA-RMUVVRQW1-H05 de Tecnologia Integral del Centro SA de CV [QA RMUVVRQW1]\".",
           "estado": "PASS",
           "evidencias": [
             {

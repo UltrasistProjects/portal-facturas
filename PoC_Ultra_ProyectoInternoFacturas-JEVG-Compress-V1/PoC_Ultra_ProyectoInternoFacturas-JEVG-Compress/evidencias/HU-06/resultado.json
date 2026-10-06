@@ -1,8 +1,8 @@
 {
   "id": "HU-06",
-  "run": "RMUQ7SGCJ",
-  "inicio": "2026-10-02T00:18:36.381Z",
-  "fin": "2026-10-02T00:18:44.516Z",
+  "run": "RMUVVRQW1",
+  "inicio": "2026-10-05T23:28:52.642Z",
+  "fin": "2026-10-05T23:29:01.002Z",
   "estado": "PASS",
   "bloqueo": null,
   "notas": [],
@@ -56,7 +56,7 @@
         {
           "paso": "Capturar la Dirección de ULTRASIST y guardar",
           "esperado": "Se guardan las reglas (\"Reglas de validación guardadas\") y la dirección queda registrada con la nueva versión.",
-          "obtenido": "Aviso \"Reglas de validación guardadas\"; dirección \"Av. Insurgentes Sur 1000, Col. Del Valle, Benito Juárez, CDMX (QA RMUQ7SGCJ)\". Antes: \"Última modificación: 01/10/2026 18:14 · Administrador Demo · versión 16\"; ahora: \"Última modificación: 01/10/2026 18:18 · Administrador Demo · versión 17\".",
+          "obtenido": "Aviso \"Reglas de validación guardadas\"; dirección \"Av. Insurgentes Sur 1000, Col. Del Valle, Benito Juárez, CDMX (QA RMUVVRQW1)\". Antes: \"Última modificación: 05/10/2026 17:18 · Administrador Demo · versión 36\"; ahora: \"Última modificación: 05/10/2026 17:28 · Administrador Demo · versión 37\".",
           "estado": "PASS",
           "evidencias": [
             {
@@ -75,7 +75,7 @@
         {
           "paso": "El proveedor internacional pulsa \"Verificar\" en su factura INV-2026-0042",
           "esperado": "INT-004 compara el texto del Invoice con la Dirección recién configurada (valor esperado = dirección guardada).",
-          "obtenido": "INT-004: WARNING — \"No se encontró la dirección de ULTRASIST en el Invoice\" (esperado \"Av. Insurgentes Sur 1000, Col. Del Valle, Benito Juárez, CDMX (QA RMUQ7SGCJ)\").",
+          "obtenido": "INT-004: WARNING — \"No se encontró la dirección de ULTRASIST en el Invoice\" (esperado \"Av. Insurgentes Sur 1000, Col. Del Valle, Benito Juárez, CDMX (QA RMUVVRQW1)\").",
           "estado": "PASS",
           "evidencias": [
             {

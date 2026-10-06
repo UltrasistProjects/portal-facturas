@@ -93,12 +93,12 @@
                   "workerIndex": 0,
                   "parallelIndex": 0,
                   "status": "passed",
-                  "duration": 4499,
+                  "duration": 4722,
                   "errors": [],
                   "stdout": [],
                   "stderr": [],
                   "retry": 0,
-                  "startTime": "2026-10-02T00:18:06.813Z",
+                  "startTime": "2026-10-05T23:28:15.220Z",
                   "annotations": [],
                   "attachments": [
                     {
@@ -186,12 +186,12 @@
                   "workerIndex": 0,
                   "parallelIndex": 0,
                   "status": "passed",
-                  "duration": 2882,
+                  "duration": 6418,
                   "errors": [],
                   "stdout": [],
                   "stderr": [],
                   "retry": 0,
-                  "startTime": "2026-10-02T00:18:11.668Z",
+                  "startTime": "2026-10-05T23:28:20.273Z",
                   "annotations": [],
                   "attachments": [
                     {
@@ -259,12 +259,12 @@
                   "workerIndex": 0,
                   "parallelIndex": 0,
                   "status": "passed",
-                  "duration": 2684,
+                  "duration": 2836,
                   "errors": [],
                   "stdout": [],
                   "stderr": [],
                   "retry": 0,
-                  "startTime": "2026-10-02T00:18:14.697Z",
+                  "startTime": "2026-10-05T23:28:26.899Z",
                   "annotations": [],
                   "attachments": [
                     {
@@ -322,12 +322,12 @@
                   "workerIndex": 0,
                   "parallelIndex": 0,
                   "status": "passed",
-                  "duration": 6110,
+                  "duration": 6179,
                   "errors": [],
                   "stdout": [],
                   "stderr": [],
                   "retry": 0,
-                  "startTime": "2026-10-02T00:18:17.491Z",
+                  "startTime": "2026-10-05T23:28:29.845Z",
                   "annotations": [],
                   "attachments": [
                     {
@@ -425,12 +425,12 @@
                   "workerIndex": 0,
                   "parallelIndex": 0,
                   "status": "passed",
-                  "duration": 7013,
+                  "duration": 10492,
                   "errors": [],
                   "stdout": [],
                   "stderr": [],
                   "retry": 0,
-                  "startTime": "2026-10-02T00:18:23.848Z",
+                  "startTime": "2026-10-05T23:28:36.276Z",
                   "annotations": [],
                   "attachments": [
                     {
@@ -479,6 +479,26 @@
                       "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/05-HU-04-archivos-minimos--a45d1-ridos-por-tipo-de-proveedor/attachments/09-internacional-sin-tipo-png-fd0e39d38f6ac7d66c4f70d642723eca3665b21a.png"
                     },
                     {
+                      "name": "10-acciones-editar-eliminar.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/05-HU-04-archivos-minimos--a45d1-ridos-por-tipo-de-proveedor/attachments/10-acciones-editar-eliminar-png-845c6826fb604119b1ba03f6594ad58dc81e09f9.png"
+                    },
+                    {
+                      "name": "11-formulario-edicion.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/05-HU-04-archivos-minimos--a45d1-ridos-por-tipo-de-proveedor/attachments/11-formulario-edicion-png-08886f9fa816dbf80d5788697595bbdb8616f699.png"
+                    },
+                    {
+                      "name": "12-confirmacion-eliminar.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/05-HU-04-archivos-minimos--a45d1-ridos-por-tipo-de-proveedor/attachments/12-confirmacion-eliminar-png-a7f852fc1cee43f815209fcf59ff4974c182edcf.png"
+                    },
+                    {
+                      "name": "13-tipo-eliminado.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/05-HU-04-archivos-minimos--a45d1-ridos-por-tipo-de-proveedor/attachments/13-tipo-eliminado-png-c89075601b9f0c047870349a31c1845ea59d0792.png"
+                    },
+                    {
                       "name": "trace",
                       "contentType": "application/zip",
                       "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/05-HU-04-archivos-minimos--a45d1-ridos-por-tipo-de-proveedor/trace.zip"
@@ -491,7 +511,7 @@
           ],
           "id": "77c50a6850230addedb1-cfe04209a7cfae05a664",
           "file": "05-HU-04-archivos-minimos.spec.ts",
-          "line": 14,
+          "line": 15,
           "column": 5
         }
       ]
@@ -518,12 +538,12 @@
                   "workerIndex": 0,
                   "parallelIndex": 0,
                   "status": "passed",
-                  "duration": 5081,
+                  "duration": 5264,
                   "errors": [],
                   "stdout": [],
                   "stderr": [],
                   "retry": 0,
-                  "startTime": "2026-10-02T00:18:31.088Z",
+                  "startTime": "2026-10-05T23:28:47.148Z",
                   "annotations": [],
                   "attachments": [
                     {
@@ -606,12 +626,12 @@
                   "workerIndex": 0,
                   "parallelIndex": 0,
                   "status": "passed",
-                  "duration": 8137,
+                  "duration": 8362,
                   "errors": [],
                   "stdout": [],
                   "stderr": [],
                   "retry": 0,
-                  "startTime": "2026-10-02T00:18:36.376Z",
+                  "startTime": "2026-10-05T23:28:52.636Z",
                   "annotations": [],
                   "attachments": [
                     {
@@ -694,12 +714,12 @@
                   "workerIndex": 0,
                   "parallelIndex": 0,
                   "status": "passed",
-                  "duration": 5055,
+                  "duration": 5278,
                   "errors": [],
                   "stdout": [],
                   "stderr": [],
                   "retry": 0,
-                  "startTime": "2026-10-02T00:18:44.743Z",
+                  "startTime": "2026-10-05T23:29:01.232Z",
                   "annotations": [],
                   "attachments": [
                     {
@@ -787,12 +807,12 @@
                   "workerIndex": 0,
                   "parallelIndex": 0,
                   "status": "passed",
-                  "duration": 4743,
+                  "duration": 4934,
                   "errors": [],
                   "stdout": [],
                   "stderr": [],
                   "retry": 0,
-                  "startTime": "2026-10-02T00:18:50.004Z",
+                  "startTime": "2026-10-05T23:29:06.750Z",
                   "annotations": [],
                   "attachments": [
                     {
@@ -875,12 +895,12 @@
                   "workerIndex": 0,
                   "parallelIndex": 0,
                   "status": "passed",
-                  "duration": 3383,
+                  "duration": 3471,
                   "errors": [],
                   "stdout": [],
                   "stderr": [],
                   "retry": 0,
-                  "startTime": "2026-10-02T00:18:54.937Z",
+                  "startTime": "2026-10-05T23:29:11.909Z",
                   "annotations": [],
                   "attachments": [
                     {
@@ -958,12 +978,12 @@
                   "workerIndex": 0,
                   "parallelIndex": 0,
                   "status": "passed",
-                  "duration": 5886,
+                  "duration": 5982,
                   "errors": [],
                   "stdout": [],
                   "stderr": [],
                   "retry": 0,
-                  "startTime": "2026-10-02T00:18:58.515Z",
+                  "startTime": "2026-10-05T23:29:15.603Z",
                   "annotations": [],
                   "attachments": [
                     {
@@ -1036,12 +1056,12 @@
                   "workerIndex": 0,
                   "parallelIndex": 0,
                   "status": "passed",
-                  "duration": 3789,
+                  "duration": 3969,
                   "errors": [],
                   "stdout": [],
                   "stderr": [],
                   "retry": 0,
-                  "startTime": "2026-10-02T00:19:04.596Z",
+                  "startTime": "2026-10-05T23:29:21.818Z",
                   "annotations": [],
                   "attachments": [
                     {
@@ -1119,12 +1139,12 @@
                   "workerIndex": 0,
                   "parallelIndex": 0,
                   "status": "passed",
-                  "duration": 3148,
+                  "duration": 3179,
                   "errors": [],
                   "stdout": [],
                   "stderr": [],
                   "retry": 0,
-                  "startTime": "2026-10-02T00:19:08.583Z",
+                  "startTime": "2026-10-05T23:29:25.968Z",
                   "annotations": [],
                   "attachments": [
                     {
@@ -1187,12 +1207,12 @@
                   "workerIndex": 0,
                   "parallelIndex": 0,
                   "status": "passed",
-                  "duration": 3996,
+                  "duration": 4004,
                   "errors": [],
                   "stdout": [],
                   "stderr": [],
                   "retry": 0,
-                  "startTime": "2026-10-02T00:19:11.825Z",
+                  "startTime": "2026-10-05T23:29:29.250Z",
                   "annotations": [],
                   "attachments": [
                     {
@@ -1265,12 +1285,12 @@
                   "workerIndex": 0,
                   "parallelIndex": 0,
                   "status": "passed",
-                  "duration": 3139,
+                  "duration": 3229,
                   "errors": [],
                   "stdout": [],
                   "stderr": [],
                   "retry": 0,
-                  "startTime": "2026-10-02T00:19:15.950Z",
+                  "startTime": "2026-10-05T23:29:33.401Z",
                   "annotations": [],
                   "attachments": [
                     {
@@ -1343,12 +1363,12 @@
                   "workerIndex": 0,
                   "parallelIndex": 0,
                   "status": "passed",
-                  "duration": 5527,
+                  "duration": 5600,
                   "errors": [],
                   "stdout": [],
                   "stderr": [],
                   "retry": 0,
-                  "startTime": "2026-10-02T00:19:19.237Z",
+                  "startTime": "2026-10-05T23:29:36.794Z",
                   "annotations": [],
                   "attachments": [
                     {
@@ -1446,12 +1466,12 @@
                   "workerIndex": 0,
                   "parallelIndex": 0,
                   "status": "passed",
-                  "duration": 10709,
+                  "duration": 10939,
                   "errors": [],
                   "stdout": [],
                   "stderr": [],
                   "retry": 0,
-                  "startTime": "2026-10-02T00:19:24.901Z",
+                  "startTime": "2026-10-05T23:29:42.538Z",
                   "annotations": [],
                   "attachments": [
                     {
@@ -1559,12 +1579,12 @@
                   "workerIndex": 0,
                   "parallelIndex": 0,
                   "status": "passed",
-                  "duration": 3838,
+                  "duration": 3889,
                   "errors": [],
                   "stdout": [],
                   "stderr": [],
                   "retry": 0,
-                  "startTime": "2026-10-02T00:19:35.916Z",
+                  "startTime": "2026-10-05T23:29:53.750Z",
                   "annotations": [],
                   "attachments": [
                     {
@@ -1629,13 +1649,322 @@
           "column": 5
         }
       ]
+    },
+    {
+      "title": "19-HU-21-requisitos-alta.spec.ts",
+      "file": "19-HU-21-requisitos-alta.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "HU-21 · Requisitos de alta del proveedor",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 360000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 7897,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-05T23:29:57.786Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "01-configuracion-requisitos.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/19-HU-21-requisitos-alta-H-19c90-sitos-de-alta-del-proveedor/attachments/01-configuracion-requisitos-png-15fafc074404755ba3b98ce9c0970a0358a149a9.png"
+                    },
+                    {
+                      "name": "02-expediente-requisitos-pendientes.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/19-HU-21-requisitos-alta-H-19c90-sitos-de-alta-del-proveedor/attachments/02-expediente-requisitos-pendientes-png-11b3668b77fd26f306a9c8f5bef51d0420a246b8.png"
+                    },
+                    {
+                      "name": "03-listado-sin-casilla.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/19-HU-21-requisitos-alta-H-19c90-sitos-de-alta-del-proveedor/attachments/03-listado-sin-casilla-png-b87566295acafda7af63524ef5fa084741eb608b.png"
+                    },
+                    {
+                      "name": "04-requisitos-completos.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/19-HU-21-requisitos-alta-H-19c90-sitos-de-alta-del-proveedor/attachments/04-requisitos-completos-png-ad6337b519e101ff875ddf6b0a50944f222fb9e1.png"
+                    },
+                    {
+                      "name": "05-autorizado-desde-expediente.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/19-HU-21-requisitos-alta-H-19c90-sitos-de-alta-del-proveedor/attachments/05-autorizado-desde-expediente-png-08c9c62dd9fd83f5cea85404df55be054569d014.png"
+                    },
+                    {
+                      "name": "06-acciones-editar-eliminar.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/19-HU-21-requisitos-alta-H-19c90-sitos-de-alta-del-proveedor/attachments/06-acciones-editar-eliminar-png-00adb16c409a5e1d5304b75292ced185ec65e267.png"
+                    },
+                    {
+                      "name": "07-formulario-edicion.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/19-HU-21-requisitos-alta-H-19c90-sitos-de-alta-del-proveedor/attachments/07-formulario-edicion-png-c95d2b7c027fbf4b97edf428b38799eb66bb0ad4.png"
+                    },
+                    {
+                      "name": "08-confirmacion-eliminar.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/19-HU-21-requisitos-alta-H-19c90-sitos-de-alta-del-proveedor/attachments/08-confirmacion-eliminar-png-28eb1b40884bb6db4d17a20b09489ef46123d500.png"
+                    },
+                    {
+                      "name": "09-tipo-eliminado.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/19-HU-21-requisitos-alta-H-19c90-sitos-de-alta-del-proveedor/attachments/09-tipo-eliminado-png-7401fce8ee8f8952b0e570960cb375889d1e60ef.png"
+                    },
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/19-HU-21-requisitos-alta-H-19c90-sitos-de-alta-del-proveedor/trace.zip"
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "40fd828b8fb1edd2b85a-80f549d74c127aeb7e5b",
+          "file": "19-HU-21-requisitos-alta.spec.ts",
+          "line": 17,
+          "column": 5
+        }
+      ]
+    },
+    {
+      "title": "20-HU-22-requisitos-contrato.spec.ts",
+      "file": "20-HU-22-requisitos-contrato.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "HU-22 · Requisitos de alta del contrato",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 360000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 7106,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-05T23:30:05.953Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "01-configuracion-requisitos-contrato.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/20-HU-22-requisitos-contra-3d715-isitos-de-alta-del-contrato/attachments/01-configuracion-requisitos-contrato-png-89c91b50e4c120021a06dcbe92fa11cd0a24101e.png"
+                    },
+                    {
+                      "name": "02-contrato-registrado.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/20-HU-22-requisitos-contra-3d715-isitos-de-alta-del-contrato/attachments/02-contrato-registrado-png-1d721a5f216f6bcb1302fe5b7aa8ee3909c590ae.png"
+                    },
+                    {
+                      "name": "03-listado-contrato-por-activar.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/20-HU-22-requisitos-contra-3d715-isitos-de-alta-del-contrato/attachments/03-listado-contrato-por-activar-png-c82ff6bedcdb6544e6d253391344ffb66f916c13.png"
+                    },
+                    {
+                      "name": "04-requisitos-contrato-completos.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/20-HU-22-requisitos-contra-3d715-isitos-de-alta-del-contrato/attachments/04-requisitos-contrato-completos-png-26d1bd4ed52a1fe7b8902c802575ffc061ebeeb9.png"
+                    },
+                    {
+                      "name": "05-confirmacion-activacion.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/20-HU-22-requisitos-contra-3d715-isitos-de-alta-del-contrato/attachments/05-confirmacion-activacion-png-b33fdd7c145daa1b6bcdab2314b131e206a4c85a.png"
+                    },
+                    {
+                      "name": "06-contrato-activo.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/20-HU-22-requisitos-contra-3d715-isitos-de-alta-del-contrato/attachments/06-contrato-activo-png-82b4929247e29d3afb9de5d899ddf6fce19097f5.png"
+                    },
+                    {
+                      "name": "07-contrato-ofrecido-al-facturar.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/20-HU-22-requisitos-contra-3d715-isitos-de-alta-del-contrato/attachments/07-contrato-ofrecido-al-facturar-png-a4d186fc31e8607c706697a8ce07e4af9fb90b6b.png"
+                    },
+                    {
+                      "name": "08-acciones-editar-eliminar.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/20-HU-22-requisitos-contra-3d715-isitos-de-alta-del-contrato/attachments/08-acciones-editar-eliminar-png-a70d590d3ab8b379a91ed7a11dc23d12e81488a9.png"
+                    },
+                    {
+                      "name": "09-formulario-edicion.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/20-HU-22-requisitos-contra-3d715-isitos-de-alta-del-contrato/attachments/09-formulario-edicion-png-f58fb7b28daafcf341b3a623679a046ff1a78807.png"
+                    },
+                    {
+                      "name": "10-confirmacion-eliminar.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/20-HU-22-requisitos-contra-3d715-isitos-de-alta-del-contrato/attachments/10-confirmacion-eliminar-png-7c09d7409053eff1266bd6e1e580079ee935d5fb.png"
+                    },
+                    {
+                      "name": "11-tipo-eliminado.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/20-HU-22-requisitos-contra-3d715-isitos-de-alta-del-contrato/attachments/11-tipo-eliminado-png-39b72d8616ff056b539b54550379a43e115c533d.png"
+                    },
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/20-HU-22-requisitos-contra-3d715-isitos-de-alta-del-contrato/trace.zip"
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "df25ee05ba5cd57454d1-6077926b405cfa3e05f8",
+          "file": "20-HU-22-requisitos-contrato.spec.ts",
+          "line": 21,
+          "column": 5
+        }
+      ]
+    },
+    {
+      "title": "21-HU-23-complemento-pagos.spec.ts",
+      "file": "21-HU-23-complemento-pagos.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "HU-23 · Complemento de pagos",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 360000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 13334,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-05T23:30:13.322Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "01-requisitos-complemento-opcional.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/21-HU-23-complemento-pagos-HU-23-·-Complemento-de-pagos/attachments/01-requisitos-complemento-opcional-png-86ffb4c35156e4cef8b3db899e95640ebd2f8b6d.png"
+                    },
+                    {
+                      "name": "02-autorizada-con-panel-pago.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/21-HU-23-complemento-pagos-HU-23-·-Complemento-de-pagos/attachments/02-autorizada-con-panel-pago-png-d43fa354e93837baf86d8d2ad00e3dda75431d3d.png"
+                    },
+                    {
+                      "name": "03-confirmacion-de-pago.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/21-HU-23-complemento-pagos-HU-23-·-Complemento-de-pagos/attachments/03-confirmacion-de-pago-png-de8692d500bc400e3dc4a77bbbeaeac5c0492619.png"
+                    },
+                    {
+                      "name": "04-factura-pagada.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/21-HU-23-complemento-pagos-HU-23-·-Complemento-de-pagos/attachments/04-factura-pagada-png-176faea6f189dbb032de6e7bce79956d7e824866.png"
+                    },
+                    {
+                      "name": "05-correo-pagada.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/21-HU-23-complemento-pagos-HU-23-·-Complemento-de-pagos/attachments/05-correo-pagada-png-e6431c3b732d6fdbad16eff11ac99302c50f8157.png"
+                    },
+                    {
+                      "name": "06-tablero-complemento-pendiente.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/21-HU-23-complemento-pagos-HU-23-·-Complemento-de-pagos/attachments/06-tablero-complemento-pendiente-png-07f34dd861cfc542f828570897eac8d823d48097.png"
+                    },
+                    {
+                      "name": "07-detalle-proveedor-pagada.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/21-HU-23-complemento-pagos-HU-23-·-Complemento-de-pagos/attachments/07-detalle-proveedor-pagada-png-50deae2beb38003ecde37880e9cfcf928507cf0e.png"
+                    },
+                    {
+                      "name": "08-carga-solo-complemento.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/21-HU-23-complemento-pagos-HU-23-·-Complemento-de-pagos/attachments/08-carga-solo-complemento-png-e87f5931fd5eca1c4a5102de5d60a81fd34a6537.png"
+                    },
+                    {
+                      "name": "09-complemento-invalido.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/21-HU-23-complemento-pagos-HU-23-·-Complemento-de-pagos/attachments/09-complemento-invalido-png-b7ddb8a56227153cdb53c6776ac2fcfe14540bef.png"
+                    },
+                    {
+                      "name": "10-complemento-adjuntado.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/21-HU-23-complemento-pagos-HU-23-·-Complemento-de-pagos/attachments/10-complemento-adjuntado-png-e0b9885473a12084f551d8df6cfad2ad65a87220.png"
+                    },
+                    {
+                      "name": "11-correo-complemento-adjuntado.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/21-HU-23-complemento-pagos-HU-23-·-Complemento-de-pagos/attachments/11-correo-complemento-adjuntado-png-f01f9334662c09245481dd8dda11d30e1f22636b.png"
+                    },
+                    {
+                      "name": "12-tablero-sin-pendiente.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/21-HU-23-complemento-pagos-HU-23-·-Complemento-de-pagos/attachments/12-tablero-sin-pendiente-png-31f841bc9b9ee80b090d7635808647ba5879952a.png"
+                    },
+                    {
+                      "name": "13-historial-pago-complemento.png",
+                      "contentType": "image/png",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/21-HU-23-complemento-pagos-HU-23-·-Complemento-de-pagos/attachments/13-historial-pago-complemento-png-b39093efc502b8da64a9f989d960223fa4e7a598.png"
+                    },
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/test-results/21-HU-23-complemento-pagos-HU-23-·-Complemento-de-pagos/trace.zip"
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "c5fff366c63e1bf14eaf-9c42233697ffc8a57ca7",
+          "file": "21-HU-23-complemento-pagos.spec.ts",
+          "line": 18,
+          "column": 5
+        }
+      ]
     }
   ],
   "errors": [],
   "stats": {
-    "startTime": "2026-10-02T00:18:05.587Z",
-    "duration": 94446.47499999999,
-    "expected": 18,
+    "startTime": "2026-10-05T23:28:14.268Z",
+    "duration": 132958.242,
+    "expected": 21,
     "skipped": 0,
     "unexpected": 0,
     "flaky": 0

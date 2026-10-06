@@ -1,8 +1,8 @@
 {
   "id": "HU-02",
-  "run": "RMUQ7SGCJ",
-  "inicio": "2026-10-02T00:18:11.675Z",
-  "fin": "2026-10-02T00:18:14.555Z",
+  "run": "RMUVVRQW1",
+  "inicio": "2026-10-05T23:28:20.279Z",
+  "fin": "2026-10-05T23:28:26.695Z",
   "estado": "PASS",
   "bloqueo": null,
   "notas": [],
@@ -16,8 +16,15 @@
       "estado": "PASS",
       "pasos": [
         {
+          "paso": "Cargar desde su expediente los requisitos de alta de los proveedores cargados en HU-01 (HU-21)",
+          "esperado": "Cada expediente queda con \"Requisitos de alta completos\"; el proveedor internacional no tiene requisitos.",
+          "obtenido": "QA Alfa Servicios RMUVVRQW1 SA de CV: 7 documentos; QA Bravo Persona RMUVVRQW1: 4 documentos; QA Charlie Consulting RMUVVRQW1 LLC: 0 documentos.",
+          "estado": "PASS",
+          "evidencias": []
+        },
+        {
           "paso": "Filtrar el catálogo por estatus \"Registrado\" y seleccionar los proveedores cargados en HU-01",
-          "esperado": "Sólo los proveedores \"Registrado\" tienen casilla; al marcar 3, el contador indica \"3 seleccionados\".",
+          "esperado": "Sólo los proveedores \"Registrado\" con sus requisitos de alta completos tienen casilla; al marcar 3, el contador indica \"3 seleccionados\".",
           "obtenido": "Contador: \"3 seleccionados\"; botón \"Autorizar seleccionados\" habilitado.",
           "estado": "PASS",
           "evidencias": [
@@ -76,7 +83,7 @@
         {
           "paso": "Consultar el proveedor de la carga parcial de HU-01 (no seleccionado)",
           "esperado": "Conserva el estatus \"Registrado\": la autorización sólo afecta a los seleccionados.",
-          "obtenido": "\"QA Delta Valida RMUQ7SGCJ SA de CV\" sigue con estatus \"Registrado\".",
+          "obtenido": "\"QA Delta Valida RMUVVRQW1 SA de CV\" sigue con estatus \"Registrado\".",
           "estado": "PASS",
           "evidencias": [
             {

@@ -1,8 +1,8 @@
 {
   "id": "HU-10",
-  "run": "RMUQ7SGCJ",
-  "inicio": "2026-10-02T00:18:17.497Z",
-  "fin": "2026-10-02T00:18:23.605Z",
+  "run": "RMUVVRQW1",
+  "inicio": "2026-10-05T23:28:29.852Z",
+  "fin": "2026-10-05T23:28:36.029Z",
   "estado": "PASS",
   "bloqueo": null,
   "notas": [
@@ -31,7 +31,7 @@
           ]
         },
         {
-          "paso": "Iniciar sesión con el usuario (alfa.rmuq7sgcj@proveedores-qa.example) y la contraseña temporal del correo de HU-03",
+          "paso": "Iniciar sesión con el usuario (alfa.rmuvvrqw1@proveedores-qa.example) y la contraseña temporal del correo de HU-03",
           "esperado": "En lugar de entrar al portal, Keycloak muestra \"Modificar contraseña\" (acción requerida UPDATE_PASSWORD).",
           "obtenido": "Pantalla \"Modificar contraseña\" con los campos nueva contraseña y confirmación (URL con execution=UPDATE_PASSWORD).",
           "estado": "PASS",
@@ -136,7 +136,7 @@
         {
           "paso": "Capturar una contraseña válida (letra, número, carácter especial y 14 caracteres) y confirmarla",
           "esperado": "Keycloak acepta la contraseña y el proveedor entra al portal (tablero con su usuario y rol Proveedor).",
-          "obtenido": "Portal abierto en http://127.0.0.1:8000/: \"Hola, QA\", rol \"Proveedor\", usuario alfa.rmuq7sgcj@proveedores-qa.example.",
+          "obtenido": "Portal abierto en http://127.0.0.1:8000/: \"Hola, QA\", rol \"Proveedor\", usuario alfa.rmuvvrqw1@proveedores-qa.example.",
           "estado": "PASS",
           "evidencias": [
             {
@@ -149,7 +149,7 @@
         {
           "paso": "El Administrador consulta el expediente del proveedor",
           "esperado": "La sección \"Acceso al portal\" muestra la contraseña \"Cambiada por el proveedor\" y el último acceso.",
-          "obtenido": "Acceso al portal: Usuario del portal alfa.rmuq7sgcj@proveedores-qa.example Último acceso 01/10/2026 18:18 Contraseña Cambiada por el proveedor Credenciales Credenciales enviadas el 01/10/2026 18:18",
+          "obtenido": "Acceso al portal: Usuario del portal alfa.rmuvvrqw1@proveedores-qa.example Último acceso 05/10/2026 17:28 Contraseña Cambiada por el proveedor Credenciales Credenciales enviadas el 05/10/2026 17:28",
           "estado": "PASS",
           "evidencias": [
             {
