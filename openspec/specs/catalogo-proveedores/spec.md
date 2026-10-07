@@ -6,7 +6,7 @@ Carga masiva del catálogo de proveedores Nacional e Internacional desde una pla
 ### Requirement: Plantilla de Excel predefinida
 El sistema SHALL generar y ofrecer al Administrador la plantilla vigente de carga masiva de proveedores en formato `.xlsx`. La plantilla SHALL contener:
 - una hoja `Proveedores` con estos encabezados, en este orden, en la fila 1 y sin filas de datos: `Origen`, `Tipo de persona`, `Razón social`, `RFC`, `Identificador fiscal extranjero`, `País`, `Correo electrónico`, `Teléfono`, `Convenio de confidencialidad`, `Notas`;
-- listas desplegables en `Origen` (`Nacional`, `Internacional`), `Tipo de persona` (`Física`, `Moral`) y `Convenio de confidencialidad` (`Sí`, `No`);
+- listas desplegables en `Origen` (`Nacional`, `Internacional`), `Tipo de persona` (`Física (con actividad empresarial)`, `Moral`) y `Convenio de confidencialidad` (`Sí`, `No`);
 - formato de texto en `RFC`, `Identificador fiscal extranjero` y `Teléfono`;
 - una hoja `Instrucciones` con la versión de la plantilla, la descripción de cada columna, un ejemplo por origen y la lista de códigos de país ISO 3166-1 alfa-2.
 
@@ -67,7 +67,7 @@ El sistema SHALL aceptar únicamente archivos con extensión `.xlsx`, de hasta 5
 ### Requirement: Mapeo de columnas al catálogo de proveedores
 Cada columna de la hoja `Proveedores` SHALL mapearse a un campo del catálogo de proveedores:
 - `Origen` → `origin` (`Nacional` → `NATIONAL`, `Internacional` → `INTERNATIONAL`);
-- `Tipo de persona` → `supplier_type` (`Física` → `PERSONA_FISICA`, `Moral` → `PERSONA_MORAL`);
+- `Tipo de persona` → `supplier_type` (`Física (con actividad empresarial)` o `Física` → `PERSONA_FISICA`, `Moral` → `PERSONA_MORAL`);
 - `Razón social` → `business_name`;
 - `RFC` → `rfc`;
 - `Identificador fiscal extranjero` → `foreign_tax_id`;
@@ -99,6 +99,10 @@ Antes de validar, el sistema SHALL normalizar cada valor:
 #### Scenario: Teléfono capturado como número
 - **WHEN** la celda `Teléfono` contiene el número 5512345678
 - **THEN** el proveedor queda con `phone = "5512345678"`
+
+#### Scenario: Persona física con actividad empresarial
+- **WHEN** una fila trae `Tipo de persona` = "Física (con actividad empresarial)"
+- **THEN** el proveedor queda con `supplier_type = PERSONA_FISICA`
 
 ### Requirement: Validación de cada fila
 El sistema SHALL validar todas las filas de datos en una sola pasada y reportar cada error con el número de fila de Excel, el encabezado de la columna y un mensaje en español, con el formato "Fila N · Columna: mensaje". Son errores bloqueantes:

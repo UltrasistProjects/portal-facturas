@@ -1,13 +1,11 @@
 {
   "id": "HU-10",
-  "run": "RMUVVRQW1",
-  "inicio": "2026-10-05T23:28:29.852Z",
-  "fin": "2026-10-05T23:28:36.029Z",
+  "run": "RMUY9TNYO",
+  "inicio": "2026-10-07T15:37:26.662Z",
+  "fin": "2026-10-07T15:37:31.941Z",
   "estado": "PASS",
   "bloqueo": null,
-  "notas": [
-    "Observación de usabilidad (no bloquea el criterio): la contraseña \"12345678#\" (sin letra) se rechaza con el mensaje genérico de Keycloak \"Contraseña incorrecta: no cumple la expresión regular.\", que no le indica al proveedor que falta una letra."
-  ],
+  "notas": [],
   "prueba": {
     "titulo": "HU-10 · Cambio de contraseña en primer inicio de sesión",
     "archivo": "04-HU-10-cambio-contrasena-primer-acceso.spec.ts"
@@ -20,7 +18,7 @@
         {
           "paso": "Abrir el portal y llegar al inicio de sesión",
           "esperado": "El portal redirige al inicio de sesión de Keycloak (proveedor de identidad).",
-          "obtenido": "Redirigido a http://127.0.0.1:58080/realms/ultrasist-portal/protocol/openid-connect/auth con el título \"Inicia sesión en Portal de Proveedores ULTRASIST\".",
+          "obtenido": "Redirigido a http://127.0.0.1:58080/realms/ultrasist-portal/protocol/openid-connect/auth con el título \"Iniciar sesión · Portal de Proveedores ULTRASIST\".",
           "estado": "PASS",
           "evidencias": [
             {
@@ -31,14 +29,14 @@
           ]
         },
         {
-          "paso": "Iniciar sesión con el usuario (alfa.rmuvvrqw1@proveedores-qa.example) y la contraseña temporal del correo de HU-03",
-          "esperado": "En lugar de entrar al portal, Keycloak muestra \"Modificar contraseña\" (acción requerida UPDATE_PASSWORD).",
-          "obtenido": "Pantalla \"Modificar contraseña\" con los campos nueva contraseña y confirmación (URL con execution=UPDATE_PASSWORD).",
+          "paso": "Iniciar sesión con el usuario (alfa.rmuy9tnyo@proveedores-qa.example) y la contraseña temporal del correo de HU-03",
+          "esperado": "En lugar de entrar al portal, Keycloak muestra \"Cambiar contraseña\" (acción requerida UPDATE_PASSWORD).",
+          "obtenido": "Pantalla \"Cambiar contraseña\" con los campos nueva contraseña y confirmación (URL con execution=UPDATE_PASSWORD).",
           "estado": "PASS",
           "evidencias": [
             {
               "archivo": "HU-10/02-solicitud-cambio-contrasena.png",
-              "descripcion": "Keycloak exige \"Modificar contraseña\" en el primer inicio de sesión.",
+              "descripcion": "Keycloak exige \"Cambiar contraseña\" en el primer inicio de sesión.",
               "tipo": "aplicacion"
             }
           ]
@@ -52,7 +50,7 @@
         {
           "paso": "Intentar abrir directamente la página de Facturas del portal sin cambiar la contraseña",
           "esperado": "El portal no abre: no hay sesión y se vuelve al inicio de sesión de Keycloak.",
-          "obtenido": "Navegar a /invoices terminó en http://127.0.0.1:58080/realms/ultrasist-portal/protocol/openid-connect/auth (\"Acceder a tu cuenta\"); el portal no se mostró.",
+          "obtenido": "Navegar a /invoices terminó en http://127.0.0.1:58080/realms/ultrasist-portal/protocol/openid-connect/auth (\"Iniciar sesión\"); el portal no se mostró.",
           "estado": "PASS",
           "evidencias": [
             {
@@ -64,8 +62,8 @@
         },
         {
           "paso": "Volver a iniciar sesión con la contraseña temporal",
-          "esperado": "Keycloak vuelve a exigir \"Modificar contraseña\".",
-          "obtenido": "Se muestra otra vez \"Modificar contraseña\".",
+          "esperado": "Keycloak vuelve a exigir \"Cambiar contraseña\".",
+          "obtenido": "Se muestra otra vez \"Cambiar contraseña\".",
           "estado": "PASS",
           "evidencias": []
         }
@@ -77,8 +75,8 @@
       "pasos": [
         {
           "paso": "Capturar la contraseña \"Password123\" (sin carácter especial)",
-          "esperado": "Se rechaza con un mensaje de la política y se permanece en \"Modificar contraseña\".",
-          "obtenido": "Rechazada: \"Contraseña incorrecta: debe contener al menos 1 caracteres especiales.\".",
+          "esperado": "Se rechaza con un mensaje de la política y se permanece en \"Cambiar contraseña\".",
+          "obtenido": "Rechazada: \"Contraseña no válida: debe incluir al menos 1 carácter especial.\".",
           "estado": "PASS",
           "evidencias": [
             {
@@ -90,8 +88,8 @@
         },
         {
           "paso": "Capturar la contraseña \"Ab#1x\" (menos de 8 caracteres)",
-          "esperado": "Se rechaza con un mensaje de la política y se permanece en \"Modificar contraseña\".",
-          "obtenido": "Rechazada: \"Contraseña incorrecta: longitud mínima 8.\".",
+          "esperado": "Se rechaza con un mensaje de la política y se permanece en \"Cambiar contraseña\".",
+          "obtenido": "Rechazada: \"Contraseña no válida: debe tener al menos 8 caracteres.\".",
           "estado": "PASS",
           "evidencias": [
             {
@@ -103,8 +101,8 @@
         },
         {
           "paso": "Capturar la contraseña \"Clave#Segura\" (sin número)",
-          "esperado": "Se rechaza con un mensaje de la política y se permanece en \"Modificar contraseña\".",
-          "obtenido": "Rechazada: \"Contraseña incorrecta: debe contener al menos 1 caracteres numéricos.\".",
+          "esperado": "Se rechaza con un mensaje de la política y se permanece en \"Cambiar contraseña\".",
+          "obtenido": "Rechazada: \"Contraseña no válida: debe incluir al menos 1 número.\".",
           "estado": "PASS",
           "evidencias": [
             {
@@ -116,8 +114,8 @@
         },
         {
           "paso": "Capturar la contraseña \"12345678#\" (sin letra)",
-          "esperado": "Se rechaza con un mensaje de la política y se permanece en \"Modificar contraseña\".",
-          "obtenido": "Rechazada: \"Contraseña incorrecta: no cumple la expresión regular.\".",
+          "esperado": "Se rechaza con un mensaje de la política y se permanece en \"Cambiar contraseña\".",
+          "obtenido": "Rechazada: \"Contraseña no válida: debe incluir al menos una letra.\".",
           "estado": "PASS",
           "evidencias": [
             {
@@ -136,7 +134,7 @@
         {
           "paso": "Capturar una contraseña válida (letra, número, carácter especial y 14 caracteres) y confirmarla",
           "esperado": "Keycloak acepta la contraseña y el proveedor entra al portal (tablero con su usuario y rol Proveedor).",
-          "obtenido": "Portal abierto en http://127.0.0.1:8000/: \"Hola, QA\", rol \"Proveedor\", usuario alfa.rmuvvrqw1@proveedores-qa.example.",
+          "obtenido": "Portal abierto en http://127.0.0.1:8000/: \"Hola, QA\", rol \"Proveedor\", usuario alfa.rmuy9tnyo@proveedores-qa.example.",
           "estado": "PASS",
           "evidencias": [
             {
@@ -149,7 +147,7 @@
         {
           "paso": "El Administrador consulta el expediente del proveedor",
           "esperado": "La sección \"Acceso al portal\" muestra la contraseña \"Cambiada por el proveedor\" y el último acceso.",
-          "obtenido": "Acceso al portal: Usuario del portal alfa.rmuvvrqw1@proveedores-qa.example Último acceso 05/10/2026 17:28 Contraseña Cambiada por el proveedor Credenciales Credenciales enviadas el 05/10/2026 17:28",
+          "obtenido": "Acceso al portal: Usuario del portal alfa.rmuy9tnyo@proveedores-qa.example Último acceso 07/10/2026 09:37 Contraseña Cambiada por el proveedor Credenciales Credenciales enviadas el 07/10/2026 09:37",
           "estado": "PASS",
           "evidencias": [
             {
@@ -168,7 +166,7 @@
         {
           "paso": "Cerrar sesión e intentar entrar otra vez con la contraseña temporal",
           "esperado": "Keycloak rechaza la contraseña temporal.",
-          "obtenido": "Inicio de sesión rechazado: \"Usuario o contraseña incorrectos.\".",
+          "obtenido": "Inicio de sesión rechazado: \"Correo o contraseña incorrectos.\".",
           "estado": "PASS",
           "evidencias": [
             {

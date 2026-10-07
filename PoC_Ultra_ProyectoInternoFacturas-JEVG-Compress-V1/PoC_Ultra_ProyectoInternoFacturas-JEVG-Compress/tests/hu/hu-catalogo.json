@@ -170,7 +170,7 @@
       "objetivo": "Yo como PMO requiero poder cambiar a través de 3 botones cambiar el estatus de la factura a “Autorizada”, “Rechazada” y “Observaciones”.",
       "criterios": [
         "Al “Rechazar” o marcar “Observaciones”, el sistema deberá desplegar un campo “Observaciones” para que el PMO registre las notas correspondientes (RN-HU20-01).",
-        "Al cambiar a “Autorizada”, el sistema deberá enviar un correo a “Recepción de Facturas” indicando que la factura número X del proveedor Y por el monto Z ha sido autorizada para su pago; el destinatario se toma de la configuración de RF-13 (RN-HU20-02).",
+        "Al cambiar a “Autorizada”, el sistema deberá enviar un correo a “Recepción de Facturas”, con copia al correo del proveedor, indicando que la factura número X del proveedor Y por el monto Z ha sido autorizada para su pago; el destinatario se toma de la configuración de RF-13 (RN-HU20-02).",
         "Al cambiar a “Rechazada” u “Observaciones”, el sistema deberá enviar un correo al proveedor (campo “correo” de la entidad proveedores) indicando la causa capturada en “Observaciones” (RN-HU20-03)."
       ],
       "dependencias": ["HU-19"]

@@ -36,12 +36,12 @@ HEADERS = (
 TEXT_COLUMNS = ("RFC", "Identificador fiscal extranjero", "Teléfono")
 LIST_VALUES = {
     "Origen": ("Nacional", "Internacional"),
-    "Tipo de persona": ("Física", "Moral"),
+    "Tipo de persona": ("Física (con actividad empresarial)", "Moral"),
     "Convenio de confidencialidad": ("Sí", "No"),
 }
 COLUMN_HELP = (
     ("Sí", "Nacional o Internacional."),
-    ("Sí", "Física o Moral."),
+    ("Sí", "Física (con actividad empresarial) o Moral. También se acepta Física."),
     ("Sí", "Nombre o razón social, de 2 a 250 caracteres."),
     ("Nacional: sí. Internacional: vacío", "12 caracteres (persona moral) o 13 (persona física). Sin RFC genéricos."),
     (

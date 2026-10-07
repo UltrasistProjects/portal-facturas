@@ -1,9 +1,9 @@
 {
   "id": "HU-15",
-  "run": "RMUVVRQW1",
-  "inicio": "2026-10-05T23:29:21.823Z",
-  "fin": "2026-10-05T23:29:25.790Z",
-  "estado": "PASS",
+  "run": "RMUY9TNYO",
+  "inicio": "2026-10-07T15:38:39.953Z",
+  "fin": "2026-10-07T15:38:56.865Z",
+  "estado": "FAIL",
   "bloqueo": null,
   "notas": [],
   "prueba": {
@@ -17,8 +17,8 @@
       "pasos": [
         {
           "paso": "Abrir \"Nueva factura\"",
-          "esperado": "El formulario pide, además de los datos generales, la sección \"Datos del Invoice\" (fecha, moneda, subtotal, impuestos y total) y sólo ofrece el contrato del proveedor.",
-          "obtenido": "Contrato ofrecido: Analitica Global 2026 · $20,000.00 USD; campos del Invoice: fecha, moneda, subtotal, impuestos y total.",
+          "esperado": "El formulario pide, además de los datos generales, la sección \"Datos del Invoice\" (fecha, moneda del catálogo, subtotal e impuestos; el total se calcula) y sólo ofrece el contrato del proveedor.",
+          "obtenido": "Contrato ofrecido: Analitica Global 2026 · $20,000.00 USD; monedas del catálogo: EUR · Euro, MXN · Peso mexicano, QAG · Moneda por Excel QA RMUY9TNYO, QBL · Moneda QA RMUY9TNYO (editada), QDE · Moneda por Excel QA RMUVVRQW1, QDN · Moneda por Excel QA RMUVVA7RK, QET · Moneda por Excel QA RMUQ7G82D, QHQ · Moneda QA RMURFCADU (editada), QJA · Moneda QA RMUQ6QF4W (editada), QNP · Moneda por Excel QA RMURFCADU, QOZ · Moneda QA RMUQ7MM3B (editada), QQY · Moneda QA RMUQ7G82D (editada), QSD · Moneda por Excel QA RMUQ6QF4W, QSW · Moneda QA RMUVVE30F (editada), QTF · Moneda por Excel QA RMUQ7SGCJ, QWP · Moneda QA RMUQ7SGCJ (editada), QXE · Moneda QA RMUVVA7RK (editada), QXJ · Moneda QA RMUVVRQW1 (editada), QZR · Moneda por Excel QA RMUVVE30F, QZZ · Moneda por Excel QA RMUQ7MM3B, USD · Dólar americano; total de solo lectura.",
           "estado": "PASS",
           "evidencias": [
             {
@@ -29,14 +29,14 @@
           ]
         },
         {
-          "paso": "Capturar importes inconsistentes (subtotal 1,000.00 + impuestos 0.00 ≠ total 1,500.00) y continuar",
-          "esperado": "Se rechaza el registro con un mensaje sobre el total y no se crea la factura.",
-          "obtenido": "Mensaje: \"Total: debe ser igual al subtotal más impuestos\"; se permanece en \"Registrar factura\".",
+          "paso": "Capturar subtotal 1,000.50 e impuestos 160.08",
+          "esperado": "El Total se recalcula al capturar (1,160.58) y no se puede editar: el servidor lo vuelve a calcular e ignora cualquier total enviado.",
+          "obtenido": "Total mostrado \"1,160.58\" (solo lectura).",
           "estado": "PASS",
           "evidencias": [
             {
-              "archivo": "HU-15/02-importes-inconsistentes.png",
-              "descripcion": "Registro rechazado: el total no es igual al subtotal más impuestos.",
+              "archivo": "HU-15/02-total-calculado.png",
+              "descripcion": "Total calculado en vivo: subtotal + impuestos, de solo lectura.",
               "tipo": "aplicacion"
             }
           ]
@@ -45,72 +45,30 @@
     },
     {
       "nombre": "Registro y carga del Invoice en PDF y de los documentos soporte configurados",
-      "estado": "PASS",
+      "estado": "FAIL",
       "pasos": [
         {
-          "paso": "Registrar QA-RMUVVRQW1-I1 con importes consistentes (1,000.00 USD)",
+          "paso": "Registrar QA-RMUY9TNYO-I1 con importes consistentes (1,000.00 USD)",
           "esperado": "Se abre la carga documental: se ofrecen Invoice (PDF) y los soportes, no el XML ni el PDF del CFDI; faltan 3 obligatorios (Invoice, Orden de compra y Vo.Bo.).",
-          "obtenido": "Factura #81; tipos ofrecidos: Invoice, Orden de compra, Vo.Bo. del líder de proyecto, Contrato, Anexo del contrato, Documentación adicional; checklist \"Faltan 3 archivos obligatorios\".",
-          "estado": "PASS",
+          "obtenido": "No se cumplió lo esperado. expect(locator).toContainText(expected) failed  Locator: locator('.required-summary') Expected substring: \"Faltan 3 archivos obligatorios\" Received string:    \"Faltan 4 archivos obligatorios\" Timeout: 15000ms",
+          "estado": "FAIL",
           "evidencias": [
             {
-              "archivo": "HU-15/03-carga-documental-invoice.png",
-              "descripcion": "Carga documental del proveedor internacional: Invoice (PDF) y soportes; 3 obligatorios pendientes.",
-              "tipo": "aplicacion"
+              "archivo": "HU-15/03-fallo-registrar-qa-rmuy9tnyo-i1-con-importes-consistentes-1-.png",
+              "descripcion": "Estado exacto de la aplicación al fallar el paso «Registrar QA-RMUY9TNYO-I1 con importes consistentes (1,000.00 USD)».",
+              "tipo": "fallo"
             }
-          ]
-        },
-        {
-          "paso": "Cargar el Invoice \"INV-QA-RMUVVRQW1.pdf\", la Orden de compra y el Vo.Bo.",
-          "esperado": "Obligatorios completos (\"Factura cargada. Ya puede enviarla a validación.\") y la factura queda \"Cargada\".",
-          "obtenido": "Checklist \"Archivos obligatorios completos Factura cargada. Ya puede enviarla a validación.\"; estatus \"Cargada\".",
-          "estado": "PASS",
-          "evidencias": [
-            {
-              "archivo": "HU-15/04-invoice-cargado.png",
-              "descripcion": "Invoice y soportes cargados: obligatorios completos.",
-              "tipo": "aplicacion"
-            },
-            {
-              "archivo": "HU-15/05-detalle-cargada.png",
-              "descripcion": "Detalle de QA-RMUVVRQW1-I1 en \"Cargada\" con los \"Datos del Invoice\".",
-              "tipo": "aplicacion"
-            }
-          ]
+          ],
+          "error": "expect(locator).toContainText(expected) failed\n\nLocator: locator('.required-summary')\nExpected substring: \"Faltan 3 archivos obligatorios\"\nReceived string:    \"Faltan 4 archivos obligatorios\"\nTimeout: 15000ms"
         }
-      ]
+      ],
+      "motivo": "expect(locator).toContainText(expected) failed\n\nLocator: locator('.required-summary')\nExpected substring: \"Faltan 3 archivos obligatorios\"\nReceived string:    \"Faltan 4 archivos obligatorios\"\nTimeout: 15000ms"
     },
     {
       "nombre": "Invoice duplicado por nombre de archivo",
-      "estado": "PASS",
-      "pasos": [
-        {
-          "paso": "Registrar QA-RMUVVRQW1-I2 e intentar cargar un Invoice con el mismo nombre de archivo (\"INV-QA-RMUVVRQW1.pdf\")",
-          "esperado": "La carga se rechaza (Invoice duplicado, indicando el folio de la otra factura) y el Invoice sigue pendiente.",
-          "obtenido": "Rechazado: \"Ya existe una factura con un Invoice llamado «INV-QA-RMUVVRQW1.pdf»: FAC-2026-00081\"; Invoice sigue \"Pendiente\".",
-          "estado": "PASS",
-          "evidencias": [
-            {
-              "archivo": "HU-15/06-invoice-duplicado.png",
-              "descripcion": "Carga rechazada: ya existe una factura con un Invoice con ese nombre de archivo.",
-              "tipo": "aplicacion"
-            }
-          ]
-        },
-        {
-          "paso": "Cargar en QA-RMUVVRQW1-I2 un Invoice con otro nombre (\"INV-QA-RMUVVRQW1-B.pdf\")",
-          "esperado": "La carga se acepta: el control de duplicados es por nombre de archivo.",
-          "obtenido": "Aceptado; checklist \"Faltan 2 archivos obligatorios\".",
-          "estado": "PASS",
-          "evidencias": [
-            {
-              "archivo": "HU-15/07-invoice-otro-nombre.png",
-              "descripcion": "Un Invoice con otro nombre de archivo sí se acepta.",
-              "tipo": "aplicacion"
-            }
-          ]
-        }
-      ]
+      "estado": "NO EJECUTADO",
+      "pasos": [],
+      "motivo": "No se ejecutó: depende de «Registro y carga del Invoice en PDF y de los documentos soporte configurados», que no terminó en PASS."
     }
   ]
 }

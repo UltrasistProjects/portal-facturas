@@ -238,7 +238,7 @@ def test_copias_iniciales(client):
     page = client.get(URL).text
     rows = re.findall(r"<tr><td><strong>([^<]+)</strong></td><td>([^<]+)</td>", page)
     assert rows == [
-        ("Autorizada", "Recepción de Facturas"),
+        ("Autorizada", "Recepción de Facturas con copia al proveedor"),
         ("Rechazada", "Proveedor (correo del catálogo)"),
         ("Observaciones", "Proveedor (correo del catálogo)"),
         ("Cancelada", "Recepción de Facturas"),
@@ -332,6 +332,21 @@ def test_evento_dirigido_al_buzon():
         recipients = ns.recipients_for(db, AUTHORIZED)
     assert recipients.to == ("facturas@ultrasist.com.mx", "cxp@ultrasist.com.mx")
     assert recipients.cc == ("pmo@ultrasist.com.mx",)
+
+
+def test_autorizada_con_copia_al_proveedor():
+    set_lists(INVOICE_AUTHORIZED=["pmo@ultrasist.com.mx", "contacto@proveedor.mx"])
+    with SessionLocal() as db:
+        recipients = ns.recipients_for(db, AUTHORIZED, " Contacto@Proveedor.mx ")
+    assert recipients.to == tuple(RECEPTION_SEED)
+    assert recipients.cc == ("contacto@proveedor.mx", "pmo@ultrasist.com.mx")
+
+
+def test_cancelada_sin_copia_al_proveedor():
+    with SessionLocal() as db:
+        recipients = ns.recipients_for(db, CANCELLED, "contacto@proveedor.mx")
+    assert recipients.to == tuple(RECEPTION_SEED)
+    assert recipients.cc == ()
 
 
 def test_evento_dirigido_al_proveedor():

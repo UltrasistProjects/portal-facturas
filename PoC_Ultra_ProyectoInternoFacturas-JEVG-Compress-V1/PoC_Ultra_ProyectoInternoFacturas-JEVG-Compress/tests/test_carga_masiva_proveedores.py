@@ -149,7 +149,11 @@ def test_descarga_de_la_plantilla(admin):
     sheet = book["Proveedores"]
     assert list(sheet.iter_rows(values_only=True)) == [HEADERS]
     lists = {str(validation.sqref): validation.formula1 for validation in sheet.data_validations.dataValidation}
-    assert lists == {"A2:A1001": '"Nacional,Internacional"', "B2:B1001": '"Física,Moral"', "I2:I1001": '"Sí,No"'}
+    assert lists == {
+        "A2:A1001": '"Nacional,Internacional"',
+        "B2:B1001": '"Física (con actividad empresarial),Moral"',
+        "I2:I1001": '"Sí,No"',
+    }
     assert {sheet.column_dimensions[letter].number_format for letter in "DEH"} == {"@"}
     instructions = [row[0] for row in book["Instrucciones"].iter_rows(values_only=True)]
     assert any("versión v1" in (value or "") for value in instructions)
@@ -389,7 +393,7 @@ def test_errores_de_varias_filas_en_una_sola_respuesta(admin):
         ),
         (national(Origen=None), "Origen: es obligatorio"),
         (national(Origen="Local"), "Origen: use Nacional o Internacional"),
-        (national(**{"Tipo de persona": "Otra"}), "Tipo de persona: use Física o Moral"),
+        (national(**{"Tipo de persona": "Otra"}), "Tipo de persona: use Física (con actividad empresarial) o Moral"),
         (national(**{"Razón social": "X"}), "Razón social: es demasiado corto"),
         (national(**{"Razón social": "X" * 251}), "Razón social: es demasiado largo"),
         (national(**{"Razón social": None}), "Razón social: es obligatorio"),
@@ -721,3 +725,11 @@ def test_log_sin_datos_del_archivo(admin):
     ]
     for value in forbidden:
         assert value not in content, value
+
+
+def test_tipo_de_persona_con_actividad_empresarial():
+    """La plantilla ofrece "Física (con actividad empresarial)"; "Física" se sigue aceptando."""
+    from app.services.supplier_import_service import PERSON_TYPES, _plain
+
+    assert PERSON_TYPES[_plain("Física (con actividad empresarial)")] == SupplierType.PERSONA_FISICA
+    assert PERSON_TYPES[_plain("Física")] == SupplierType.PERSONA_FISICA

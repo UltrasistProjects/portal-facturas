@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- DOCUMENTO FICTICIO PARA PRUEBAS. NO ES UN CFDI TIMBRADO VALIDO. -->
+<cfdi:Comprobante xmlns:cfdi="http://www.sat.gob.mx/cfd/4" xmlns:pago20="http://www.sat.gob.mx/Pagos20" xmlns:tfd="http://www.sat.gob.mx/TimbreFiscalDigital" Version="4.0" Fecha="2026-10-02T09:00:00" SubTotal="0" Total="0" Moneda="XXX" TipoDeComprobante="P">
+  <cfdi:Emisor Rfc="TIC210101ABC" Nombre="TECNOLOGIA INTEGRAL DEL CENTRO SA DE CV"/>
+  <cfdi:Receptor Rfc="ULT940623AG0" Nombre="ULTRASIST" DomicilioFiscalReceptor="03930" RegimenFiscalReceptor="601" UsoCFDI="CP01"/>
+  <cfdi:Conceptos><cfdi:Concepto Cantidad="1" ValorUnitario="0" Importe="0" Descripcion="Pago"/></cfdi:Conceptos>
+  <cfdi:Complemento>
+    <pago20:Pagos Version="2.0">
+      <pago20:Totales MontoTotalPagos="116000.00"/>
+      <pago20:Pago FechaPago="2026-10-01T10:00:00" FormaDePagoP="03" MonedaP="MXN" Monto="116000.00">
+        <pago20:DoctoRelacionado IdDocumento="D5ABE09F-EEAA-4BF0-BE0A-CDA179EC639B" MonedaDR="MXN" NumParcialidad="1" ImpSaldoAnt="116000.00" ImpPagado="116000.00" ImpSaldoInsoluto="0.00" ObjetoImpDR="02"/>
+      </pago20:Pago>
+    </pago20:Pagos>
+    <tfd:TimbreFiscalDigital UUID="0EEA127D-1280-42BA-A957-2CF6C7125B22"/>
+  </cfdi:Complemento>
+</cfdi:Comprobante>

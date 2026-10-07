@@ -1,8 +1,8 @@
 {
   "id": "HU-22",
-  "run": "RMUVVRQW1",
-  "inicio": "2026-10-05T23:30:05.959Z",
-  "fin": "2026-10-05T23:30:13.063Z",
+  "run": "RMUY9TNYO",
+  "inicio": "2026-10-07T15:39:22.819Z",
+  "fin": "2026-10-07T15:39:30.408Z",
   "estado": "PASS",
   "bloqueo": null,
   "notas": [],
@@ -17,13 +17,13 @@
       "pasos": [
         {
           "paso": "Abrir Requisitos mínimos › Alta de contrato",
-          "esperado": "El menú agrupa las tres configuraciones de documentos; la tabla muestra Contrato como Obligatorio fijo (con candado), y Orden de compra y Anexos como Opcionales con varios archivos.",
-          "obtenido": "Menú \"Requisitos mínimos\": Archivos de factura, Alta de proveedor y Alta de contrato. Contrato: Obligatorio con candado; Orden de compra y Anexos: Opcional, varios archivos.",
+          "esperado": "El menú agrupa las tres configuraciones de documentos; la tabla muestra Contrato como Obligatorio, y Orden de compra y Anexos como Opcionales con varios archivos; todos los niveles son editables.",
+          "obtenido": "Menú \"Requisitos mínimos\": Archivos de factura, Alta de proveedor y Alta de contrato. Contrato: Obligatorio (editable); Orden de compra y Anexos: Opcional, varios archivos.",
           "estado": "PASS",
           "evidencias": [
             {
               "archivo": "HU-22/01-configuracion-requisitos-contrato.png",
-              "descripcion": "Requisitos del contrato: Contrato obligatorio fijo; Orden de compra y Anexos opcionales.",
+              "descripcion": "Requisitos del contrato: Contrato obligatorio; Orden de compra y Anexos opcionales; niveles editables.",
               "tipo": "aplicacion"
             }
           ]
@@ -35,9 +35,9 @@
       "estado": "PASS",
       "pasos": [
         {
-          "paso": "Dar de alta el contrato \"QA Contrato RMUVVRQW1\" de Carlos Hernandez Lopez (DEMO)",
+          "paso": "Dar de alta el contrato \"QA Contrato RMUY9TNYO\" de Carlos Hernandez Lopez (DEMO)",
           "esperado": "El contrato queda \"Registrado\", el sistema abre su expediente con \"Contrato creado. Cargue sus requisitos para activarlo.\" y \"Falta 1 requisito obligatorio\"; el botón \"Activar contrato\" está deshabilitado.",
-          "obtenido": "Contrato 11: \"Falta 1 requisito obligatorio\"; botón \"Activar contrato\" deshabilitado.",
+          "obtenido": "Contrato 13: \"Falta 1 requisito obligatorio\"; botón \"Activar contrato\" deshabilitado.",
           "estado": "PASS",
           "evidencias": [
             {
@@ -50,7 +50,7 @@
         {
           "paso": "Buscarlo en el listado de contratos",
           "esperado": "El listado lo muestra \"Registrado\" con \"Faltan 1\" en la columna Requisitos y liga a su expediente.",
-          "obtenido": "Fila: \"Carlos Hernandez Lopez (DEMO) QA Contrato RMUVVRQW1 Miguel PMO (DEMO) Python Data Analytics $50,000.00 MXN 01/01/2026 — 31/12/2026 Registrado Faltan 1 Monto original Modificar monto\".",
+          "obtenido": "Fila: \"Carlos Hernandez Lopez (DEMO) QA Contrato RMUY9TNYO Miguel PMO (DEMO) Python Data Analytics $50,000.00 MXN 01/01/2026 — 31/12/2026 Registrado Faltan 1 Monto original Modificar monto\".",
           "estado": "PASS",
           "evidencias": [
             {
@@ -100,7 +100,7 @@
         {
           "paso": "Abrir \"Registrar factura\" con el usuario del proveedor",
           "esperado": "El formulario ofrece el contrato activado entre los contratos del proveedor.",
-          "obtenido": "Contratos ofrecidos: QA Contrato RMUVJ4GBS · $50,000.00 MXN | QA Contrato RMUVJ59U2 · $50,000.00 MXN | QA Contrato RMUVVA7RK · $50,000.00 MXN | QA Contrato RMUVVE30F · $50,000.00 MXN | QA Contrato RMUVVO8A5 · $50,000.00 MXN | QA Contrato RMUVVRQW1 · $50,000.00 MXN | Servicios de Analitica 2026 · $75,000.00 MXN.",
+          "obtenido": "Contratos ofrecidos: QA Contrato RMUVJ4GBS · $50,000.00 MXN | QA Contrato RMUVJ59U2 · $50,000.00 MXN | QA Contrato RMUVVA7RK · $50,000.00 MXN | QA Contrato RMUVVE30F · $50,000.00 MXN | QA Contrato RMUVVO8A5 · $50,000.00 MXN | QA Contrato RMUVVRQW1 · $50,000.00 MXN | QA Contrato RMUY9TNYO · $50,000.00 MXN | Servicios de Analitica 2026 · $75,000.00 MXN.",
           "estado": "PASS",
           "evidencias": [
             {
@@ -117,22 +117,22 @@
       "estado": "PASS",
       "pasos": [
         {
-          "paso": "Crear el tipo temporal \"Requisito de contrato temporal QA RMUVVRQW1\"",
-          "esperado": "La fila del tipo muestra las acciones \"Editar\" y \"Eliminar\"; las filas de los tipos del sistema no las muestran.",
-          "obtenido": "Fila \"Requisito de contrato temporal QA RMUVVRQW1\" con Editar y Eliminar; 3 filas del sistema sin acciones.",
+          "paso": "Crear el tipo temporal \"Requisito de contrato temporal QA RMUY9TNYO\"",
+          "esperado": "La fila del tipo muestra las acciones \"Editar\" y \"Eliminar\", igual que las filas de los tipos del sistema.",
+          "obtenido": "Fila \"Requisito de contrato temporal QA RMUY9TNYO\" con Editar y Eliminar; las 4 filas de la tabla tienen ambas acciones.",
           "estado": "PASS",
           "evidencias": [
             {
               "archivo": "HU-22/08-acciones-editar-eliminar.png",
-              "descripcion": "Fila de \"Requisito de contrato temporal QA RMUVVRQW1\" con las acciones Editar y Eliminar.",
+              "descripcion": "Todas las filas, también las del sistema, con Editar y Eliminar.",
               "tipo": "aplicacion"
             }
           ]
         },
         {
-          "paso": "Pulsar \"Editar\" y renombrarlo a \"Requisito de contrato temporal QA RMUVVRQW1 editado\"",
+          "paso": "Pulsar \"Editar\" y renombrarlo a \"Requisito de contrato temporal QA RMUY9TNYO editado\"",
           "esperado": "Se abre su formulario de edición y, al guardar, el portal responde \"Requisito actualizado\".",
-          "obtenido": "Aviso \"Requisito actualizado\"; la fila ahora dice \"Requisito de contrato temporal QA RMUVVRQW1 editado\".",
+          "obtenido": "Aviso \"Requisito actualizado\"; la fila ahora dice \"Requisito de contrato temporal QA RMUY9TNYO editado\".",
           "estado": "PASS",
           "evidencias": [
             {
@@ -145,7 +145,7 @@
         {
           "paso": "Pulsar \"Eliminar\" y no confirmar",
           "esperado": "Aparece la confirmación con el nombre del tipo; al cerrarla el tipo sigue en la tabla.",
-          "obtenido": "Confirmación \"¿Eliminar «Requisito de contrato temporal QA RMUVVRQW1 editado»?\" mostrada y cerrada; el tipo sigue listado.",
+          "obtenido": "Confirmación \"¿Eliminar «Requisito de contrato temporal QA RMUY9TNYO editado»?\" mostrada y cerrada; el tipo sigue listado.",
           "estado": "PASS",
           "evidencias": [
             {
@@ -157,13 +157,26 @@
         },
         {
           "paso": "Pulsar \"Eliminar\" y confirmar",
-          "esperado": "El portal responde \"Tipo eliminado\" y el tipo desaparece de la pantalla.",
-          "obtenido": "Aviso \"Tipo eliminado\"; \"Requisito de contrato temporal QA RMUVVRQW1 editado\" ya no aparece.",
+          "esperado": "El portal responde \"Requisito eliminado\" y el tipo deja de listarse: la baja es lógica.",
+          "obtenido": "Aviso \"Requisito eliminado\"; \"Requisito de contrato temporal QA RMUY9TNYO editado\" ya no aparece en la configuración.",
           "estado": "PASS",
           "evidencias": [
             {
               "archivo": "HU-22/11-tipo-eliminado.png",
-              "descripcion": "Aviso \"Tipo eliminado\".",
+              "descripcion": "Aviso \"Requisito eliminado\".",
+              "tipo": "aplicacion"
+            }
+          ]
+        },
+        {
+          "paso": "Pulsar \"Mostrar eliminados\"",
+          "esperado": "El tipo eliminado se conserva: aparece con su fecha de eliminación y la acción \"Restaurar\".",
+          "obtenido": "\"Requisito de contrato temporal QA RMUY9TNYO editado\" listado como eliminado el 07/10/2026 09:39.",
+          "estado": "PASS",
+          "evidencias": [
+            {
+              "archivo": "HU-22/12-tipo-en-eliminados.png",
+              "descripcion": "\"Requisito de contrato temporal QA RMUY9TNYO editado\" en la lista de eliminados, con \"Restaurar\".",
               "tipo": "aplicacion"
             }
           ]

@@ -141,36 +141,39 @@ test('HU-04 · Definición de archivos requeridos por tipo de proveedor', async 
     );
 
     await hu.escenario(
-      'Desactivar el tipo soporte: deja de exigirse',
+      'Eliminar el tipo soporte (baja lógica): deja de exigirse',
       async () => {
         await hu.paso(
           admin,
-          `Desactivar "${tipo}"`,
-          'El tipo pasa a "Tipos inactivos" ("Estado del tipo de documento actualizado").',
+          `Eliminar "${tipo}" y confirmar`,
+          'El portal responde "Tipo eliminado"; el tipo deja de listarse y se conserva en "Mostrar eliminados".',
           async () => {
             await admin.goto('/admin/required-documents');
-            const detalle = admin.locator('details.admin-create').filter({ hasText: tipo });
-            await detalle.locator('summary').click();
-            await detalle.getByRole('button', { name: 'Desactivar' }).click();
-            await expect(admin.locator('.alert-success')).toHaveText('Estado del tipo de documento actualizado');
-            const inactivo = admin.locator('.inactive-types tbody tr').filter({ hasText: tipo });
-            await expect(inactivo).toHaveCount(1);
-            await hu.captura(admin, 'tipo-inactivo', `"${tipo}" en "Tipos inactivos".`, { enfocar: inactivo });
-            return `Aviso "${await texto(admin, '.alert-success')}"; "${tipo}" listado en Tipos inactivos.`;
+            const fila = admin.locator('.requirements-table tbody tr').filter({ hasText: tipo });
+            const confirmar = fila.locator('details.delete-confirm');
+            await confirmar.locator('summary').click();
+            await clicNavegando(admin, confirmar.getByRole('button', { name: 'Sí, eliminar' }));
+            await expect(admin.locator('.alert-success')).toHaveText('Tipo eliminado');
+            await expect(admin.locator('.requirements-table tbody tr').filter({ hasText: tipo })).toHaveCount(0);
+            await admin.goto('/admin/required-documents?eliminados=1');
+            const eliminado = admin.locator('#eliminados tbody tr').filter({ hasText: tipo });
+            await expect(eliminado).toHaveCount(1);
+            await hu.captura(admin, 'tipo-eliminado', `"${tipo}" en "Tipos eliminados", con "Restaurar".`, { enfocar: eliminado });
+            return `Aviso "Tipo eliminado"; "${tipo}" listado en Tipos eliminados.`;
           },
         );
         const internacional = await hu.sesion('proveedor3');
         await hu.paso(
           internacional,
           'El proveedor internacional vuelve a la carga documental de INV-2026-0042 y reemplaza su Orden de compra',
-          'El tipo desactivado ya no aparece, los obligatorios están completos y la factura vuelve a "Cargada" ("Factura cargada. Ya puede enviarla a validación.").',
+          'El tipo eliminado ya no aparece, los obligatorios están completos y la factura vuelve a "Cargada" ("Factura cargada. Ya puede enviarla a validación.").',
           async () => {
             await cargaDocumental(internacional, 'INV-2026-0042');
             await expect(internacional.locator('.document-row').filter({ hasText: tipo })).toHaveCount(0);
             await cargarDocumento(internacional, 'PURCHASE_ORDER', fixtures.orden_compra);
             await expect(internacional.locator('.required-summary')).toContainText('Archivos obligatorios completos');
             await expect(internacional.locator('.required-summary')).toContainText('Factura cargada. Ya puede enviarla a validación.');
-            await hu.captura(internacional, 'internacional-sin-tipo', 'Tras desactivar el tipo, el checklist está completo y la factura vuelve a "Cargada".');
+            await hu.captura(internacional, 'internacional-sin-tipo', 'Tras eliminar el tipo, el checklist está completo y la factura vuelve a "Cargada".');
             return `Checklist: "${await resumenObligatorios(internacional)}"; "${tipo}" ya no se lista.`;
           },
         );

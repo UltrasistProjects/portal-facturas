@@ -445,7 +445,7 @@ test('Recorrido del flujo completo del portal', async ({ page }) => {
   await tarjeta(page, 'Parte 5 de 6 · PMO', 'Revisión, autorización y registro del pago', [
     'Primer acceso del PMO creado en la parte 2',
     'Consulta de las facturas enviadas y su detalle',
-    'Autorización con aviso a Recepción de Facturas',
+    'Autorización con aviso a Recepción de Facturas y copia al proveedor',
     'Registro del pago y aviso al proveedor',
   ]);
   await rotular('PMO', `Primer acceso de ${pmo.correo} con la contraseña temporal que le entregó el Administrador`);
@@ -480,11 +480,11 @@ test('Recorrido del flujo completo del portal', async ({ page }) => {
   const desdeAutorizada = new Date(Date.now() - 2000).toISOString();
   await clicNavegando(page, page.locator('#decision-confirm-accept'));
   await expect(page.locator('.page-heading .status')).toHaveText('Autorizada');
-  await rotular('PMO · Decisión', 'Factura "Autorizada": se notifica a Recepción de Facturas');
+  await rotular('PMO · Decisión', 'Factura "Autorizada": se notifica a Recepción de Facturas con copia al proveedor');
   await senalar(page, page.locator('#decision-result'), 3500);
   const recepcion = ((await page.locator('#decision-result').innerText()).match(/[\w.+-]+@[\w.-]+\.\w+/g) ?? [])[0];
   const autorizada = recepcion ? buscarCorreo(recepcion, `Factura ${numero} autorizada para pago`, desdeAutorizada) : null;
-  if (autorizada) await mostrarCorreo(page, 'Correo a Recepción de Facturas', autorizada);
+  if (autorizada) await mostrarCorreo(page, 'Correo a Recepción de Facturas (Cc: proveedor)', autorizada);
 
   await page.goto(`/invoices/${facturaId}`);
   await rotular('PMO · Pago', 'Cuando la factura se paga, el PMO lo registra en el portal');

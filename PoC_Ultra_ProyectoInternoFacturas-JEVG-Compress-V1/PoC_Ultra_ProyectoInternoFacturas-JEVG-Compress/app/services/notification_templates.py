@@ -108,7 +108,8 @@ class Recipient(StrEnum):
 @dataclass(frozen=True)
 class EventSpec:
     """Lo que el Administrador no puede cambiar de una plantilla: nombre, destinatario (RD-03), variables disponibles
-    y obligatorias (RD-04) y texto predeterminado (RD-08)."""
+    y obligatorias (RD-04) y texto predeterminado (RD-08). `supplier_copy`: el correo dirigido a Recepcion de Facturas
+    va tambien con copia al proveedor de la factura."""
 
     event: NotificationEvent
     label: str
@@ -117,6 +118,12 @@ class EventSpec:
     required: tuple[str, ...]
     default_subject: str
     default_body: str
+    supplier_copy: bool = False
+
+    @property
+    def recipient_label(self) -> str:
+        """Destinatario que muestran las pantallas de plantillas y de notificaciones."""
+        return f"{self.recipient} con copia al proveedor" if self.supplier_copy else self.recipient
 
     def example(self, name: str) -> str:
         return self.label if name == "estatus" else VARIABLES[name].example
@@ -165,6 +172,7 @@ EVENTS: dict[NotificationEvent, EventSpec] = {
             "ha sido Autorizada para su pago.\n\n"
             "Folio interno: {{folio_interno}}\n"
             "Fecha de autorización: {{fecha_estatus}}\n\n" + RECEPTION_FOOTER,
+            supplier_copy=True,
         ),
         EventSpec(
             NotificationEvent.INVOICE_REJECTED,

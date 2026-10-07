@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from types import SimpleNamespace
 
+import pytest
 from sqlalchemy import select
 
 from app.core.config import settings
@@ -185,3 +186,37 @@ def test_fin_006_diferencia_contra_autorizado():
     over = financial(xml={"subtotal": Decimal("118"), "tax": Decimal("0"), "total": Decimal("118")})["FIN-006"]
     assert (over.status, over.severity) == ("FAIL", "WARNING")
     assert over.evidence == {"absolute_difference": "18", "percentage": "18.00"}
+
+
+# --- CON-003: periodo por mes contra la vigencia del contrato -----------------------------------------------------
+
+
+def _contract(start: str, end: str):
+    from datetime import date
+    from types import SimpleNamespace
+
+    return SimpleNamespace(
+        start_date=date.fromisoformat(start),
+        end_date=date.fromisoformat(end),
+        project_name="Proyecto",
+        authorized_technology="Python",
+    )
+
+
+def _con_003(period: str, contract):
+    from types import SimpleNamespace
+
+    from app.rules.contract_rules import contract_rules
+
+    invoice = SimpleNamespace(service_period=period, project_name="Proyecto")
+    return next(r for r in contract_rules(invoice, contract, []) if r.rule_code == "CON-003")
+
+
+@pytest.mark.parametrize(
+    ("period", "status"),
+    [("08/2026", "PASS"), ("12/2026", "PASS"), ("07/2026", "FAIL"), ("01/2027", "FAIL"), ("2026-08", "FAIL")],
+)
+def test_periodo_por_mes_contra_la_vigencia(period, status):
+    """Un contrato que empieza a mitad de mes cubre ese mes completo; el valor esperado usa el formato MM/AAAA."""
+    result = _con_003(period, _contract("2026-08-15", "2026-12-10"))
+    assert (result.status, result.expected_value, result.detected_value) == (status, "08/2026 a 12/2026", period)

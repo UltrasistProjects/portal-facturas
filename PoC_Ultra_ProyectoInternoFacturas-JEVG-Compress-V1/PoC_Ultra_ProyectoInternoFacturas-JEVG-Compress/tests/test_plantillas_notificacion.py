@@ -151,7 +151,7 @@ def test_listado_inicial(client):
     rows = re.findall(r"<tr><td><strong>(.*?)</strong></td><td>(.*?)</td><td>(.*?)</td><td>(.*?)</td>", response.text)
     reception, supplier = "Recepción de Facturas", "Proveedor (correo del catálogo)"
     assert [(label, recipient) for label, recipient, _, _ in rows] == [
-        ("Autorizada", reception),
+        ("Autorizada", f"{reception} con copia al proveedor"),
         ("Rechazada", supplier),
         ("Observaciones", supplier),
         ("Cancelada", reception),

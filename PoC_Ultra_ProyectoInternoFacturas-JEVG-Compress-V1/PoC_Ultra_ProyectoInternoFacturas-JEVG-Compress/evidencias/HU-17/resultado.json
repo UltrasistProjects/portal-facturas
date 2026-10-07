@@ -1,10 +1,10 @@
 {
   "id": "HU-17",
-  "run": "RMUVVRQW1",
-  "inicio": "2026-10-05T23:29:53.756Z",
-  "fin": "2026-10-05T23:29:57.643Z",
-  "estado": "PASS",
-  "bloqueo": null,
+  "run": "RMUY9TNYO",
+  "inicio": "2026-10-07T15:39:13.455Z",
+  "fin": "2026-10-07T15:39:13.457Z",
+  "estado": "BLOCKED",
+  "bloqueo": "Depende de HU-16, que no dejó el dato «hu16.enviada» (resultado de HU-16: BLOCKED).",
   "notas": [],
   "prueba": {
     "titulo": "HU-17 · Consulta de estatus de factura",
@@ -12,149 +12,10 @@
   },
   "escenarios": [
     {
-      "nombre": "Tablero con indicadores de seguimiento por estatus",
-      "estado": "PASS",
-      "pasos": [
-        {
-          "paso": "Abrir el tablero",
-          "esperado": "Se muestran el total de facturas y los indicadores Enviadas, Observaciones, Autorizadas, Rechazadas y Canceladas.",
-          "obtenido": "Total facturas: 66; Enviadas: 9; Observaciones: 2; Autorizadas: 9; Rechazadas: 9; Canceladas: 22.",
-          "estado": "PASS",
-          "evidencias": [
-            {
-              "archivo": "HU-17/01-tablero-indicadores.png",
-              "descripcion": "Tablero del proveedor con los indicadores por estatus.",
-              "tipo": "aplicacion"
-            }
-          ]
-        }
-      ]
-    },
-    {
-      "nombre": "Listado de sus facturas con el estatus actual de cada una",
-      "estado": "PASS",
-      "pasos": [
-        {
-          "paso": "Abrir \"Facturas\" con \"Todos los estados\" y buscar \"QA-RMUVVRQW1\"",
-          "esperado": "Se listan sólo sus facturas con su estatus (Cargada, Autorizada, Rechazada, Observaciones, Cancelada); la factura del proveedor internacional no aparece.",
-          "obtenido": "Estatus: QA-RMUVVRQW1-N1 = Autorizada; QA-RMUVVRQW1-N4 = Rechazada; QA-RMUVVRQW1-N5 = Observaciones; QA-RMUVVRQW1-N2 = Cancelada; QA-RMUVVRQW1-N3 = Cargada; QA-RMUVVRQW1-I1 (de otro proveedor) no se lista.",
-          "estado": "PASS",
-          "evidencias": [
-            {
-              "archivo": "HU-17/02-listado-estatus.png",
-              "descripcion": "Listado del proveedor: cada factura con su estatus actual.",
-              "tipo": "aplicacion"
-            }
-          ]
-        },
-        {
-          "paso": "Filtrar por el estatus \"Observaciones\"",
-          "esperado": "Sólo se listan facturas en \"Observaciones\".",
-          "obtenido": "2 factura(s), todas en \"Observaciones\", incluida QA-RMUVVRQW1-N5.",
-          "estado": "PASS",
-          "evidencias": [
-            {
-              "archivo": "HU-17/03-filtro-observaciones.png",
-              "descripcion": "Listado filtrado por \"Observaciones\".",
-              "tipo": "aplicacion"
-            }
-          ]
-        }
-      ]
-    },
-    {
-      "nombre": "Motivo del rechazo visible para el proveedor",
-      "estado": "PASS",
-      "pasos": [
-        {
-          "paso": "Abrir QA-RMUVVRQW1-N4 (\"Rechazada\")",
-          "esperado": "El detalle destaca \"Motivo del rechazo\" con el mismo texto que capturó el PMO y que recibió por correo; el seguimiento atribuye la decisión a \"PMO\".",
-          "obtenido": "\"Motivo del rechazo\": \"QA RMUVVRQW1: el subtotal del XML no coincide con la orden de compra OC-QA-RMUVVRQW1.\" (igual al correo); seguimiento: 05/10/2026 17:29 Enviada a validación Proveedor Moral Demo 05/10/2026 17:29 Rechazada PMO QA RMUVVRQW1: el subtotal del XML no coincide con la orden de compra OC-QA-RMUVVRQW1..",
-          "estado": "PASS",
-          "evidencias": [
-            {
-              "archivo": "HU-17/04-motivo-rechazo.png",
-              "descripcion": "Detalle \"Rechazada\" con el motivo del rechazo.",
-              "tipo": "aplicacion"
-            },
-            {
-              "archivo": "HU-17/05-seguimiento-rechazo.png",
-              "descripcion": "Seguimiento: envío y decisión del PMO (sin el nombre del revisor).",
-              "tipo": "aplicacion"
-            }
-          ]
-        }
-      ]
-    },
-    {
-      "nombre": "Observaciones del PMO y reenvío de la factura corregida",
-      "estado": "PASS",
-      "pasos": [
-        {
-          "paso": "Abrir QA-RMUVVRQW1-N5 (\"Observaciones\")",
-          "esperado": "El detalle destaca \"Observaciones del PMO\" con el texto del correo e indica \"Corrija lo indicado y vuelva a enviar la factura\" con acceso a la carga documental.",
-          "obtenido": "\"Observaciones del PMO\": \"QA RMUVVRQW1: falta el Vo.Bo. firmado por el líder de proyecto; corrija y reenvíe.\" (igual al correo); \"Corrija lo indicado y vuelva a enviar la factura. Gestionar documentos\".",
-          "estado": "PASS",
-          "evidencias": [
-            {
-              "archivo": "HU-17/06-observaciones-pmo.png",
-              "descripcion": "Detalle en \"Observaciones\" con la causa del PMO y la indicación de corregir y reenviar.",
-              "tipo": "aplicacion"
-            }
-          ]
-        },
-        {
-          "paso": "Pulsar \"Enviar a validación\" para reenviarla",
-          "esperado": "La factura vuelve a \"Enviada\" y el seguimiento registra el segundo envío.",
-          "obtenido": "Estatus \"Enviada\"; seguimiento: 05/10/2026 17:29 Enviada a validación Proveedor Moral Demo 05/10/2026 17:29 Observaciones PMO QA RMUVVRQW1: falta el Vo.Bo. firmado por el líder de proyecto; corrija y reenvíe. 05/10/2026 17:29 Enviada a validación Proveedor Moral Demo.",
-          "estado": "PASS",
-          "evidencias": [
-            {
-              "archivo": "HU-17/07-reenviada.png",
-              "descripcion": "QA-RMUVVRQW1-N5 reenviada: estatus \"Enviada\" y seguimiento con dos envíos.",
-              "tipo": "aplicacion"
-            }
-          ]
-        }
-      ]
-    },
-    {
-      "nombre": "Factura cancelada: fecha límite de aceptación y acuse",
-      "estado": "PASS",
-      "pasos": [
-        {
-          "paso": "Abrir QA-RMUVVRQW1-N2 (\"Cancelada\")",
-          "esperado": "Se informa la cancelación y la fecha límite (08/10/2026 17:29) y el acuse aparece entre los documentos.",
-          "obtenido": "\"Cancelada el 05/10/2026 17:29. Recepción de Facturas debe aceptar la cancelación antes del 08/10/2026 17:29.\".",
-          "estado": "PASS",
-          "evidencias": [
-            {
-              "archivo": "HU-17/08-cancelada-fecha-limite.png",
-              "descripcion": "Detalle \"Cancelada\" con la fecha límite de aceptación.",
-              "tipo": "aplicacion"
-            }
-          ]
-        }
-      ]
-    },
-    {
-      "nombre": "Aislamiento: no puede consultar facturas de otro proveedor",
-      "estado": "PASS",
-      "pasos": [
-        {
-          "paso": "Abrir por URL la factura QA-RMUVVRQW1-I1 (del proveedor internacional)",
-          "esperado": "El portal responde 404 y no muestra la factura.",
-          "obtenido": "HTTP 404: \"Factura no encontrada\".",
-          "estado": "PASS",
-          "evidencias": [
-            {
-              "archivo": "HU-17/09-factura-ajena-404.png",
-              "descripcion": "Factura de otro proveedor: respuesta 404.",
-              "tipo": "aplicacion"
-            }
-          ]
-        }
-      ]
+      "nombre": "Precondiciones",
+      "estado": "BLOCKED",
+      "motivo": "Depende de HU-16, que no dejó el dato «hu16.enviada» (resultado de HU-16: BLOCKED).",
+      "pasos": []
     }
   ]
 }

@@ -1,9 +1,9 @@
 {
   "id": "HU-04",
-  "run": "RMUVVRQW1",
-  "inicio": "2026-10-05T23:28:36.282Z",
-  "fin": "2026-10-05T23:28:46.771Z",
-  "estado": "PASS",
+  "run": "RMUY9TNYO",
+  "inicio": "2026-10-07T15:37:32.126Z",
+  "fin": "2026-10-07T15:38:01.389Z",
+  "estado": "FAIL",
   "bloqueo": null,
   "notas": [],
   "prueba": {
@@ -17,13 +17,13 @@
       "pasos": [
         {
           "paso": "Abrir Requisitos mínimos › Archivos de factura",
-          "esperado": "La tabla muestra cada tipo de documento con un nivel (Obligatorio / Opcional / No aplica) para Nacional y otro para Internacional; los niveles fijos (CFDI e Invoice) aparecen con candado.",
-          "obtenido": "Columnas: TIPO DE DOCUMENTO | FORMATOS | NACIONAL | INTERNACIONAL | ACCIONES. XML del CFDI: Nacional \"Obligatorio\" fijo / Internacional \"No aplica\"; Invoice (PDF): Nacional \"No aplica\" / Internacional \"Obligatorio\". 12 niveles fijos con candado.",
+          "esperado": "La tabla muestra cada tipo de documento con un nivel (Obligatorio / Opcional / No aplica) para Nacional y otro para Internacional; todos los niveles son editables, también los de los tipos del sistema.",
+          "obtenido": "Columnas: TIPO DE DOCUMENTO | FORMATOS | NACIONAL | INTERNACIONAL | ACCIONES. XML del CFDI: Nacional \"Obligatorio\" / Internacional \"No aplica\"; Invoice (PDF): Nacional \"No aplica\" / Internacional \"Obligatorio\". Sin niveles fijos: todos tienen selector.",
           "estado": "PASS",
           "evidencias": [
             {
               "archivo": "HU-04/01-configuracion-por-origen.png",
-              "descripcion": "Archivos mínimos por origen: columnas Nacional e Internacional y niveles fijos con candado.",
+              "descripcion": "Archivos mínimos por origen: columnas Nacional e Internacional, todos los niveles editables.",
               "tipo": "aplicacion"
             }
           ]
@@ -48,9 +48,9 @@
       "estado": "PASS",
       "pasos": [
         {
-          "paso": "Crear el tipo soporte \"Constancia QA RMUVVRQW1\" (PDF; Nacional: No aplica; Internacional: Obligatorio)",
+          "paso": "Crear el tipo soporte \"Constancia QA RMUY9TNYO\" (PDF; Nacional: No aplica; Internacional: Obligatorio)",
           "esperado": "Se crea el tipo (\"Tipo de documento creado\") y aparece en la configuración con esos niveles.",
-          "obtenido": "Aviso \"Tipo de documento creado\"; fila \"Constancia QA RMUVVRQW1\" con Nacional = No aplica e Internacional = Obligatorio.",
+          "obtenido": "Aviso \"Tipo de documento creado\"; fila \"Constancia QA RMUY9TNYO\" con Nacional = No aplica e Internacional = Obligatorio.",
           "estado": "PASS",
           "evidencias": [
             {
@@ -60,7 +60,7 @@
             },
             {
               "archivo": "HU-04/04-tipo-soporte-creado.png",
-              "descripcion": "Tipo \"Constancia QA RMUVVRQW1\" en la configuración: Nacional \"No aplica\", Internacional \"Obligatorio\".",
+              "descripcion": "Tipo \"Constancia QA RMUY9TNYO\" en la configuración: Nacional \"No aplica\", Internacional \"Obligatorio\".",
               "tipo": "aplicacion"
             }
           ]
@@ -73,13 +73,13 @@
       "pasos": [
         {
           "paso": "El proveedor internacional abre la carga documental de su factura INV-2026-0042",
-          "esperado": "El checklist incluye \"Constancia QA RMUVVRQW1\" como Obligatorio y Pendiente, se ofrece Invoice (PDF) y no se ofrecen el XML ni el PDF del CFDI.",
-          "obtenido": "Checklist: \"Falta 1 archivo obligatorio\"; tipos ofrecidos: Invoice, Orden de compra, Vo.Bo. del líder de proyecto, Constancia QA RMUVVRQW1, Contrato, Anexo del contrato, Documentación adicional.",
+          "esperado": "El checklist incluye \"Constancia QA RMUY9TNYO\" como Obligatorio y Pendiente, se ofrece Invoice (PDF) y no se ofrecen el XML ni el PDF del CFDI.",
+          "obtenido": "Checklist: \"Falta 1 archivo obligatorio\"; tipos ofrecidos: Invoice, Orden de compra, Vo.Bo. del líder de proyecto, Constancia QA RMUY9TNYO, Contrato, Anexo del contrato, Documentación adicional.",
           "estado": "PASS",
           "evidencias": [
             {
               "archivo": "HU-04/05-internacional-tipo-obligatorio.png",
-              "descripcion": "Carga documental del proveedor internacional: \"Constancia QA RMUVVRQW1\" obligatorio y pendiente.",
+              "descripcion": "Carga documental del proveedor internacional: \"Constancia QA RMUY9TNYO\" obligatorio y pendiente.",
               "tipo": "aplicacion"
             }
           ]
@@ -87,7 +87,7 @@
         {
           "paso": "El proveedor internacional intenta \"Enviar a validación\" INV-2026-0042 sin cargar el nuevo archivo obligatorio",
           "esperado": "El envío no procede por el archivo obligatorio faltante y la factura no queda \"Enviada\".",
-          "obtenido": "Respuesta del portal: \"409 No fue posible completar la operacion Faltan archivos obligatorios. Cárguelos antes de enviar Referencia: eec3ff34df054d9b97846906dd7bb400 Ir al acceso\"; estatus de INV-2026-0042: \"Borrador\".",
+          "obtenido": "Respuesta del portal: \"409 No fue posible completar la operacion Faltan archivos obligatorios: Constancia QA RMUY9TNYO. Cárguelos antes de enviar Referencia: 421922b644774acabf22318edec63a14 Ir al acceso\"; estatus de INV-2026-0042: \"Borrador\".",
           "estado": "PASS",
           "evidencias": [
             {
@@ -99,13 +99,13 @@
         },
         {
           "paso": "El proveedor nacional abre la carga documental de su factura D-SIN-VOBO",
-          "esperado": "Se ofrecen el XML y el PDF del CFDI; \"Constancia QA RMUVVRQW1\" no se ofrece porque no aplica al Nacional.",
+          "esperado": "Se ofrecen el XML y el PDF del CFDI; \"Constancia QA RMUY9TNYO\" no se ofrece porque no aplica al Nacional.",
           "obtenido": "Checklist: \"Falta 1 archivo obligatorio\"; tipos ofrecidos: XML del CFDI, PDF del CFDI, Orden de compra, Vo.Bo. del líder de proyecto, Contrato, Anexo del contrato, Complemento de pago, Complemento de pago, Documentación adicional.",
           "estado": "PASS",
           "evidencias": [
             {
               "archivo": "HU-04/07-nacional-sin-tipo.png",
-              "descripcion": "Carga documental del proveedor nacional: se ofrecen XML/PDF del CFDI y no \"Constancia QA RMUVVRQW1\".",
+              "descripcion": "Carga documental del proveedor nacional: se ofrecen XML/PDF del CFDI y no \"Constancia QA RMUY9TNYO\".",
               "tipo": "aplicacion"
             }
           ]
@@ -114,61 +114,50 @@
     },
     {
       "nombre": "Desactivar el tipo soporte: deja de exigirse",
-      "estado": "PASS",
+      "estado": "FAIL",
       "pasos": [
         {
-          "paso": "Desactivar \"Constancia QA RMUVVRQW1\"",
+          "paso": "Desactivar \"Constancia QA RMUY9TNYO\"",
           "esperado": "El tipo pasa a \"Tipos inactivos\" (\"Estado del tipo de documento actualizado\").",
-          "obtenido": "Aviso \"Estado del tipo de documento actualizado\"; \"Constancia QA RMUVVRQW1\" listado en Tipos inactivos.",
-          "estado": "PASS",
+          "obtenido": "No se cumplió lo esperado. locator.click: Timeout 20000ms exceeded.",
+          "estado": "FAIL",
           "evidencias": [
             {
-              "archivo": "HU-04/08-tipo-inactivo.png",
-              "descripcion": "\"Constancia QA RMUVVRQW1\" en \"Tipos inactivos\".",
-              "tipo": "aplicacion"
+              "archivo": "HU-04/08-fallo-desactivar-constancia-qa-rmuy9tnyo.png",
+              "descripcion": "Estado exacto de la aplicación al fallar el paso «Desactivar \"Constancia QA RMUY9TNYO\"».",
+              "tipo": "fallo"
             }
-          ]
-        },
-        {
-          "paso": "El proveedor internacional vuelve a la carga documental de INV-2026-0042 y reemplaza su Orden de compra",
-          "esperado": "El tipo desactivado ya no aparece, los obligatorios están completos y la factura vuelve a \"Cargada\" (\"Factura cargada. Ya puede enviarla a validación.\").",
-          "obtenido": "Checklist: \"Archivos obligatorios completos Factura cargada. Ya puede enviarla a validación.\"; \"Constancia QA RMUVVRQW1\" ya no se lista.",
-          "estado": "PASS",
-          "evidencias": [
-            {
-              "archivo": "HU-04/09-internacional-sin-tipo.png",
-              "descripcion": "Tras desactivar el tipo, el checklist está completo y la factura vuelve a \"Cargada\".",
-              "tipo": "aplicacion"
-            }
-          ]
+          ],
+          "error": "locator.click: Timeout 20000ms exceeded."
         }
-      ]
+      ],
+      "motivo": "locator.click: Timeout 20000ms exceeded."
     },
     {
       "nombre": "Editar y eliminar un tipo desde su fila",
       "estado": "PASS",
       "pasos": [
         {
-          "paso": "Crear el tipo temporal \"Temporal QA RMUVVRQW1\"",
-          "esperado": "La fila del tipo muestra las acciones \"Editar\" y \"Eliminar\"; las filas de los tipos del sistema no las muestran.",
-          "obtenido": "Fila \"Temporal QA RMUVVRQW1\" con Editar y Eliminar; 11 filas del sistema sin acciones.",
+          "paso": "Crear el tipo temporal \"Temporal QA RMUY9TNYO\"",
+          "esperado": "La fila del tipo muestra las acciones \"Editar\" y \"Eliminar\", igual que las filas de los tipos del sistema.",
+          "obtenido": "Fila \"Temporal QA RMUY9TNYO\" con Editar y Eliminar; las 13 filas de la tabla tienen ambas acciones.",
           "estado": "PASS",
           "evidencias": [
             {
-              "archivo": "HU-04/10-acciones-editar-eliminar.png",
-              "descripcion": "Fila de \"Temporal QA RMUVVRQW1\" con las acciones Editar y Eliminar.",
+              "archivo": "HU-04/09-acciones-editar-eliminar.png",
+              "descripcion": "Todas las filas, también las del sistema, con Editar y Eliminar.",
               "tipo": "aplicacion"
             }
           ]
         },
         {
-          "paso": "Pulsar \"Editar\" y renombrarlo a \"Temporal QA RMUVVRQW1 editado\"",
+          "paso": "Pulsar \"Editar\" y renombrarlo a \"Temporal QA RMUY9TNYO editado\"",
           "esperado": "Se abre su formulario de edición y, al guardar, el portal responde \"Tipo de documento actualizado\".",
-          "obtenido": "Aviso \"Tipo de documento actualizado\"; la fila ahora dice \"Temporal QA RMUVVRQW1 editado\".",
+          "obtenido": "Aviso \"Tipo de documento actualizado\"; la fila ahora dice \"Temporal QA RMUY9TNYO editado\".",
           "estado": "PASS",
           "evidencias": [
             {
-              "archivo": "HU-04/11-formulario-edicion.png",
+              "archivo": "HU-04/10-formulario-edicion.png",
               "descripcion": "Formulario de edición abierto desde la fila.",
               "tipo": "aplicacion"
             }
@@ -177,11 +166,11 @@
         {
           "paso": "Pulsar \"Eliminar\" y no confirmar",
           "esperado": "Aparece la confirmación con el nombre del tipo; al cerrarla el tipo sigue en la tabla.",
-          "obtenido": "Confirmación \"¿Eliminar «Temporal QA RMUVVRQW1 editado»?\" mostrada y cerrada; el tipo sigue listado.",
+          "obtenido": "Confirmación \"¿Eliminar «Temporal QA RMUY9TNYO editado»?\" mostrada y cerrada; el tipo sigue listado.",
           "estado": "PASS",
           "evidencias": [
             {
-              "archivo": "HU-04/12-confirmacion-eliminar.png",
+              "archivo": "HU-04/11-confirmacion-eliminar.png",
               "descripcion": "Confirmación antes de eliminar.",
               "tipo": "aplicacion"
             }
@@ -189,13 +178,26 @@
         },
         {
           "paso": "Pulsar \"Eliminar\" y confirmar",
-          "esperado": "El portal responde \"Tipo eliminado\" y el tipo desaparece de la pantalla.",
-          "obtenido": "Aviso \"Tipo eliminado\"; \"Temporal QA RMUVVRQW1 editado\" ya no aparece.",
+          "esperado": "El portal responde \"Tipo eliminado\" y el tipo deja de listarse: la baja es lógica.",
+          "obtenido": "Aviso \"Tipo eliminado\"; \"Temporal QA RMUY9TNYO editado\" ya no aparece en la configuración.",
           "estado": "PASS",
           "evidencias": [
             {
-              "archivo": "HU-04/13-tipo-eliminado.png",
+              "archivo": "HU-04/12-tipo-eliminado.png",
               "descripcion": "Aviso \"Tipo eliminado\".",
+              "tipo": "aplicacion"
+            }
+          ]
+        },
+        {
+          "paso": "Pulsar \"Mostrar eliminados\"",
+          "esperado": "El tipo eliminado se conserva: aparece con su fecha de eliminación y la acción \"Restaurar\".",
+          "obtenido": "\"Temporal QA RMUY9TNYO editado\" listado como eliminado el 07/10/2026 09:38.",
+          "estado": "PASS",
+          "evidencias": [
+            {
+              "archivo": "HU-04/13-tipo-en-eliminados.png",
+              "descripcion": "\"Temporal QA RMUY9TNYO editado\" en la lista de eliminados, con \"Restaurar\".",
               "tipo": "aplicacion"
             }
           ]

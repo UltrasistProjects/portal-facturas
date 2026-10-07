@@ -143,7 +143,7 @@ def test_autorizar(client):
     assert [(r.decision, r.comments) for r in reviews(invoice.id)] == [("ACCEPTED", None)]
     assert audits(invoice.id, "STATUS_CHANGED") and audits(invoice.id, "ACCEPTED")
     page = client.get(response.headers["location"]).text
-    assert f"Correo enviado a {RECEPTION}" in page and 'id="decision"' not in page
+    assert f"Correo enviado a {RECEPTION} con copia a {PROVIDER_EMAIL}" in page and 'id="decision"' not in page
 
 
 def test_observaciones(client):
@@ -254,12 +254,15 @@ def test_no_se_autoriza_con_bloqueo_critico(client):
 # --- Correos de la decision ---------------------------------------------------------------------------------------
 
 
-def test_autorizacion_notificada_a_recepcion(client):
+def test_autorizacion_notificada_a_recepcion_con_copia_al_proveedor(client):
     invoice = sent_invoice()
     login(client, "pmo@poc.local")
     decide(client, invoice.id, "ACCEPTED")
     message = mail_for(invoice.invoice_number)
     assert message["To"] == RECEPTION and message["Subject"] == f"Factura {invoice.invoice_number} autorizada para pago"
+    assert message["Cc"] == PROVIDER_EMAIL
+    [delivery] = deliveries(invoice.id)
+    assert (delivery.to_addresses, delivery.cc_addresses) == ([RECEPTION], [PROVIDER_EMAIL])
     body = message.get_body(("plain",)).get_content()
     assert (
         f"La factura número {invoice.invoice_number} del proveedor Tecnologia Integral del Centro SA de CV "

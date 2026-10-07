@@ -1,14 +1,14 @@
 # interfaz-usuario Specification
 
 ## Purpose
-Interfaz del portal sin diálogos nativos del navegador: confirmaciones en modales del portal y errores de validación de los formularios en español junto a cada campo, con las mismas reglas que ya declaran los campos y la validación nativa como respaldo sin JavaScript.
+Interfaz del portal sin diálogos nativos del navegador: confirmaciones en modales del portal y errores de validación de los formularios en español junto a cada campo, con las mismas reglas que ya declaran los campos, formularios que se envían una sola vez y la validación nativa como respaldo sin JavaScript.
 ## Requirements
 ### Requirement: Confirmaciones en modales del portal
 El código propio del portal (`app/static/js` y `app/templates`, sin `app/static/vendor`) MUST NOT usar `alert`, `confirm` ni `prompt`. Una acción que pide confirmación SHALL mostrar un modal de Bootstrap con la pregunta, un botón para aceptar y otro para cancelar. Cancelar, cerrar el modal o pulsar Esc MUST NOT ejecutar la acción. Aceptar SHALL ejecutar exactamente la misma acción que el botón ejecutaba antes de la confirmación, con los mismos datos.
 
 #### Scenario: Autorizar con confirmación
 - **WHEN** el PMO pulsa "Autorizar" en el panel de decisión de una factura "Enviada"
-- **THEN** ve un modal con "¿Autorizar la factura {número} para su pago? Se notificará a Recepción de Facturas." y no se envía nada hasta que elige
+- **THEN** ve un modal con "¿Autorizar la factura {número} para su pago? Se notificará a Recepción de Facturas con copia al proveedor." y no se envía nada hasta que elige
 
 #### Scenario: Aceptar la autorización
 - **WHEN** el PMO acepta en el modal
@@ -36,7 +36,7 @@ Al enviar un formulario con campos inválidos, el envío MUST NOT proceder, igua
 - **THEN** el mensaje y la marca de inválido desaparecen sin enviar el formulario
 
 #### Scenario: Error al salir del campo
-- **WHEN** el proveedor escribe "8/2026" en "Periodo de servicio" y pasa al siguiente campo
+- **WHEN** el proveedor escribe "agosto 2026" en "Periodo de servicio" y pasa al siguiente campo
 - **THEN** debajo del campo aparece "Use el formato MM/AAAA, por ejemplo 08/2026." sin intentar el envío
 
 #### Scenario: Recorrer campos sin escribir
@@ -96,4 +96,23 @@ Sin JavaScript, los formularios SHALL conservar la validación nativa del navega
 #### Scenario: Navegador sin JavaScript
 - **WHEN** el usuario envía "Crear usuario" con "Nombre" vacío y JavaScript deshabilitado
 - **THEN** el navegador bloquea el envío con su aviso nativo, como antes del cambio
+
+### Requirement: Un solo envío por formulario
+Con JavaScript, cada formulario `POST` del portal SHALL enviarse una sola vez: tras el primer envío SHALL ignorar los siguientes y deshabilitar sus botones de envío, de modo que un segundo clic mientras el servidor responde (por ejemplo, mientras sale el correo de una cancelación) MUST NOT repetir la operación. La petición SHALL conservar el nombre y el valor del botón pulsado, como la decisión del PMO. El bloqueo MUST NOT aplicarse a un envío que el navegador no hace porque el formulario es inválido, ni a los envíos que el script del formulario cancela para hacerlos por su cuenta (por `fetch` o tras su propio modal de confirmación). Al volver a la página con "Atrás" desde la caché del navegador, el formulario SHALL aceptar un nuevo envío y sus botones SHALL estar habilitados. Sin JavaScript, el servidor SHALL seguir rechazando la operación repetida con su error de negocio.
+
+#### Scenario: Segundo clic mientras responde el servidor
+- **WHEN** el proveedor pulsa "Cancelar factura" con su acuse y vuelve a pulsarlo antes de que el portal responda
+- **THEN** el navegador hace una sola petición, el botón queda deshabilitado y la factura se cancela sin el error "La factura ya está cancelada"
+
+#### Scenario: Decisión del PMO
+- **WHEN** el PMO confirma "Autorizar" en el modal
+- **THEN** la petición lleva `decision=ACCEPTED` y los botones del panel "Decisión" quedan deshabilitados
+
+#### Scenario: Formulario inválido
+- **WHEN** el usuario envía un formulario con un campo obligatorio vacío, lo corrige y lo envía de nuevo
+- **THEN** el segundo envío procede: el primero no llegó a hacerse y no bloqueó el formulario
+
+#### Scenario: Volver con "Atrás"
+- **WHEN** el usuario envía un formulario y vuelve a la página con "Atrás" desde la caché del navegador
+- **THEN** los botones del formulario están habilitados y un nuevo envío procede
 

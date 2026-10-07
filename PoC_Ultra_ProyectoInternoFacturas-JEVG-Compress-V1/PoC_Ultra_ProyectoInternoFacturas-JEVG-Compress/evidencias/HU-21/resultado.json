@@ -1,8 +1,8 @@
 {
   "id": "HU-21",
-  "run": "RMUVVRQW1",
-  "inicio": "2026-10-05T23:29:57.792Z",
-  "fin": "2026-10-05T23:30:05.687Z",
+  "run": "RMUY9TNYO",
+  "inicio": "2026-10-07T15:39:13.478Z",
+  "fin": "2026-10-07T15:39:22.536Z",
   "estado": "PASS",
   "bloqueo": null,
   "notas": [],
@@ -35,9 +35,9 @@
       "estado": "PASS",
       "pasos": [
         {
-          "paso": "Dar de alta la persona moral \"QA Hotel Requisitos RMUVVRQW1 SA de CV\" con el formulario de proveedores",
+          "paso": "Dar de alta la persona moral \"QA Hotel Requisitos RMUY9TNYO SA de CV\" con el formulario de proveedores",
           "esperado": "El proveedor queda \"Registrado\" y su expediente indica \"Faltan 7 requisitos obligatorios\"; el botón \"Autorizar proveedor\" está deshabilitado.",
-          "obtenido": "Expediente 54: \"Faltan 7 requisitos obligatorios\"; botón \"Autorizar proveedor\" deshabilitado.",
+          "obtenido": "Expediente 84: \"Faltan 7 requisitos obligatorios\"; botón \"Autorizar proveedor\" deshabilitado.",
           "estado": "PASS",
           "evidencias": [
             {
@@ -50,7 +50,7 @@
         {
           "paso": "Buscarlo en el listado de proveedores",
           "esperado": "No tiene casilla de selección; muestra \"Faltan 7 requisitos\" con la liga a su expediente.",
-          "obtenido": "Fila: \"Faltan 7 requisitos QA Hotel Requisitos RMUVVRQW1 SA de CV hotel.rmuvvrqw1@qa.example QAH260101QW1 Persona Moral Registrado Faltan 7 0\".",
+          "obtenido": "Fila: \"Faltan 7 requisitos QA Hotel Requisitos RMUY9TNYO SA de CV hotel.rmuy9tnyo@qa.example QAH260101NYO Persona Moral Registrado Faltan 7 0\".",
           "estado": "PASS",
           "evidencias": [
             {
@@ -99,22 +99,22 @@
       "estado": "PASS",
       "pasos": [
         {
-          "paso": "Crear el tipo temporal \"Requisito temporal QA RMUVVRQW1\"",
-          "esperado": "La fila del tipo muestra las acciones \"Editar\" y \"Eliminar\"; las filas de los tipos del sistema no las muestran.",
-          "obtenido": "Fila \"Requisito temporal QA RMUVVRQW1\" con Editar y Eliminar; 13 filas del sistema sin acciones.",
+          "paso": "Crear el tipo temporal \"Requisito temporal QA RMUY9TNYO\"",
+          "esperado": "La fila del tipo muestra las acciones \"Editar\" y \"Eliminar\", igual que las filas de los tipos del sistema.",
+          "obtenido": "Fila \"Requisito temporal QA RMUY9TNYO\" con Editar y Eliminar; las 14 filas de la tabla tienen ambas acciones.",
           "estado": "PASS",
           "evidencias": [
             {
               "archivo": "HU-21/06-acciones-editar-eliminar.png",
-              "descripcion": "Fila de \"Requisito temporal QA RMUVVRQW1\" con las acciones Editar y Eliminar.",
+              "descripcion": "Todas las filas, también las del sistema, con Editar y Eliminar.",
               "tipo": "aplicacion"
             }
           ]
         },
         {
-          "paso": "Pulsar \"Editar\" y renombrarlo a \"Requisito temporal QA RMUVVRQW1 editado\"",
+          "paso": "Pulsar \"Editar\" y renombrarlo a \"Requisito temporal QA RMUY9TNYO editado\"",
           "esperado": "Se abre su formulario de edición y, al guardar, el portal responde \"Requisito actualizado\".",
-          "obtenido": "Aviso \"Requisito actualizado\"; la fila ahora dice \"Requisito temporal QA RMUVVRQW1 editado\".",
+          "obtenido": "Aviso \"Requisito actualizado\"; la fila ahora dice \"Requisito temporal QA RMUY9TNYO editado\".",
           "estado": "PASS",
           "evidencias": [
             {
@@ -127,7 +127,7 @@
         {
           "paso": "Pulsar \"Eliminar\" y no confirmar",
           "esperado": "Aparece la confirmación con el nombre del tipo; al cerrarla el tipo sigue en la tabla.",
-          "obtenido": "Confirmación \"¿Eliminar «Requisito temporal QA RMUVVRQW1 editado»?\" mostrada y cerrada; el tipo sigue listado.",
+          "obtenido": "Confirmación \"¿Eliminar «Requisito temporal QA RMUY9TNYO editado»?\" mostrada y cerrada; el tipo sigue listado.",
           "estado": "PASS",
           "evidencias": [
             {
@@ -139,13 +139,26 @@
         },
         {
           "paso": "Pulsar \"Eliminar\" y confirmar",
-          "esperado": "El portal responde \"Tipo eliminado\" y el tipo desaparece de la pantalla.",
-          "obtenido": "Aviso \"Tipo eliminado\"; \"Requisito temporal QA RMUVVRQW1 editado\" ya no aparece.",
+          "esperado": "El portal responde \"Requisito eliminado\" y el tipo deja de listarse: la baja es lógica.",
+          "obtenido": "Aviso \"Requisito eliminado\"; \"Requisito temporal QA RMUY9TNYO editado\" ya no aparece en la configuración.",
           "estado": "PASS",
           "evidencias": [
             {
               "archivo": "HU-21/09-tipo-eliminado.png",
-              "descripcion": "Aviso \"Tipo eliminado\".",
+              "descripcion": "Aviso \"Requisito eliminado\".",
+              "tipo": "aplicacion"
+            }
+          ]
+        },
+        {
+          "paso": "Pulsar \"Mostrar eliminados\"",
+          "esperado": "El tipo eliminado se conserva: aparece con su fecha de eliminación y la acción \"Restaurar\".",
+          "obtenido": "\"Requisito temporal QA RMUY9TNYO editado\" listado como eliminado el 07/10/2026 09:39.",
+          "estado": "PASS",
+          "evidencias": [
+            {
+              "archivo": "HU-21/10-tipo-en-eliminados.png",
+              "descripcion": "\"Requisito temporal QA RMUY9TNYO editado\" en la lista de eliminados, con \"Restaurar\".",
               "tipo": "aplicacion"
             }
           ]

@@ -1,7 +1,7 @@
 {% extends "base.html" %}{% block title %}Plantilla {{ spec.label }}{% endblock %}{% block content %}
 {% set url = "/admin/notification-templates/" ~ spec.event.value %}
 <div class="breadcrumb"><a href="/admin/notification-templates">Plantillas de correo</a><i class="bi bi-chevron-right"></i>{{ spec.label }}</div>
-<div class="page-heading"><div><span class="eyebrow">CONFIGURACION</span><h1>Plantilla: {{ spec.label }}</h1><p>Destinatario: {{ spec.recipient }}</p></div></div>
+<div class="page-heading"><div><span class="eyebrow">CONFIGURACION</span><h1>Plantilla: {{ spec.label }}</h1><p>Destinatario: {{ spec.recipient_label }}</p></div></div>
 {% if notice %}<div class="alert alert-info">{{ notice }}</div>{% endif %}
 {% if error %}<div class="alert alert-danger">{{ error }} <a href="{{ url }}">Abrir la versión vigente</a></div>{% endif %}
 {% if errors %}<div class="alert alert-danger"><strong>Corrija la plantilla:</strong><ul class="template-errors">{% for item in errors %}<li>{{ item }}</li>{% endfor %}</ul></div>{% endif %}

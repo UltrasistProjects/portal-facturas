@@ -1,8 +1,8 @@
 {
   "id": "HU-14",
-  "run": "RMUVVRQW1",
-  "inicio": "2026-10-05T23:29:29.255Z",
-  "fin": "2026-10-05T23:29:33.258Z",
+  "run": "RMUY9TNYO",
+  "inicio": "2026-10-07T15:38:57.843Z",
+  "fin": "2026-10-07T15:39:02.122Z",
   "estado": "PASS",
   "bloqueo": null,
   "notas": [],
@@ -16,7 +16,7 @@
       "estado": "PASS",
       "pasos": [
         {
-          "paso": "Abrir QA-RMUVVRQW1-N2 (\"Cargada\") y desplegar \"Cancelar factura\"",
+          "paso": "Abrir QA-RMUY9TNYO-N2 (\"Cargada\") y desplegar \"Cancelar factura\"",
           "esperado": "Se muestra el formulario con el archivo \"Acuse de cancelación\" y la confirmación \"Confirmo que la factura se canceló y adjunto su acuse\".",
           "obtenido": "Formulario con \"Acuse de cancelación\" (Formatos admitidos: PDF, XML) y la casilla de confirmación.",
           "estado": "PASS",
@@ -63,7 +63,7 @@
         {
           "paso": "Adjuntar el acuse (PDF), confirmar y pulsar \"Cancelar factura\"",
           "esperado": "La factura queda \"Cancelada\"; se informa \"Se notificó a Recepción de Facturas\" y \"… debe aceptar la cancelación antes del <fecha + 72 h>\".",
-          "obtenido": "Estatus \"Cancelada\"; \"Factura cancelada. Se notificó a Recepción de Facturas.\"; \"Cancelada el 05/10/2026 17:29. Recepción de Facturas debe aceptar la cancelación antes del 08/10/2026 17:29.\" (diferencia: 72 h).",
+          "obtenido": "Estatus \"Cancelada\"; \"Factura cancelada. Se notificó a Recepción de Facturas.\"; \"Cancelada el 07/10/2026 09:39. Recepción de Facturas debe aceptar la cancelación antes del 10/10/2026 09:39.\" (diferencia: 72 h).",
           "estado": "PASS",
           "evidencias": [
             {
@@ -94,13 +94,13 @@
       "pasos": [
         {
           "paso": "Abrir el correo \"Cancelada\" generado por el portal",
-          "esperado": "Va a Recepción de Facturas (recepcionfacturas@ultrasist.com.mx, recepcion.qa.rmuvvrqw1@ultrasist-qa.example) e indica el número de factura, el nombre del proveedor y que acepte la cancelación antes de la fecha límite (+72 h).",
-          "obtenido": "Para: recepcion.qa.rmuvvrqw1@ultrasist-qa.example, recepcionfacturas@ultrasist.com.mx; asunto \"Cancelación de la factura QA-RMUVVRQW1-N2 de Tecnologia Integral del Centro SA de CV\"; texto: \"La factura número QA-RMUVVRQW1-N2 del proveedor Tecnologia Integral del Centro SA de CV ha sido cancelada. Por favor acepte la “Cancelación” antes del 08/10/2026 17:29\".",
+          "esperado": "Va a Recepción de Facturas (recepcionfacturas@ultrasist.com.mx, recepcion.qa.rmuy9tnyo@ultrasist-qa.example) e indica el número de factura, el nombre del proveedor y que acepte la cancelación antes de la fecha límite (+72 h).",
+          "obtenido": "Para: recepcion.qa.rmuy9tnyo@ultrasist-qa.example, recepcionfacturas@ultrasist.com.mx; asunto \"Cancelación de la factura QA-RMUY9TNYO-N2 de Tecnologia Integral del Centro SA de CV\"; texto: \"La factura número QA-RMUY9TNYO-N2 del proveedor Tecnologia Integral del Centro SA de CV ha sido cancelada. Por favor acepte la “Cancelación” antes del 10/10/2026 09:39\".",
           "estado": "PASS",
           "evidencias": [
             {
               "archivo": "HU-14/06-correo-cancelacion.png",
-              "descripcion": "Correo \"Cancelada\" a Recepción de Facturas para QA-RMUVVRQW1-N2.",
+              "descripcion": "Correo \"Cancelada\" a Recepción de Facturas para QA-RMUY9TNYO-N2.",
               "tipo": "correo"
             }
           ]

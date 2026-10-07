@@ -1,6 +1,8 @@
 import html
 import re
+from uuid import uuid4
 
+import pytest
 from sqlalchemy import delete, func, select
 
 from app.core.constants import SupplierStatus
@@ -139,6 +141,52 @@ def test_periodo_invalido_en_alta_de_factura(client):
     }
     response = client.post("/invoices/new", data=data, follow_redirects=False)
     assert response.status_code == 400
-    assert "Periodo de servicio" in response.text
+    assert "Periodo de servicio (MM/AAAA): el mes debe estar entre 01 y 12" in html.unescape(response.text)
     with SessionLocal() as db:
         assert db.scalar(select(func.count()).select_from(Invoice)) == before
+
+
+def period_invoice(client, period: str):
+    """Alta de una factura del proveedor 1 con el periodo capturado tal cual."""
+    supplier = supplier_by_email("proveedor1@poc.local")
+    with SessionLocal() as db:
+        contract = db.scalar(
+            select(Contract)
+            .where(Contract.supplier_id == supplier.id, Contract.status == "ACTIVE")
+            .order_by(Contract.id)
+        )
+    login(client, "proveedor1@poc.local")
+    number = f"PERIODO-{uuid4().hex[:8]}"
+    data = {
+        "contract_id": contract.id,
+        "invoice_number": number,
+        "service_period": period,
+        "project_name": contract.project_name,
+        "csrf_token": csrf(client, "/invoices/new"),
+    }
+    return client.post("/invoices/new", data=data, follow_redirects=False), number
+
+
+@pytest.mark.parametrize(
+    ("captured", "stored"),
+    [
+        ("08/2026", "08/2026"),
+        ("8/2026", "08/2026"),
+        ("08-2026", "08/2026"),
+        (" 08 / 2026 ", "08/2026"),
+        ("2026-08", "08/2026"),
+    ],
+)
+def test_periodo_sin_formato_estricto(client, captured, stored):
+    """El periodo se acepta con separadores y espacios comunes y se guarda como MM/AAAA."""
+    response, number = period_invoice(client, captured)
+    assert response.status_code == 303
+    with SessionLocal() as db:
+        assert db.scalar(select(Invoice.service_period).where(Invoice.invoice_number == number)) == stored
+
+
+@pytest.mark.parametrize("captured", ["agosto 2026", "2026", "08/26"])
+def test_periodo_sin_mes_y_anio(client, captured):
+    response, _ = period_invoice(client, captured)
+    assert response.status_code == 400
+    assert "Periodo de servicio (MM/AAAA): use el formato MM/AAAA, por ejemplo 08/2026" in html.unescape(response.text)

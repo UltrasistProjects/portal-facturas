@@ -52,7 +52,11 @@ MSG_CHANGED = "El archivo cambió desde la validación. Vuelva a cargarlo."
 MSG_CONFLICT = "Otro proceso registró proveedores de este archivo mientras se procesaba. Vuelva a cargarlo."
 
 ORIGINS = {"nacional": SupplierOrigin.NATIONAL, "internacional": SupplierOrigin.INTERNATIONAL}
-PERSON_TYPES = {"fisica": SupplierType.PERSONA_FISICA, "moral": SupplierType.PERSONA_MORAL}
+PERSON_TYPES = {
+    "fisica (con actividad empresarial)": SupplierType.PERSONA_FISICA,
+    "fisica": SupplierType.PERSONA_FISICA,
+    "moral": SupplierType.PERSONA_MORAL,
+}
 AGREEMENT = {"si": True, "no": False, "": False}
 RFC_PATTERN = re.compile(r"^[A-ZÑ&]{3,4}[0-9]{6}[A-Z0-9]{3}$")
 GENERIC_RFCS = {"XAXX010101000", "XEXX010101000"}
@@ -243,7 +247,7 @@ def _validate_row(row: Row) -> None:
             texts[header] = _text(value)
 
     origin = _choice(row, texts, "Origen", ORIGINS, "use Nacional o Internacional")
-    person_type = _choice(row, texts, "Tipo de persona", PERSON_TYPES, "use Física o Moral")
+    person_type = _choice(row, texts, "Tipo de persona", PERSON_TYPES, "use Física (con actividad empresarial) o Moral")
     agreement = _choice(row, texts, "Convenio de confidencialidad", AGREEMENT, "use Sí o No", required=False)
     business_name = _required(row, texts, "Razón social")
     if business_name is not None and len(business_name) < 2:

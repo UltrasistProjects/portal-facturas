@@ -112,7 +112,7 @@ def recipient_lists(config: Configuration) -> list[RecipientList]:
         spec = nt.EVENTS[event]
         addresses = list(config.copies[event].addresses) if event in config.copies else []
         label = f"Copias de {spec.label}"
-        lists.append(RecipientList(event.value, label, addresses, 0, event, spec.label, spec.recipient))
+        lists.append(RecipientList(event.value, label, addresses, 0, event, spec.label, spec.recipient_label))
     return lists
 
 
@@ -194,16 +194,21 @@ class Recipients:
 
 
 def recipients_for(db: Session, event: NotificationEvent, supplier_email: str | None = None) -> Recipients:
-    """Destinatarios del correo de `event` (D4), leidos de la base de datos en cada envio."""
+    """Destinatarios del correo de `event` (D4), leidos de la base de datos en cada envio. Un evento de Recepcion de
+    Facturas con copia al proveedor la agrega antes de las copias configuradas, si `supplier_email` llega."""
     spec = nt.EVENTS[NotificationEvent(event)]
+    supplier = (supplier_email or "").strip().lower()
+    supplier_copy: tuple[str, ...] = ()
     if spec.recipient == nt.Recipient.RECEPTION:
         to = tuple(load(db).mailbox.addresses)
+        if spec.supplier_copy and supplier:
+            supplier_copy = (supplier,)
     else:
-        if not supplier_email or not supplier_email.strip():
+        if not supplier:
             raise NotificationDataError(f"Falta el correo del proveedor para el evento {spec.event.value}")
-        to = (supplier_email.strip().lower(),)
+        to = (supplier,)
     copies = db.scalar(select(NotificationCopy.addresses).where(NotificationCopy.event == spec.event)) or []
-    return Recipients(to, tuple(dict.fromkeys(address for address in copies if address not in to)))
+    return Recipients(to, tuple(dict.fromkeys(address for address in (*supplier_copy, *copies) if address not in to)))
 
 
 def deliver(

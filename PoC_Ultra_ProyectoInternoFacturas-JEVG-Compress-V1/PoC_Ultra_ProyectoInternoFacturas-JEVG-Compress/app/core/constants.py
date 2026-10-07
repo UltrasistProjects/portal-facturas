@@ -14,6 +14,11 @@ class SupplierType(StrEnum):
     PERSONA_MORAL = "PERSONA_MORAL"
 
 
+# Nombre del tipo de persona en la interfaz: la persona fisica que factura es la que tiene actividad empresarial.
+PERSONA_FISICA_LABEL = "Persona física (con actividad empresarial)"
+SUPPLIER_TYPE_LABELS = {SupplierType.PERSONA_MORAL: "Persona moral", SupplierType.PERSONA_FISICA: PERSONA_FISICA_LABEL}
+
+
 class SupplierStatus(StrEnum):
     # Alta (carga masiva o individual), aun sin acceso al portal: la autorizacion es posterior (HU-02).
     REGISTERED = "REGISTERED"
@@ -69,12 +74,12 @@ class RequirementProfile(StrEnum):
 
 REQUIREMENT_PROFILE_LABELS = {
     RequirementProfile.PERSONA_MORAL: "Persona moral",
-    RequirementProfile.PERSONA_FISICA: "Persona física",
+    RequirementProfile.PERSONA_FISICA: PERSONA_FISICA_LABEL,
     RequirementProfile.INTERNATIONAL: "Internacional",
 }
 REQUIREMENT_PROFILE_PLURALS = {
     RequirementProfile.PERSONA_MORAL: "personas morales",
-    RequirementProfile.PERSONA_FISICA: "personas físicas",
+    RequirementProfile.PERSONA_FISICA: "personas físicas con actividad empresarial",
     RequirementProfile.INTERNATIONAL: "proveedores internacionales",
 }
 

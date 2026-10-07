@@ -45,9 +45,11 @@ Un alta rechazada SHALL volver a mostrar el formulario con lo capturado, incluid
 **Campos según el origen y el tipo de persona.** Con JavaScript (`supplier_form.js`), el formulario de alta SHALL mostrar sólo los campos que aplican:
 - el RFC, con el origen Nacional;
 - el identificador fiscal extranjero y el país, con el Internacional;
-- la fecha de constitución, sólo con persona moral.
+- la fecha de constitución y el nombre y teléfono del representante legal, sólo con persona moral.
 
-Un campo que deja de aplicar SHALL ocultarse, limpiarse y deshabilitarse, de modo que el navegador no lo valida ni lo envía. Al volver a aplicar, SHALL recuperar su obligatoriedad. Sin JavaScript se muestran todos los campos y el servidor valida la combinación. La página de edición MUST NOT ofrecer el origen ni el tipo de persona: el servidor muestra sólo los campos que aplican, y la fecha de constitución de la persona moral es obligatoria sin depender del script.
+A la persona física MUST NOT pedírsele el representante legal: el servidor lo guarda vacío aunque llegue, y el expediente muestra "Representante legal: No aplica". Para la persona moral es obligatorio. En la interfaz, el tipo `PERSONA_FISICA` SHALL mostrarse como "Persona física (con actividad empresarial)".
+
+Un campo que deja de aplicar SHALL ocultarse, limpiarse y deshabilitarse, de modo que el navegador no lo valida ni lo envía. Al volver a aplicar, SHALL recuperar su obligatoriedad. Sin JavaScript se muestran todos los campos y el servidor valida la combinación. La página de edición MUST NOT ofrecer el origen ni el tipo de persona: el servidor muestra sólo los campos que aplican, y la fecha de constitución y el representante legal de la persona moral son obligatorios sin depender del script.
 
 #### Scenario: Proveedor nuevo registrado
 - **WHEN** el Administrador da de alta un proveedor con el formulario
@@ -79,11 +81,19 @@ Un campo que deja de aplicar SHALL ocultarse, limpiarse y deshabilitarse, de mod
 
 #### Scenario: Campos que no aplican
 - **WHEN** con JavaScript el Administrador elige el origen Internacional y el tipo persona física
-- **THEN** el RFC y la fecha de constitución se ocultan, se limpian y no se envían, y el identificador fiscal y el país se vuelven obligatorios
+- **THEN** el RFC, la fecha de constitución y el representante legal se ocultan, se limpian y no se envían, y el identificador fiscal y el país se vuelven obligatorios
 
 #### Scenario: Edición sin selectores de identidad
 - **WHEN** el Administrador abre el expediente de una persona moral para editarla
-- **THEN** el formulario no tiene los campos de origen ni de tipo de persona, y la fecha de constitución es obligatoria
+- **THEN** el formulario no tiene los campos de origen ni de tipo de persona, y la fecha de constitución y el representante legal son obligatorios
+
+#### Scenario: Persona física sin representante legal
+- **WHEN** el Administrador da de alta una persona física; aunque la petición traiga nombre y teléfono del representante legal
+- **THEN** el proveedor queda sin representante legal, su expediente muestra "Representante legal: No aplica" y el tipo "Persona física (con actividad empresarial)"
+
+#### Scenario: Persona moral sin representante legal
+- **WHEN** el Administrador da de alta una persona moral sin el teléfono del representante legal
+- **THEN** la respuesta es HTTP 400 con "Telefono del representante legal: es obligatorio para persona moral" y no se crea el proveedor
 
 ### Requirement: Autorización masiva exclusiva del Administrador
 `POST /suppliers/authorize` y `POST /suppliers/{supplier_id}/credentials` SHALL estar disponibles únicamente para el rol `Administrador` y MUST exigir un token CSRF válido. Las casillas de selección, el botón "Autorizar seleccionados" y la sección de acceso al portal del expediente SHALL mostrarse sólo al rol `Administrador`.

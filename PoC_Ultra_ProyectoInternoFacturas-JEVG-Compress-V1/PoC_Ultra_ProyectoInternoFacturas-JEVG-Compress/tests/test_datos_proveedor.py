@@ -93,19 +93,21 @@ def test_alta_con_el_perfil_completo(client):
         delete_supplier("PCO260101AB1")
 
 
-def test_alta_de_persona_fisica_sin_fecha_de_constitucion(client):
+def test_alta_de_persona_fisica_sin_fecha_ni_representante_legal(client):
     login(client)
     try:
-        # La fecha capturada no se guarda: no aplica a persona fisica.
+        # Ni la fecha ni el representante legal capturados se guardan: no aplican a persona fisica.
         response = create_supplier(client, rfc="PCO260101FIS", supplier_type="PERSONA_FISICA", website="")
         assert response.status_code == 303
         supplier = supplier_by_rfc("PCO260101FIS")
         assert (supplier.incorporation_date, supplier.website) == (None, None)
-        assert supplier.legal_rep_name == "Ana Martinez Ruiz"
+        assert (supplier.legal_rep_name, supplier.legal_rep_phone) == (None, None)
         page = html.unescape(client.get(f"/suppliers/{supplier.id}").text)
         assert "<dt>Fecha de constitución</dt><dd>No aplica</dd>" in page
-        assert 'name="incorporation_date"' not in page
-        assert "el representante legal puede ser la misma persona" in page
+        assert "<dt>Representante legal</dt><dd>No aplica</dd>" in page
+        assert "Persona física (con actividad empresarial)" in page
+        for name in ("incorporation_date", "legal_rep_name", "legal_rep_phone"):
+            assert f'name="{name}"' not in page
     finally:
         delete_supplier("PCO260101FIS")
 
@@ -115,11 +117,9 @@ def test_alta_de_persona_fisica_sin_fecha_de_constitucion(client):
     [
         ({"phone": ""}, "Telefono: es obligatorio"),
         ({"phone": "55-ABC"}, "Telefono: debe tener de 7 a 30 caracteres"),
-        ({"legal_rep_name": ""}, "Nombre del representante legal: es obligatorio"),
-        (
-            {"supplier_type": "PERSONA_FISICA", "legal_rep_phone": ""},
-            "Telefono del representante legal: es obligatorio",
-        ),
+        ({"legal_rep_name": ""}, "Nombre del representante legal: es obligatorio para persona moral"),
+        ({"legal_rep_phone": ""}, "Telefono del representante legal: es obligatorio para persona moral"),
+        ({"legal_rep_name": "A"}, "Nombre del representante legal: debe tener de 2 a 150 caracteres"),
         ({"bank_information": "C" * 256}, "Informacion bancaria: es demasiado largo"),
         ({"incorporation_date": ""}, "Fecha de constitucion: es obligatorio para persona moral"),
         ({"incorporation_date": "2999-01-01"}, "Fecha de constitucion: debe estar entre 1900 y hoy"),
@@ -258,6 +258,8 @@ def conditional_control(page: str, name: str) -> tuple[str, str, str] | None:
         ("foreign_tax_id", ("origin", "INTERNATIONAL")),
         ("country", ("origin", "INTERNATIONAL")),
         ("incorporation_date", ("supplier_type", "PERSONA_MORAL")),
+        ("legal_rep_name", ("supplier_type", "PERSONA_MORAL")),
+        ("legal_rep_phone", ("supplier_type", "PERSONA_MORAL")),
     ],
 )
 def test_alta_declara_los_campos_condicionados(client, name, rule):
@@ -273,20 +275,27 @@ def test_alta_sin_dependencias_en_los_demas_campos(client):
     page = client.get("/suppliers").text
     assert "/static/js/supplier_form.js" in page
     always = ("origin", "business_name", "supplier_type", "email", "phone", "classification", "main_activity")
-    always += ("website", "contact_name", "contact_phone", "legal_rep_name", "legal_rep_phone", "bank_information")
+    always += ("website", "contact_name", "contact_phone", "bank_information")
     for name in (*always, "confidentiality_agreement", "economic_proposal"):
         assert conditional_control(page, name) is None, name
-    hint = 'data-depends-on="supplier_type" data-applies-when="PERSONA_FISICA">En persona física, el representante'
-    assert hint in html.unescape(page)
+    page = html.unescape(page)
+    assert "La fecha de constitución y el representante legal solo aplican a persona moral" in page
+    assert '<option value="PERSONA_FISICA">Persona física (con actividad empresarial)</option>' in page
 
 
 def test_alta_sin_los_campos_que_no_aplican(client):
     """El navegador no envia los campos deshabilitados: el pais del nacional es MX y la persona fisica no necesita
-    fecha de constitucion."""
+    fecha de constitucion ni representante legal."""
     login(client)
     try:
         response = create_supplier(
-            client, origin="NATIONAL", rfc="PCO260101PAY", supplier_type="PERSONA_FISICA", incorporation_date=""
+            client,
+            origin="NATIONAL",
+            rfc="PCO260101PAY",
+            supplier_type="PERSONA_FISICA",
+            incorporation_date="",
+            legal_rep_name="",
+            legal_rep_phone="",
         )
         assert response.status_code == 303
         supplier = supplier_by_rfc("PCO260101PAY")
@@ -370,7 +379,7 @@ def test_edicion_invalida_conserva_lo_capturado(client, registered_suppliers):
     response = edit_supplier(client, supplier.id, **{**form, "contact_name": "Contacto Capturado"})
     assert response.status_code == 400
     page = html.unescape(response.text)
-    assert "Telefono del representante legal: es obligatorio" in page
+    assert "Telefono del representante legal: es obligatorio para persona moral" in page
     assert 'value="Contacto Capturado"' in page
     assert supplier_by_rfc(supplier.rfc).contact_name is None
     assert updates(supplier.id) == []

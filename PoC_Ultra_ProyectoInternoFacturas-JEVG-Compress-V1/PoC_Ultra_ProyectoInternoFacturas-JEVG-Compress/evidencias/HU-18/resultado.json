@@ -1,10 +1,10 @@
 {
   "id": "HU-18",
-  "run": "RMUVVRQW1",
-  "inicio": "2026-10-05T23:29:33.407Z",
-  "fin": "2026-10-05T23:29:36.634Z",
-  "estado": "PASS",
-  "bloqueo": null,
+  "run": "RMUY9TNYO",
+  "inicio": "2026-10-07T15:39:02.270Z",
+  "fin": "2026-10-07T15:39:02.272Z",
+  "estado": "BLOCKED",
+  "bloqueo": "Depende de HU-16, que no dejó el dato «hu16.enviada» (resultado de HU-16: BLOCKED).",
   "notas": [],
   "prueba": {
     "titulo": "HU-18 · Consulta de facturas por PMO",
@@ -12,106 +12,10 @@
   },
   "escenarios": [
     {
-      "nombre": "Bandeja por omisión: facturas \"Enviada\", la que más ha esperado primero",
-      "estado": "PASS",
-      "pasos": [
-        {
-          "paso": "El PMO abre \"Facturas\"",
-          "esperado": "Se muestra la bandeja de revisión con sólo facturas \"Enviada\", con proveedor, folio y número, origen, proyecto, fecha de envío, monto, score y estatus, ordenadas de la más antigua a la más reciente.",
-          "obtenido": "18 facturas en la página, todas \"Enviada\"; columnas: PROVEEDOR | FOLIO / FACTURA | ORIGEN | PROYECTO | ENVÍO | MONTO | SCORE | ESTADO; aviso \"Bandeja de revisión: facturas enviadas, las que más han esperado primero.\".",
-          "estado": "PASS",
-          "evidencias": [
-            {
-              "archivo": "HU-18/01-bandeja-enviadas.png",
-              "descripcion": "Bandeja del PMO: facturas \"Enviada\" con sus datos principales, la más antigua primero.",
-              "tipo": "aplicacion"
-            }
-          ]
-        },
-        {
-          "paso": "Buscar en la bandeja las facturas de la corrida (\"QA-RMUVVRQW1\")",
-          "esperado": "QA-RMUVVRQW1-N1 (enviada primero, en HU-13) aparece antes que QA-RMUVVRQW1-I1 (enviada después, en HU-16); la factura cancelada QA-RMUVVRQW1-N2 no aparece.",
-          "obtenido": "Orden: QA-RMUVVRQW1-N1 → QA-RMUVVRQW1-I1; QA-RMUVVRQW1-N2 no aparece.",
-          "estado": "PASS",
-          "evidencias": [
-            {
-              "archivo": "HU-18/02-bandeja-orden-envio.png",
-              "descripcion": "Bandeja filtrada por \"QA-RMUVVRQW1\": orden por fecha de envío y sin la factura cancelada.",
-              "tipo": "aplicacion"
-            }
-          ]
-        }
-      ]
-    },
-    {
-      "nombre": "Filtro por origen del proveedor",
-      "estado": "PASS",
-      "pasos": [
-        {
-          "paso": "Elegir el origen \"Internacional\" y filtrar (búsqueda \"QA-RMUVVRQW1\")",
-          "esperado": "Sólo se listan facturas de proveedores internacionales.",
-          "obtenido": "1 factura(s), todas de origen \"Internacional\", incluida QA-RMUVVRQW1-I1.",
-          "estado": "PASS",
-          "evidencias": [
-            {
-              "archivo": "HU-18/03-filtro-internacional.png",
-              "descripcion": "Bandeja filtrada por origen \"Internacional\".",
-              "tipo": "aplicacion"
-            }
-          ]
-        },
-        {
-          "paso": "Elegir el origen \"Nacional\" y filtrar (búsqueda \"QA-RMUVVRQW1\")",
-          "esperado": "Sólo se listan facturas de proveedores nacionales.",
-          "obtenido": "1 factura(s), todas de origen \"Nacional\".",
-          "estado": "PASS",
-          "evidencias": [
-            {
-              "archivo": "HU-18/04-filtro-nacional.png",
-              "descripcion": "Bandeja filtrada por origen \"Nacional\".",
-              "tipo": "aplicacion"
-            }
-          ]
-        }
-      ]
-    },
-    {
-      "nombre": "Consulta de todas las facturas registradas con su estatus",
-      "estado": "PASS",
-      "pasos": [
-        {
-          "paso": "Elegir \"Todos los estados\", \"Todos los orígenes\" y buscar \"QA-RMUVVRQW1\"",
-          "esperado": "Se listan las facturas de la corrida de ambos proveedores, cada una con su estatus actual (incluida la Cancelada).",
-          "obtenido": "Listado: FAC-2026-00082 QA-RMUVVRQW1-I2 (Internacional): Borrador; FAC-2026-00081 QA-RMUVVRQW1-I1 (Internacional): Enviada; FAC-2026-00080 QA-RMUVVRQW1-N3 (Nacional): Cargada; FAC-2026-00079 QA-RMUVVRQW1-N2 (Nacional): Cancelada; FAC-2026-00078 QA-RMUVVRQW1-N1 (Nacional): Enviada; FAC-2026-00077 QA-RMUVVRQW1-H08 (Nacional): Cancelada; FAC-2026-00076 QA-RMUVVRQW1-H05 (Nacional): Cancelada.",
-          "estado": "PASS",
-          "evidencias": [
-            {
-              "archivo": "HU-18/05-todas-las-facturas.png",
-              "descripcion": "Todas las facturas de la corrida (búsqueda \"QA-RMUVVRQW1\") con su estatus.",
-              "tipo": "aplicacion"
-            }
-          ]
-        }
-      ]
-    },
-    {
-      "nombre": "Selección de una factura para su revisión",
-      "estado": "PASS",
-      "pasos": [
-        {
-          "paso": "Seleccionar QA-RMUVVRQW1-N1 en el listado",
-          "esperado": "Se abre el detalle de la factura con el botón \"Decidir\".",
-          "obtenido": "Detalle /invoices/78 (\"FAC-2026-00078\", estatus \"Enviada\") con el botón \"Decidir\".",
-          "estado": "PASS",
-          "evidencias": [
-            {
-              "archivo": "HU-18/06-detalle-seleccionado.png",
-              "descripcion": "Detalle de QA-RMUVVRQW1-N1 abierto desde la bandeja, con \"Decidir\".",
-              "tipo": "aplicacion"
-            }
-          ]
-        }
-      ]
+      "nombre": "Precondiciones",
+      "estado": "BLOCKED",
+      "motivo": "Depende de HU-16, que no dejó el dato «hu16.enviada» (resultado de HU-16: BLOCKED).",
+      "pasos": []
     }
   ]
 }

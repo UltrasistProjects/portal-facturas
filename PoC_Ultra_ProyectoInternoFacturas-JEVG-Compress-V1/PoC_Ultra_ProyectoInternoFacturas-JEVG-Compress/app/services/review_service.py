@@ -37,8 +37,9 @@ DECISIONS = {
 }
 DECIDED = frozenset(DECISIONS.values())
 WITH_OBSERVATIONS = {InvoiceStatus.REJECTED, InvoiceStatus.REQUIRES_CORRECTION}
-# Correo de cada estatus (D4): Autorizada y Cancelada van al buzon de Recepcion de Facturas; Rechazada, Observaciones
-# y Pagada, al proveedor. El Complemento de pago adjuntado (payment_service) no es el correo de un estatus.
+# Correo de cada estatus (D4): Autorizada y Cancelada van al buzon de Recepcion de Facturas (Autorizada con copia al
+# proveedor); Rechazada, Observaciones y Pagada, al proveedor. notification_service resuelve los destinatarios con el
+# correo del proveedor. El Complemento de pago adjuntado (payment_service) no es el correo de un estatus.
 EVENTS = {
     InvoiceStatus.ACCEPTED: NotificationEvent.INVOICE_AUTHORIZED,
     InvoiceStatus.REJECTED: NotificationEvent.INVOICE_REJECTED,
@@ -46,7 +47,6 @@ EVENTS = {
     InvoiceStatus.CANCELLED: NotificationEvent.INVOICE_CANCELLED,
     InvoiceStatus.PAID: NotificationEvent.INVOICE_PAID,
 }
-MAILBOX_EVENTS = {NotificationEvent.INVOICE_AUTHORIZED, NotificationEvent.INVOICE_CANCELLED}
 
 
 def _decision(value: str) -> ReviewDecision:
@@ -108,7 +108,7 @@ def send_notification(db: Session, invoice: Invoice, observations: str | None, u
         return notification_service.notify(
             db,
             event,
-            supplier_email=None if event in MAILBOX_EVENTS else invoice.supplier.email,
+            supplier_email=invoice.supplier.email,
             entity=ENTITY,
             entity_id=invoice.id,
             user_id=user_id,

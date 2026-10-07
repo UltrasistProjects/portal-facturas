@@ -8,6 +8,7 @@ from app.core.constants import (
     SUPPLIER_CLASSIFICATION_LABELS,
     SUPPLIER_ORIGIN_LABELS,
     SUPPLIER_STATUS_LABELS,
+    SUPPLIER_TYPE_LABELS,
 )
 from app.core.security import csrf_token
 from app.core.timeutils import to_business
@@ -18,6 +19,7 @@ templates.env.globals.update(
     supplier_status_labels=SUPPLIER_STATUS_LABELS,
     supplier_origin_labels=SUPPLIER_ORIGIN_LABELS,
     supplier_classification_labels=SUPPLIER_CLASSIFICATION_LABELS,
+    supplier_type_labels=SUPPLIER_TYPE_LABELS,
     csrf_token=csrf_token,
 )
 

@@ -129,8 +129,8 @@ class UserCreate(BaseModel):
 class SupplierProfile(BaseModel):
     """Datos del proveedor que capturan el alta individual y la edicion. La base de datos los admite vacios (proveedores
     previos y carga masiva); aqui se exigen los obligatorios. Los campos vacios del formulario no se envian: faltan, y
-    una casilla sin marcar es falso. `supplier_type` va primero porque decide si aplica la fecha de constitucion; la
-    edicion lo toma del proveedor. En persona fisica el representante legal puede ser la misma persona."""
+    una casilla sin marcar es falso. `supplier_type` va primero porque decide si aplican la fecha de constitucion y el
+    representante legal, que solo se piden a la persona moral; la edicion lo toma del proveedor."""
 
     model_config = ConfigDict(str_strip_whitespace=True)
     supplier_type: SupplierType
@@ -140,8 +140,9 @@ class SupplierProfile(BaseModel):
     main_activity: str = Field(max_length=10)
     incorporation_date: date | None = Field(None, validate_default=True)
     website: str | None = None
-    legal_rep_name: str = Field(min_length=2, max_length=150)
-    legal_rep_phone: str
+    # Solo de la persona moral: a la persona fisica no se le piden y no se guardan.
+    legal_rep_name: str | None = Field(None, validate_default=True)
+    legal_rep_phone: str | None = Field(None, validate_default=True)
     contact_name: str = Field(min_length=2, max_length=150)
     contact_phone: str
     # Opcional al registrar; el pago, que ocurre fuera del portal, la requiere.
@@ -179,11 +180,29 @@ class SupplierProfile(BaseModel):
             raise ValueError("no es una direccion web valida (http o https, hasta 255 caracteres)")
         return url
 
-    @field_validator("phone", "legal_rep_phone", "contact_phone")
+    @field_validator("phone", "contact_phone")
     @classmethod
     def phone_format(cls, value: str) -> str:
         if not re.fullmatch(PHONE_FORMAT, value):
             raise ValueError(PHONE_FORMAT_MESSAGE)
+        return value
+
+    @field_validator("legal_rep_name", "legal_rep_phone")
+    @classmethod
+    def legal_representative(cls, value: str | None, info: ValidationInfo) -> str | None:
+        """Obligatorio para persona moral; no aplica a persona fisica, que no lo guarda."""
+        supplier_type = info.data.get("supplier_type")
+        if supplier_type == SupplierType.PERSONA_FISICA:
+            return None
+        if not value:
+            if supplier_type == SupplierType.PERSONA_MORAL:
+                raise ValueError("es obligatorio para persona moral")
+            return None
+        if info.field_name == "legal_rep_phone":
+            if not re.fullmatch(PHONE_FORMAT, value):
+                raise ValueError(PHONE_FORMAT_MESSAGE)
+        elif not 2 <= len(value) <= 150:
+            raise ValueError("debe tener de 2 a 150 caracteres")
         return value
 
 
@@ -281,9 +300,30 @@ class ContractAmendmentCreate(BaseModel):
     reason: str = Field(min_length=3, max_length=500)
 
 
+# Periodo de servicio capturado: mes y año en cualquier orden comun (8/2026, 08-2026, 08 / 2026, 2026-08). Se guarda
+# siempre como MM/AAAA, el mismo formato con el que CON-003 lo compara contra la vigencia del contrato.
+PERIOD_MONTH_YEAR = re.compile(r"(\d{1,2})\s*[/.\-]\s*(\d{4})")
+PERIOD_YEAR_MONTH = re.compile(r"(\d{4})\s*[/.\-]\s*(\d{1,2})")
+MSG_PERIOD = "use el formato MM/AAAA, por ejemplo 08/2026"
+
+
+def normalize_period(value: str) -> str:
+    """Periodo en MM/AAAA; ValueError si no es un mes valido."""
+    text = (value or "").strip()
+    if match := PERIOD_MONTH_YEAR.fullmatch(text):
+        month, year = match.groups()
+    elif match := PERIOD_YEAR_MONTH.fullmatch(text):
+        year, month = match.groups()
+    else:
+        raise ValueError(MSG_PERIOD)
+    if not 1 <= int(month) <= 12:
+        raise ValueError("el mes debe estar entre 01 y 12")
+    return f"{int(month):02d}/{year}"
+
+
 class InvoiceCreate(BaseModel):
     invoice_number: str = Field(min_length=1, max_length=100)
-    service_period: str = Field(pattern=r"^(0[1-9]|1[0-2])/\d{4}$")
+    service_period: str
     project_name: str = Field(min_length=2, max_length=200)
     purchase_order_number: str | None = None
     project_leader: str | None = None
@@ -292,6 +332,11 @@ class InvoiceCreate(BaseModel):
     total: Decimal = Decimal("0")
     currency: str = "MXN"
     model_config = ConfigDict(str_strip_whitespace=True)
+
+    @field_validator("service_period")
+    @classmethod
+    def month_and_year(cls, value: str) -> str:
+        return normalize_period(value)
 
 
 def _amount_text(value):

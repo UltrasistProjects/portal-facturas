@@ -148,33 +148,35 @@ test('HU-20 · Cambio de estatus de factura', async ({ browser }, testInfo) => {
       { requiere: ['Precondición: el proveedor envía dos facturas más para decidir'] },
     );
 
-    await hu.escenario('Autorizar: confirmación y correo a "Recepción de Facturas" (RN-HU20-02)', async () => {
+    await hu.escenario('Autorizar: confirmación y correo a "Recepción de Facturas" con copia al proveedor (RN-HU20-02)', async () => {
       let desde = '';
-      await hu.paso(pmo, `En ${n1.numero}, pulsar "Autorizar"`, 'Un modal pide confirmar la autorización avisando que se notificará a Recepción de Facturas.', async () => {
+      await hu.paso(pmo, `En ${n1.numero}, pulsar "Autorizar"`, 'Un modal pide confirmar la autorización avisando que se notificará a Recepción de Facturas con copia al proveedor.', async () => {
         await abrirDecision(pmo, n1.id);
         await pmo.locator('#decision').getByRole('button', { name: 'Autorizar' }).click();
         await expect(pmo.locator('#decision-confirm')).toBeVisible();
-        await expect(pmo.locator('#decision-confirm-text')).toHaveText(`¿Autorizar la factura ${n1.numero} para su pago? Se notificará a Recepción de Facturas.`);
+        await expect(pmo.locator('#decision-confirm-text')).toHaveText(`¿Autorizar la factura ${n1.numero} para su pago? Se notificará a Recepción de Facturas con copia al proveedor.`);
         await hu.captura(pmo, 'modal-autorizar', 'Modal de confirmación de la autorización.');
         return `Modal: "${await texto(pmo, '#decision-confirm-text')}".`;
       });
-      await hu.paso(pmo, 'Confirmar con "Autorizar"', `La factura pasa a "Autorizada" y el correo se envía a Recepción de Facturas (${recepcion.join(', ')}).`, async () => {
+      await hu.paso(pmo, 'Confirmar con "Autorizar"', `La factura pasa a "Autorizada" y el correo se envía a Recepción de Facturas (${recepcion.join(', ')}) con copia a ${CORREO_PROVEEDOR}.`, async () => {
         desde = new Date(Date.now() - 2000).toISOString();
         await clicNavegando(pmo, pmo.locator('#decision-confirm-accept'));
         await expect(pmo.locator('.page-heading .status')).toHaveText('Autorizada');
         const resultado = await texto(pmo, '#decision-result');
         for (const destino of recepcion) expect(resultado).toContain(destino);
-        await hu.captura(pmo, 'factura-autorizada', `${n1.numero} "Autorizada": correo enviado a Recepción de Facturas.`, { enfocar: pmo.locator('.page-heading') });
+        expect(resultado).toContain(`con copia a ${CORREO_PROVEEDOR}`);
+        await hu.captura(pmo, 'factura-autorizada', `${n1.numero} "Autorizada": correo enviado a Recepción de Facturas con copia al proveedor.`, { enfocar: pmo.locator('.page-heading') });
         return `Estatus "${await texto(pmo, '.page-heading .status')}"; "${resultado}".`;
       });
-      await hu.paso(null, 'Abrir el correo "Autorizada" generado', 'Indica que la factura número X del proveedor Y por el monto Z ha sido autorizada para su pago.', async () => {
+      await hu.paso(null, 'Abrir el correo "Autorizada" generado', 'Va a Recepción de Facturas con copia (Cc) al proveedor e indica que la factura número X del proveedor Y por el monto Z ha sido autorizada para su pago.', async () => {
         const correo = buscarCorreo(recepcion[0], `Factura ${n1.numero} autorizada para pago`, desde) as Correo;
         expect(correo, 'No se encontró el correo "Autorizada"').not.toBeNull();
         expect(correo.para.sort()).toEqual([...recepcion].sort());
+        expect(correo.cc).toContain(CORREO_PROVEEDOR);
         const frase = `La factura número ${n1.numero} del proveedor ${PROVEEDOR} por el monto $116,000.00 MXN ha sido Autorizada para su pago.`;
         expect(correo.texto).toContain(frase);
-        await hu.capturaCorreo(correo, 'correo-autorizada', `Correo "Autorizada" a Recepción de Facturas para ${n1.numero}.`);
-        return `Para ${correo.para.join(', ')}; "${frase}"`;
+        await hu.capturaCorreo(correo, 'correo-autorizada', `Correo "Autorizada" a Recepción de Facturas con copia al proveedor para ${n1.numero}.`);
+        return `Para ${correo.para.join(', ')}; Cc ${correo.cc.join(', ')}; "${frase}"`;
       });
       guardarDato('hu20.autorizada', n1);
     });

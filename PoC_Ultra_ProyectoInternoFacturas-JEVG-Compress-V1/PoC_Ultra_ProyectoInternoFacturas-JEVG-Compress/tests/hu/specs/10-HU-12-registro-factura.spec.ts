@@ -32,10 +32,10 @@ test('HU-12 · Registro de factura', async ({ browser }, testInfo) => {
       );
       await hu.paso(
         proveedor,
-        'Capturar el periodo con formato inválido ("2026-08") y continuar',
+        'Capturar el periodo sin mes ni año reconocibles ("agosto 2026") y continuar',
         'El formulario no se envía y muestra junto al campo "Use el formato MM/AAAA, por ejemplo 08/2026."',
         async () => {
-          await llenarAltaFactura(proveedor, { numero, periodo: '2026-08' });
+          await llenarAltaFactura(proveedor, { numero, periodo: 'agosto 2026' });
           await proveedor.getByRole('button', { name: /Continuar a documentos/ }).click();
           const error = proveedor.locator('.invalid-feedback').filter({ hasText: /\S/ }).first();
           await expect(error).toHaveText('Use el formato MM/AAAA, por ejemplo 08/2026.');
