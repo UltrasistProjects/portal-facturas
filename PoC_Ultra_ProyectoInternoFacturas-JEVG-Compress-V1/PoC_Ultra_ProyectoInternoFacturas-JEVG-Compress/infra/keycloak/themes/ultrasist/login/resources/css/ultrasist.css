@@ -1,0 +1,332 @@
+/*
+ * Tema de login "ultrasist" de Keycloak: el diseño del login anterior del portal (app/templates/auth/login.html y sus
+ * reglas de app/static/css/app.css, eliminados en add-keycloak-authentication). Se carga después de Bootstrap 5.3.3.
+ */
+
+/* Tokens y ajustes de Bootstrap del portal (app/static/css/app.css) */
+:root {
+  --navy: #12243a;
+  --navy2: #18334f;
+  --blue: #1769e0;
+  --ink: #152235;
+  --muted: #697789;
+  --line: #e3e8ef;
+  --bg: #f4f6f9;
+  --green: #16845b;
+  --red: #cc3b3b;
+  --amber: #b76b00;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body.login-body {
+  margin: 0;
+  background: #fff;
+  color: var(--ink);
+  font-family: Inter, "Segoe UI", Arial, sans-serif;
+  font-size: 14px;
+}
+
+a {
+  color: var(--blue);
+}
+
+.btn {
+  border-radius: 7px;
+  font-weight: 600;
+}
+
+.btn-primary {
+  background: var(--blue);
+  border-color: var(--blue);
+}
+
+.form-control {
+  border-color: #cbd4df;
+  min-height: 42px;
+}
+
+.form-control[aria-invalid="true"] {
+  border-color: var(--red);
+}
+
+.btn-light {
+  border-color: #cbd4df;
+}
+
+.alert {
+  border-radius: 8px;
+}
+
+/* Layout: panel de marca y tarjeta del formulario */
+.login-page {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: 1.1fr 0.9fr;
+  background: #fff;
+}
+
+.login-panel {
+  background: var(--navy);
+  color: #fff;
+  padding: 55px 7vw;
+  display: flex;
+  flex-direction: column;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  color: #fff;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.brand small {
+  display: block;
+  color: #93abc4;
+  font-size: 10px;
+  letter-spacing: 1.3px;
+  text-transform: uppercase;
+}
+
+.brand-logo {
+  width: 72px;
+  max-height: 38px;
+  object-fit: contain;
+  display: block;
+  flex: 0 0 auto;
+}
+
+.login-copy {
+  margin: auto 0;
+  max-width: 580px;
+}
+
+.eyebrow {
+  font-size: 10px;
+  color: var(--blue);
+  font-weight: 800;
+  letter-spacing: 1.4px;
+}
+
+.login-headline {
+  font-size: clamp(32px, 3.6vw, 47px);
+  font-weight: 500;
+  line-height: 1.12;
+  margin: 14px 0 20px;
+}
+
+.login-copy .login-description {
+  font-size: 17px;
+  color: #b7c8d9;
+  line-height: 1.7;
+}
+
+.principle-card {
+  margin-top: 38px;
+  border: 1px solid #36516c;
+  background: #172e46;
+  border-radius: 10px;
+  padding: 18px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+  color: #d9e8f7;
+}
+
+.principle-card i {
+  color: #68aafa;
+}
+
+.login-form-wrap {
+  display: grid;
+  place-items: center;
+  padding: 35px;
+}
+
+.login-card {
+  width: min(410px, 100%);
+  display: grid;
+  gap: 12px;
+}
+
+.login-mobile-brand {
+  display: none;
+}
+
+#kc-page-title {
+  font-size: 27px;
+  font-weight: 500;
+  margin: 0;
+}
+
+/* Mensajes de Keycloak */
+.login-alert {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 0;
+}
+
+.login-alert-icon {
+  line-height: 1.5;
+}
+
+.invalid-feedback {
+  font-size: 13px;
+}
+
+#kc-info,
+.instruction {
+  color: var(--muted);
+}
+
+#kc-info {
+  font-size: 13px;
+}
+
+/* Usuario ya identificado (p. ej., cambio de contraseña tras iniciar sesión) */
+#kc-username {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 650;
+}
+
+#kc-username label {
+  overflow-wrap: anywhere;
+}
+
+.kc-tooltip-text {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* Formularios */
+.login-form,
+.login-card form {
+  display: grid;
+  gap: 14px;
+}
+
+.form-group {
+  display: grid;
+  gap: 6px;
+}
+
+.login-card .form-label {
+  margin: 0;
+  font-weight: 650;
+}
+
+.password-toggle {
+  border: 1px solid #cbd4df;
+  background: #fff;
+  color: var(--muted);
+}
+
+.password-toggle:hover,
+.password-toggle:focus-visible {
+  color: var(--ink);
+  background: var(--bg);
+}
+
+.form-settings,
+.form-options-wrapper {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Confirmación de cierre de sesión (base/login/logout-confirm.ftl) */
+#kc-logout-confirm,
+#kc-logout-confirm .form-actions {
+  display: grid;
+  gap: 12px;
+}
+
+/* Casilla de base/login/password-commons.ftl ("Cerrar sesión en otros dispositivos") */
+.checkbox label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.form-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.form-buttons .btn {
+  flex: 1 1 auto;
+}
+
+.password-help {
+  padding: 10px 12px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.password-help-title {
+  margin: 0 0 4px;
+  font-weight: 650;
+  color: var(--ink);
+}
+
+.password-help ul {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.password-help-note {
+  margin: 4px 0 0;
+}
+
+/* Pantallas angostas: el panel de marca se reduce a un encabezado con el logo */
+@media (max-width: 700px) {
+  .login-page {
+    grid-template-columns: 1fr;
+  }
+
+  .login-panel {
+    display: none;
+  }
+
+  .login-form-wrap {
+    place-items: start center;
+    padding: 24px 16px;
+  }
+
+  .login-mobile-brand {
+    display: flex;
+    margin-bottom: 8px;
+    padding-bottom: 14px;
+    border-bottom: 1px solid var(--line);
+    color: var(--ink);
+  }
+
+  .login-mobile-brand small {
+    color: var(--muted);
+  }
+}

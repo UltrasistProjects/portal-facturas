@@ -1,0 +1,276 @@
+{
+  "proyecto": "movil",
+  "viewport": {
+    "width": 390,
+    "height": 844
+  },
+  "usuario": "pmo.tema.mux0vrdamov@ultrasist-qa.example",
+  "eventosKeycloak": [
+    {
+      "hora": "2026-10-06T18:39:08.045Z",
+      "tipo": "UPDATE_PASSWORD_ERROR",
+      "error": "password_rejected",
+      "usuario": "pmo.tema.mux0vrdamov@ultrasist-qa.example",
+      "idUsuario": "5e9d1fc6-36e3-4966-bf6f-b3610beb2078",
+      "motivo": "invalidPasswordMinSpecialCharsMessage"
+    },
+    {
+      "hora": "2026-10-06T18:39:08.375Z",
+      "tipo": "UPDATE_PASSWORD_ERROR",
+      "error": "password_rejected",
+      "usuario": "pmo.tema.mux0vrdamov@ultrasist-qa.example",
+      "idUsuario": "5e9d1fc6-36e3-4966-bf6f-b3610beb2078",
+      "motivo": "invalidPasswordBlacklistedMessage"
+    },
+    {
+      "hora": "2026-10-06T18:39:08.733Z",
+      "tipo": "UPDATE_PASSWORD",
+      "error": null,
+      "usuario": "pmo.tema.mux0vrdamov@ultrasist-qa.example",
+      "idUsuario": "5e9d1fc6-36e3-4966-bf6f-b3610beb2078",
+      "motivo": null
+    },
+    {
+      "hora": "2026-10-06T18:39:10.013Z",
+      "tipo": "RESET_PASSWORD_ERROR",
+      "error": "user_not_found",
+      "usuario": "noexiste.mux0vrdamov@ultrasist-qa.example",
+      "idUsuario": null,
+      "motivo": null
+    },
+    {
+      "hora": "2026-10-06T18:39:15.557Z",
+      "tipo": "SEND_RESET_PASSWORD",
+      "error": null,
+      "usuario": "pmo.tema.mux0vrdamov@ultrasist-qa.example",
+      "idUsuario": "5e9d1fc6-36e3-4966-bf6f-b3610beb2078",
+      "motivo": null
+    },
+    {
+      "hora": "2026-10-06T18:39:16.195Z",
+      "tipo": "UPDATE_PASSWORD_ERROR",
+      "error": "password_rejected",
+      "usuario": "pmo.tema.mux0vrdamov@ultrasist-qa.example",
+      "idUsuario": "5e9d1fc6-36e3-4966-bf6f-b3610beb2078",
+      "motivo": "invalidPasswordMinSpecialCharsMessage"
+    },
+    {
+      "hora": "2026-10-06T18:39:16.538Z",
+      "tipo": "UPDATE_PASSWORD",
+      "error": null,
+      "usuario": "pmo.tema.mux0vrdamov@ultrasist-qa.example",
+      "idUsuario": "5e9d1fc6-36e3-4966-bf6f-b3610beb2078",
+      "motivo": null
+    },
+    {
+      "hora": "2026-10-06T18:39:16.936Z",
+      "tipo": "RESET_PASSWORD_ERROR",
+      "error": "expired_code",
+      "usuario": null,
+      "idUsuario": "5e9d1fc6-36e3-4966-bf6f-b3610beb2078",
+      "motivo": "expiredActionMessage"
+    },
+    {
+      "hora": "2026-10-06T18:39:19.244Z",
+      "tipo": "RESET_PASSWORD_ERROR",
+      "error": "user_disabled",
+      "usuario": "pmo.tema.mux0vrdamov@ultrasist-qa.example",
+      "idUsuario": "5e9d1fc6-36e3-4966-bf6f-b3610beb2078",
+      "motivo": null
+    }
+  ],
+  "paginas": [
+    {
+      "captura": "01-inicio-de-sesion.png",
+      "pagina": "/realms/ultrasist-portal/protocol/openid-connect/auth",
+      "titulo": "Iniciar sesión · Portal de Proveedores ULTRASIST",
+      "hojas": [
+        "http://127.0.0.1:58080/resources/u83sx/login/ultrasist/vendor/bootstrap.min.css",
+        "http://127.0.0.1:58080/resources/u83sx/login/ultrasist/vendor/bootstrap-icons.min.css",
+        "http://127.0.0.1:58080/resources/u83sx/login/ultrasist/css/ultrasist.css"
+      ],
+      "anchoDocumento": 390,
+      "anchoVentana": 390
+    },
+    {
+      "captura": "02-credenciales-invalidas.png",
+      "pagina": "/realms/ultrasist-portal/login-actions/authenticate",
+      "titulo": "Iniciar sesión · Portal de Proveedores ULTRASIST",
+      "hojas": [
+        "http://127.0.0.1:58080/resources/u83sx/login/ultrasist/vendor/bootstrap.min.css",
+        "http://127.0.0.1:58080/resources/u83sx/login/ultrasist/vendor/bootstrap-icons.min.css",
+        "http://127.0.0.1:58080/resources/u83sx/login/ultrasist/css/ultrasist.css"
+      ],
+      "anchoDocumento": 390,
+      "anchoVentana": 390
+    },
+    {
+      "captura": "03-primer-acceso.png",
+      "pagina": "/realms/ultrasist-portal/login-actions/required-action",
+      "titulo": "Iniciar sesión · Portal de Proveedores ULTRASIST",
+      "hojas": [
+        "http://127.0.0.1:58080/resources/u83sx/login/ultrasist/vendor/bootstrap.min.css",
+        "http://127.0.0.1:58080/resources/u83sx/login/ultrasist/vendor/bootstrap-icons.min.css",
+        "http://127.0.0.1:58080/resources/u83sx/login/ultrasist/css/ultrasist.css"
+      ],
+      "anchoDocumento": 390,
+      "anchoVentana": 390
+    },
+    {
+      "captura": "04-primer-acceso-error-de-politica.png",
+      "pagina": "/realms/ultrasist-portal/login-actions/required-action",
+      "titulo": "Iniciar sesión · Portal de Proveedores ULTRASIST",
+      "hojas": [
+        "http://127.0.0.1:58080/resources/u83sx/login/ultrasist/vendor/bootstrap.min.css",
+        "http://127.0.0.1:58080/resources/u83sx/login/ultrasist/vendor/bootstrap-icons.min.css",
+        "http://127.0.0.1:58080/resources/u83sx/login/ultrasist/css/ultrasist.css"
+      ],
+      "anchoDocumento": 390,
+      "anchoVentana": 390
+    },
+    {
+      "captura": "05-primer-acceso-contrasena-comun.png",
+      "pagina": "/realms/ultrasist-portal/login-actions/required-action",
+      "titulo": "Iniciar sesión · Portal de Proveedores ULTRASIST",
+      "hojas": [
+        "http://127.0.0.1:58080/resources/u83sx/login/ultrasist/vendor/bootstrap.min.css",
+        "http://127.0.0.1:58080/resources/u83sx/login/ultrasist/vendor/bootstrap-icons.min.css",
+        "http://127.0.0.1:58080/resources/u83sx/login/ultrasist/css/ultrasist.css"
+      ],
+      "anchoDocumento": 390,
+      "anchoVentana": 390
+    },
+    {
+      "captura": "07-cambio-voluntario.png",
+      "pagina": "/realms/ultrasist-portal/login-actions/required-action",
+      "titulo": "Iniciar sesión · Portal de Proveedores ULTRASIST",
+      "hojas": [
+        "http://127.0.0.1:58080/resources/u83sx/login/ultrasist/vendor/bootstrap.min.css",
+        "http://127.0.0.1:58080/resources/u83sx/login/ultrasist/vendor/bootstrap-icons.min.css",
+        "http://127.0.0.1:58080/resources/u83sx/login/ultrasist/css/ultrasist.css"
+      ],
+      "anchoDocumento": 390,
+      "anchoVentana": 390
+    },
+    {
+      "captura": "08-solicitud-de-restablecimiento.png",
+      "pagina": "/realms/ultrasist-portal/login-actions/reset-credentials",
+      "titulo": "Iniciar sesión · Portal de Proveedores ULTRASIST",
+      "hojas": [
+        "http://127.0.0.1:58080/resources/u83sx/login/ultrasist/vendor/bootstrap.min.css",
+        "http://127.0.0.1:58080/resources/u83sx/login/ultrasist/vendor/bootstrap-icons.min.css",
+        "http://127.0.0.1:58080/resources/u83sx/login/ultrasist/css/ultrasist.css"
+      ],
+      "anchoDocumento": 390,
+      "anchoVentana": 390
+    },
+    {
+      "captura": "09-confirmacion-correo-no-registrado.png",
+      "pagina": "/realms/ultrasist-portal/login-actions/authenticate",
+      "titulo": "Iniciar sesión · Portal de Proveedores ULTRASIST",
+      "hojas": [
+        "http://127.0.0.1:58080/resources/u83sx/login/ultrasist/vendor/bootstrap.min.css",
+        "http://127.0.0.1:58080/resources/u83sx/login/ultrasist/vendor/bootstrap-icons.min.css",
+        "http://127.0.0.1:58080/resources/u83sx/login/ultrasist/css/ultrasist.css"
+      ],
+      "anchoDocumento": 390,
+      "anchoVentana": 390
+    },
+    {
+      "captura": "10-confirmacion-correo-registrado.png",
+      "pagina": "/realms/ultrasist-portal/login-actions/authenticate",
+      "titulo": "Iniciar sesión · Portal de Proveedores ULTRASIST",
+      "hojas": [
+        "http://127.0.0.1:58080/resources/u83sx/login/ultrasist/vendor/bootstrap.min.css",
+        "http://127.0.0.1:58080/resources/u83sx/login/ultrasist/vendor/bootstrap-icons.min.css",
+        "http://127.0.0.1:58080/resources/u83sx/login/ultrasist/css/ultrasist.css"
+      ],
+      "anchoDocumento": 390,
+      "anchoVentana": 390
+    },
+    {
+      "captura": "12-nueva-contrasena-desde-el-correo.png",
+      "pagina": "/realms/ultrasist-portal/login-actions/required-action",
+      "titulo": "Iniciar sesión · Portal de Proveedores ULTRASIST",
+      "hojas": [
+        "http://127.0.0.1:58080/resources/u83sx/login/ultrasist/vendor/bootstrap.min.css",
+        "http://127.0.0.1:58080/resources/u83sx/login/ultrasist/vendor/bootstrap-icons.min.css",
+        "http://127.0.0.1:58080/resources/u83sx/login/ultrasist/css/ultrasist.css"
+      ],
+      "anchoDocumento": 390,
+      "anchoVentana": 390
+    },
+    {
+      "captura": "13-nueva-contrasena-error-de-politica.png",
+      "pagina": "/realms/ultrasist-portal/login-actions/required-action",
+      "titulo": "Iniciar sesión · Portal de Proveedores ULTRASIST",
+      "hojas": [
+        "http://127.0.0.1:58080/resources/u83sx/login/ultrasist/vendor/bootstrap.min.css",
+        "http://127.0.0.1:58080/resources/u83sx/login/ultrasist/vendor/bootstrap-icons.min.css",
+        "http://127.0.0.1:58080/resources/u83sx/login/ultrasist/css/ultrasist.css"
+      ],
+      "anchoDocumento": 390,
+      "anchoVentana": 390
+    },
+    {
+      "captura": "15-enlace-ya-usado.png",
+      "pagina": "/realms/ultrasist-portal/login-actions/action-token",
+      "titulo": "Iniciar sesión · Portal de Proveedores ULTRASIST",
+      "hojas": [
+        "http://127.0.0.1:58080/resources/u83sx/login/ultrasist/vendor/bootstrap.min.css",
+        "http://127.0.0.1:58080/resources/u83sx/login/ultrasist/vendor/bootstrap-icons.min.css",
+        "http://127.0.0.1:58080/resources/u83sx/login/ultrasist/css/ultrasist.css"
+      ],
+      "anchoDocumento": 390,
+      "anchoVentana": 390
+    },
+    {
+      "captura": "16-contrasena-anterior-rechazada.png",
+      "pagina": "/realms/ultrasist-portal/login-actions/authenticate",
+      "titulo": "Iniciar sesión · Portal de Proveedores ULTRASIST",
+      "hojas": [
+        "http://127.0.0.1:58080/resources/u83sx/login/ultrasist/vendor/bootstrap.min.css",
+        "http://127.0.0.1:58080/resources/u83sx/login/ultrasist/vendor/bootstrap-icons.min.css",
+        "http://127.0.0.1:58080/resources/u83sx/login/ultrasist/css/ultrasist.css"
+      ],
+      "anchoDocumento": 390,
+      "anchoVentana": 390
+    },
+    {
+      "captura": "18-confirmacion-de-cierre-de-sesion.png",
+      "pagina": "/realms/ultrasist-portal/protocol/openid-connect/logout",
+      "titulo": "Cerrar sesión",
+      "hojas": [
+        "http://127.0.0.1:58080/resources/u83sx/login/ultrasist/vendor/bootstrap.min.css",
+        "http://127.0.0.1:58080/resources/u83sx/login/ultrasist/vendor/bootstrap-icons.min.css",
+        "http://127.0.0.1:58080/resources/u83sx/login/ultrasist/css/ultrasist.css"
+      ],
+      "anchoDocumento": 390,
+      "anchoVentana": 390
+    },
+    {
+      "captura": "19-sesion-cerrada.png",
+      "pagina": "/realms/ultrasist-portal/protocol/openid-connect/logout/logout-confirm",
+      "titulo": "Iniciar sesión · Portal de Proveedores ULTRASIST",
+      "hojas": [
+        "http://127.0.0.1:58080/resources/u83sx/login/ultrasist/vendor/bootstrap.min.css",
+        "http://127.0.0.1:58080/resources/u83sx/login/ultrasist/vendor/bootstrap-icons.min.css",
+        "http://127.0.0.1:58080/resources/u83sx/login/ultrasist/css/ultrasist.css"
+      ],
+      "anchoDocumento": 390,
+      "anchoVentana": 390
+    },
+    {
+      "captura": "20-confirmacion-cuenta-deshabilitada.png",
+      "pagina": "/realms/ultrasist-portal/login-actions/authenticate",
+      "titulo": "Iniciar sesión · Portal de Proveedores ULTRASIST",
+      "hojas": [
+        "http://127.0.0.1:58080/resources/u83sx/login/ultrasist/vendor/bootstrap.min.css",
+        "http://127.0.0.1:58080/resources/u83sx/login/ultrasist/vendor/bootstrap-icons.min.css",
+        "http://127.0.0.1:58080/resources/u83sx/login/ultrasist/css/ultrasist.css"
+      ],
+      "anchoDocumento": 390,
+      "anchoVentana": 390
+    }
+  ]
+}

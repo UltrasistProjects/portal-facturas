@@ -71,7 +71,8 @@ def test_deteccion_de_fuerza_bruta():
 def test_sesion_sso_igual_a_la_local_y_eventos():
     assert (REALM["ssoSessionIdleTimeout"], REALM["ssoSessionMaxLifespan"], REALM["rememberMe"]) == (3600, 28800, False)
     assert REALM["eventsEnabled"] and {"UPDATE_PASSWORD", "LOGIN_ERROR"} <= set(REALM["enabledEventTypes"])
-    assert not REALM["registrationAllowed"] and not REALM["resetPasswordAllowed"]
+    # El restablecimiento de contrasena por correo lo habilita tema-login-keycloak (tests/test_tema_keycloak.py).
+    assert not REALM["registrationAllowed"]
 
 
 def test_roles_del_portal():

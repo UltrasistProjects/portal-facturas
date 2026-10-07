@@ -5,7 +5,7 @@ Subcomandos:
   fixtures <run> <dir>                       genera los archivos de prueba de la ejecucion (XML, PDF, TXT)
   plantilla-proveedores <xlsx> <out> <run> <modo>   llena la plantilla descargada del portal (modo: validos|errores)
   plantilla-catalogo <xlsx> <out> <clave> <descripcion>   agrega una fila a la plantilla de un catalogo
-  inspeccionar-xlsx <xlsx>                   hojas, encabezados y filas de datos de un libro
+  inspeccionar-xlsx <xlsx>                   hojas, encabezados y filas de datos (conteo y valores) de un libro
   correo <outbox> <destinatario> <texto-asunto> [desde-iso]   ultimo .eml para ese destinatario, como JSON
   usuario <correo>                           datos de credenciales del usuario en la BD del portal, como JSON
 
@@ -227,7 +227,13 @@ def inspeccionar_xlsx(source: str) -> None:
     workbook = openpyxl.load_workbook(source)
     first = workbook[workbook.sheetnames[0]]
     headers = [cell.value for cell in first[1]]
-    print(json.dumps({"hojas": workbook.sheetnames, "encabezados": headers, "filas_datos": first.max_row - 1}))
+    rows = [[cell for cell in row] for row in first.iter_rows(min_row=2, values_only=True)]
+    print(
+        json.dumps(
+            {"hojas": workbook.sheetnames, "encabezados": headers, "filas_datos": first.max_row - 1, "filas": rows},
+            default=str,
+        )
+    )
 
 
 def plantilla_catalogo(source: str, out: str, code: str, description: str) -> None:

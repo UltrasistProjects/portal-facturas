@@ -31,12 +31,13 @@ python -m venv .venv
 python -m pip install --upgrade pip
 pip install --require-hashes -r requirements.lock
 python scripts/create_env.py
-docker compose up -d --wait db keycloak
+docker compose up -d --wait db keycloak mailpit
+docker compose exec -T keycloak bash /opt/keycloak/scripts/configure-realm.sh
 python scripts/init_db.py
 uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
-También puede ejecutar `scripts\create_venv.ps1` y después `run_local.ps1`. `run_local` crea o completa `.env`, levanta PostgreSQL y Keycloak (`docker compose up -d --wait db keycloak`), aplica las migraciones y siembra la demo sólo si la base está vacía. **Conserva los datos entre arranques.** El primer arranque de Keycloak tarda alrededor de un minuto (descarga la imagen e importa el realm).
+También puede ejecutar `scripts\create_venv.ps1` y después `run_local.ps1`. `run_local` crea o completa `.env`, levanta PostgreSQL, Keycloak y Mailpit (`docker compose up -d --wait db keycloak mailpit`), aplica al realm el tema de login y el correo de Keycloak (`configure-realm.sh`), aplica las migraciones y siembra la demo sólo si la base está vacía. **Conserva los datos entre arranques.** El primer arranque de Keycloak tarda alrededor de un minuto (descarga la imagen e importa el realm).
 
 En CMD use `.venv\Scripts\activate` y `run_local.bat`.
 
@@ -48,7 +49,8 @@ source .venv/bin/activate
 python -m pip install --upgrade pip
 pip install --require-hashes -r requirements.lock
 python scripts/create_env.py
-docker compose up -d --wait db keycloak
+docker compose up -d --wait db keycloak mailpit
+docker compose exec -T keycloak bash /opt/keycloak/scripts/configure-realm.sh
 python scripts/init_db.py
 uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
@@ -110,7 +112,28 @@ El portal no recibe ni guarda contraseñas (RN-HU03-01). La autenticación la ha
 
 - Servicio `keycloak` de `compose.yaml` (`quay.io/keycloak/keycloak:26.7.4`, modo `start-dev`), sólo en `127.0.0.1:${KEYCLOAK_PORT}` (58080 por defecto). Consola: <http://127.0.0.1:58080/admin>, con `KC_BOOTSTRAP_ADMIN_USERNAME` y `KC_BOOTSTRAP_ADMIN_PASSWORD` del `.env`.
 - Al arrancar importa el realm versionado `infra/keycloak/realm-ultrasist-portal.json` (roles `Administrador`, `Proveedor` y `PMO`; clientes `portal-facturas-web` y `portal-facturas-admin`; política de contraseñas; detección de fuerza bruta; eventos; sesión SSO de 60 min de inactividad y 8 h de máximo). El realm no contiene secretos: los de los clientes llegan como variables de entorno desde el `.env`, y sin ellas el contenedor no arranca.
-- Los datos viven en el volumen `portal-facturas_keycloak-data`. El realm sólo se importa si no existe: para aplicar cambios del JSON, `docker compose rm -sf keycloak`, `docker volume rm portal-facturas_keycloak-data` y vuelva a levantarlo (se pierden las cuentas; `python scripts/reset_demo.py` o `python scripts/link_keycloak_users.py` las recrean).
+- Los datos viven en el volumen `portal-facturas_keycloak-data`. El realm sólo se importa si no existe. El tema de login, el restablecimiento de contraseña, los eventos que se registran y el correo de Keycloak se aplican además al realm existente con `infra/keycloak/configure-realm.sh` (idempotente; `run_local.*` lo ejecuta en cada arranque), sin borrar nada. Para aplicar otros cambios del JSON: `docker compose rm -sf keycloak`, `docker volume rm portal-facturas_keycloak-data` y vuelva a levantarlo (se pierden las cuentas; `python scripts/reset_demo.py` o `python scripts/link_keycloak_users.py` las recrean).
+- Correo de Keycloak en local: el servicio `mailpit` de `compose.yaml` (`axllent/mailpit:v1.31.4`) recibe los correos de Keycloak (restablecimiento de contraseña) sin enviarlos. Se leen en <http://127.0.0.1:58025> (`MAILPIT_PORT`). Ningún correo de Keycloak local sale al SMTP real del `.env`, que es el del portal.
+
+**Pantallas de inicio de sesión (tema `ultrasist`).**
+
+- Keycloak muestra el inicio de sesión, el restablecimiento, la contraseña nueva (enlace del correo, primer acceso y cambio voluntario) y sus páginas de error, información, enlace vencido, página expirada y cierre de sesión con el diseño del portal: el tema de login `ultrasist`, en `infra/keycloak/themes/ultrasist/login/`. El portal no recibe contraseñas: Keycloak sigue procesando credenciales, sesiones, política, correo, tokens y redirecciones.
+- Hereda de `base` de Keycloak (plantillas sin estilos) y sobrescribe `template.ftl` (layout), `login.ftl`, `login-reset-password.ftl` y `login-update-password.ftl`, partiendo de las de la versión de la imagen (`keycloakVersion` en `theme.properties`). Conservan el `action`, los campos y los mensajes de las originales.
+- Textos: `messages/messages_es.properties` (español de México, con "usted"); las plantillas no fijan texto. Estilos: `resources/css/ultrasist.css` sobre copias de Bootstrap 5.3.3 e Icons 1.11.3 idénticas a `app/static/vendor/`. Sin CDN.
+- Con `start-dev`, los cambios del tema se ven al recargar la página. `tests/test_tema_keycloak.py` verifica el contrato de los formularios, los textos, la ausencia de recursos externos y de credenciales, y las copias de Bootstrap.
+- **Al actualizar Keycloak:** compare las cuatro plantillas con las de `base/login` de la versión nueva (están en `/opt/keycloak/lib/lib/main/org.keycloak.keycloak-themes-<versión>.jar`; por ejemplo, `docker compose cp keycloak:<ruta del jar> .` y `unzip`), lleve los cambios al tema, actualice `keycloakVersion` y repita `npx playwright test -c playwright.tema.config.ts` en `tests/hu/`. La prueba falla mientras `keycloakVersion` no coincida con la imagen.
+
+**Restablecimiento de contraseña.**
+
+- "¿Olvidó su contraseña?" en el inicio de sesión (`resetPasswordAllowed` del realm). Lo ejecuta Keycloak con su flujo integrado: pide el correo, responde con el mismo mensaje exista o no la cuenta, envía un enlace de un solo uso y pide la contraseña nueva con la política del realm. El portal no participa.
+- El enlace vence a los 5 minutos (valor por defecto del realm, `actionTokenGeneratedByUserLifespan`). Una cuenta deshabilitada no recibe el correo.
+- **Registro:** cada solicitud e intento queda en los eventos de usuario del realm durante 30 días. Se consultan en la consola de Keycloak ("Events", realm `ultrasist-portal`) o con `GET /admin/realms/ultrasist-portal/events?type=...`; los errores salen también en el log del contenedor.
+  - Solicitud con correo enviado: `SEND_RESET_PASSWORD`, con el usuario y el correo. Si falla el envío: `SEND_RESET_PASSWORD_ERROR`.
+  - Solicitud rechazada: `RESET_PASSWORD_ERROR`, con el error `user_not_found` (y el correo escrito), `user_disabled` o `expired_code` (enlace ya usado o vencido).
+  - Enlace alterado: `EXECUTE_ACTION_TOKEN_ERROR` (`invalid_code`).
+  - Contraseña nueva: `UPDATE_PASSWORD`, o `UPDATE_PASSWORD_ERROR` con el motivo de la política.
+  - Quedan en Keycloak, no en la auditoría del portal (`audit_logs`).
+- El correo usa la plantilla por defecto de Keycloak (tema `email`, fuera de este cambio).
 
 **Inicio y cierre de sesión.**
 
@@ -131,7 +154,8 @@ El portal no recibe ni guarda contraseñas (RN-HU03-01). La autenticación la ha
 - Secretos de los clientes: generados en el servidor de Keycloak y copiados sólo a las variables de entorno del portal.
 - La lista `infra/keycloak/common_passwords.txt` debe instalarse en `data/password-blacklists/` del servidor (la exige la política `passwordBlacklist`).
 - *Rate limiting* por IP en el proxy inverso frente a Keycloak: Keycloak bloquea por cuenta, no por IP.
-- Correo de Keycloak (para funciones futuras como la recuperación de contraseña): el mismo servidor y remitente SMTP del portal (`smtpServer` del realm); la contraseña SMTP se configura en Keycloak, nunca en el JSON versionado.
+- Correo de Keycloak (restablecimiento de contraseña): el mismo servidor y remitente SMTP del portal (`smtpServer` del realm); la contraseña SMTP se configura en Keycloak, nunca en el JSON versionado. Sin él, "¿Olvidó su contraseña?" responde "No se pudo enviar el correo".
+- Tema de login: copie `infra/keycloak/themes/ultrasist` a `/opt/keycloak/themes/` de la instancia (o empaquételo como JAR en `providers/` y ejecute `kc.sh build`) y reiníciela: en modo `start` Keycloak guarda los temas en caché. Después ejecute en el servidor `infra/keycloak/configure-realm.sh` con `KCADM_USER` y `KCADM_PASSWORD` de una cuenta administradora (`KCADM_REALM` si no es de `master`, `KEYCLOAK_SERVER` si no es `http://localhost:8080`) y, para el correo, `KEYCLOAK_SMTP_HOST`, `KEYCLOAK_SMTP_PORT`, `KEYCLOAK_SMTP_FROM`, `KEYCLOAK_SMTP_SECURITY`, `KEYCLOAK_SMTP_USER` y `KEYCLOAK_SMTP_PASSWORD`; o asigne el tema en la consola ("Realm settings › Themes › Login theme"). Para volver al tema por defecto: `kcadm.sh update realms/ultrasist-portal -s loginTheme=keycloak.v2` (un valor vacío no lo cambia).
 
 **Lista de contraseñas comunes.** Se mantiene a mano en `infra/keycloak/common_words.txt`. `python scripts/build_password_blacklist.py` genera `common_passwords.txt` con esas entradas y sus variantes decoradas (`password1!`, `portal2026!`): como la política exige dígito y carácter especial, sin variantes la lista no bloquearía ninguna contraseña. Una prueba verifica que el archivo generado esté al día.
 
@@ -165,7 +189,8 @@ python scripts/check.py     # ruff, formato, alembic check, pytest y pip-audit (
 - CI: `python scripts/ci_tests.py [argumentos de pytest]` levanta un PostgreSQL desechable con el servicio `db` de `compose.yaml` (proyecto de compose y puerto propios, sin `.env`), ejecuta `pytest` contra él y lo elimina con su volumen al terminar. Es el `test_command` de `.github/workflows/calidad.yml`.
 - `scripts/check.py` ejecuta `alembic check` sobre otra base temporal, que elimina al terminar aunque el paso falle.
 - La cobertura mínima de `app/` es del 93 % (`--cov-fail-under`).
-- Ninguna prueba necesita Keycloak ni red: `tests/idp.py` simula su API de administración y su OIDC (discovery, JWKS firmado por sesión y token endpoint con PKCE) sobre un `httpx.MockTransport`. Los scripts que corren en un subproceso (`init_db`, `reset_demo`) lo usan mediante un servidor local en `127.0.0.1`.
+- El tema de login de Keycloak se prueba contra Keycloak real aparte de `pytest`: con el portal en el transporte de correo `file` (ver `tests/hu/README.md`) y Mailpit levantado, `npx playwright test -c playwright.tema.config.ts` en `tests/hu/` recorre el inicio de sesión, el primer acceso, el cambio voluntario y el restablecimiento en 1440×900 y 390×844, y deja las capturas en `evidencias/tema-login-keycloak/`.
+- Ninguna prueba de `pytest` necesita Keycloak ni red: `tests/idp.py` simula su API de administración y su OIDC (discovery, JWKS firmado por sesión y token endpoint con PKCE) sobre un `httpx.MockTransport`. Los scripts que corren en un subproceso (`init_db`, `reset_demo`) lo usan mediante un servidor local en `127.0.0.1`.
 
 Cubre:
 
@@ -567,7 +592,8 @@ Los aplica Keycloak (RF-06); el portal no muestra formularios de contraseña.
 - **Política del realm:** 8 a 128 caracteres, con letra, número y carácter especial; distinta del usuario, del correo y de la actual; fuera de la lista de contraseñas comunes (con sus variantes decoradas).
 - **Fuerza bruta:** Keycloak bloquea la cuenta tras 5 fallos consecutivos, con espera creciente hasta 60 minutos; el contador se reinicia a las 24 h. Los fallos y cambios quedan en los eventos del realm (30 días).
 - **Cambio voluntario:** "Cambiar contraseña" (menú lateral) lleva a Keycloak con `kc_action=UPDATE_PASSWORD`; al volver, el portal abre una sesión nueva, muestra "Contraseña actualizada" y audita `PASSWORD_CHANGED` (`forced: false`).
-- No hay recuperación de contraseña ni caducidad de la temporal (fuera del MVP). Las columnas `users.password_hash` y `users.must_change_password` quedan obsoletas y se eliminarán cuando todos los usuarios estén enlazados.
+- **Restablecimiento:** "¿Olvidó su contraseña?" en el inicio de sesión de Keycloak (ver "Keycloak: inicio de sesión y cuentas").
+- La contraseña temporal no caduca (fuera del MVP). Las columnas `users.password_hash` y `users.must_change_password` quedan obsoletas y se eliminarán cuando todos los usuarios estén enlazados.
 
 ## Archivos y seguridad de PoC
 
@@ -676,7 +702,7 @@ Los XML bajo `data/demo_documents/` son estructuralmente útiles para el parser,
 - Las reglas `INT` del Invoice internacional buscan texto literal y aún no se calibran con invoices reales; no hay extracción automática de datos del Invoice.
 - Los correos (credenciales, decisión del PMO, cancelación) se envían de forma síncrona, sin cola ni reintentos automáticos; un envío fallido se reenvía a mano. No hay recordatorio antes de que venza el plazo de 72 horas de una cancelación.
 - El monto acumulado del tablero suma los totales sin convertir moneda: con facturas en MXN y USD es sólo una referencia.
-- La contraseña temporal no expira y no hay recuperación de contraseña.
+- La contraseña temporal no expira. El correo de restablecimiento de contraseña usa la plantilla por defecto de Keycloak, sin la marca del portal.
 - Keycloak limita los intentos por cuenta, no por IP (el portal limitaba ambos): el límite por IP debe ponerlo el proxy inverso. La lista de comunes de Keycloak compara contraseñas completas; sus variantes decoradas aproximan, sin igualar, la regla anterior (palabra común con dígitos y símbolos).
 - El correo del proveedor en el catálogo no se sincroniza con su cuenta de Keycloak.
 - La verificación documental del Anexo A es presencia/vigencia referencial, no validación legal.

@@ -45,6 +45,7 @@ La épica cubre al proveedor nacional (CFDI: XML y PDF) y al internacional (Invo
 ### Dentro del alcance
 
 - Cambio obligatorio de la contraseña temporal en el primer inicio de sesión (HU-10).
+- Restablecimiento de contraseña por correo ("¿Olvidó su contraseña?") en las pantallas de Keycloak con el diseño del portal. Lo agrega el cambio `tema-login-keycloak` (2026-10-06); antes estaba fuera del MVP.
 - Registro de la factura nacional con sus archivos mínimos y el estatus "Cargada" (HU-12).
 - Envío de la factura nacional a validación. Antes del envío, el XML se valida contra las Reglas de Validación y se controlan los duplicados por el identificador del XML. La factura enviada pasa a "Enviada" (HU-13).
 - Registro del Invoice internacional con la captura de sus importes, sus documentos soporte y el control de duplicados por nombre de archivo (HU-15).
@@ -58,7 +59,6 @@ La épica cubre al proveedor nacional (CFDI: XML y PDF) y al internacional (Invo
 | Tema | Motivo |
 | --- | --- |
 | Rotación periódica de la contraseña (HU-11) | Fuera del MVP (Validación de HUs, §3) |
-| Recuperación de contraseña ("olvidé mi contraseña") | Fuera del MVP (Validación de HUs, §3, "Requerimiento General") |
 | Caducidad de la contraseña temporal | Ninguna fuente la pide y hoy no expira (README). Puede agregarse después sin cambiar el diseño de HU-10 |
 | Seguimiento del pago | El MVP termina en "Autorizada". El ERS no define estatus de pago (§3.6) |
 | Extracción automática de datos del Invoice con IA | El PoC tiene analizadores en `app/services/ai/`, pero el alcance pide validar sólo "en la medida de lo posible". Se decide con las muestras (P-07) |

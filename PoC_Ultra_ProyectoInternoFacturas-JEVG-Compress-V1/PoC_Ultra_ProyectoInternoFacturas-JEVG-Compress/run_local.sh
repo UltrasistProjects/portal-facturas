@@ -1,7 +1,7 @@
 #!/usr/bin/env sh
-# Levanta el portal en local: crea el entorno y .env si faltan, arranca PostgreSQL y Keycloak, aplica las migraciones y
-# deja uvicorn en primer plano (Ctrl+C lo detiene; los contenedores siguen). Se puede repetir sin riesgo: conserva los
-# datos y reanuda lo que este detenido, como Keycloak tras reiniciar la maquina (no se reinicia solo).
+# Levanta el portal en local: crea el entorno y .env si faltan, arranca PostgreSQL, Keycloak y Mailpit, aplica las
+# migraciones y deja uvicorn en primer plano (Ctrl+C lo detiene; los contenedores siguen). Se puede repetir sin riesgo:
+# conserva los datos y reanuda lo que este detenido, como Keycloak tras reiniciar la maquina (no se reinicia solo).
 set -eu
 cd "$(dirname "$0")"
 
@@ -51,7 +51,9 @@ if [ -n "${DOCKER_CONTEXT:-}" ]; then
   done
 fi
 
-docker compose up -d --wait db keycloak
+docker compose up -d --wait db keycloak mailpit
+# --import-realm no reimporta un realm existente: el tema de login y el correo de Keycloak se aplican aqui (idempotente).
+docker compose exec -T keycloak bash /opt/keycloak/scripts/configure-realm.sh
 .venv/bin/python scripts/init_db.py
 
 if .venv/bin/python -c "import json, urllib.request as r

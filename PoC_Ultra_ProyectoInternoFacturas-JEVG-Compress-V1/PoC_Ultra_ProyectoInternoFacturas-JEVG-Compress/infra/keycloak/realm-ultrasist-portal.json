@@ -9,13 +9,14 @@
   "verifyEmail": false,
   "loginWithEmailAllowed": true,
   "duplicateEmailsAllowed": false,
-  "resetPasswordAllowed": false,
+  "resetPasswordAllowed": true,
   "editUsernameAllowed": false,
   "internationalizationEnabled": true,
   "supportedLocales": [
     "es"
   ],
   "defaultLocale": "es",
+  "loginTheme": "ultrasist",
   "passwordPolicy": "length(8) and maxLength(128) and digits(1) and specialChars(1) and regexPattern(.*\\p{L}.*) and notUsername(undefined) and notEmail(undefined) and passwordHistory(1) and passwordBlacklist(common_passwords.txt)",
   "bruteForceProtected": true,
   "permanentLockout": false,
@@ -40,7 +41,13 @@
     "CODE_TO_TOKEN_ERROR",
     "UPDATE_PASSWORD",
     "UPDATE_PASSWORD_ERROR",
-    "USER_DISABLED_BY_TEMPORARY_LOCKOUT"
+    "USER_DISABLED_BY_TEMPORARY_LOCKOUT",
+    "SEND_RESET_PASSWORD",
+    "SEND_RESET_PASSWORD_ERROR",
+    "EXECUTE_ACTION_TOKEN",
+    "EXECUTE_ACTION_TOKEN_ERROR",
+    "RESET_PASSWORD",
+    "RESET_PASSWORD_ERROR"
   ],
   "adminEventsEnabled": true,
   "adminEventsDetailsEnabled": false,

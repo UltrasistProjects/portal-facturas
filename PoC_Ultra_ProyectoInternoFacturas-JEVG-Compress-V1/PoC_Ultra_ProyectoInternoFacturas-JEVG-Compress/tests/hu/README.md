@@ -30,6 +30,17 @@ Cada ejecución genera identificadores propios (RFC, correos, números de factur
 sobre la misma base. Para repetir un solo spec conservando los datos de la ejecución anterior:
 `HU_RUN_ID=<id de evidencias/_estado-ejecucion.json> npx playwright test specs/11-*`.
 
+## Video del recorrido completo
+
+`npm run video` (con el portal arrancado igual que en el paso 2) graba en un solo video (~8 min) el flujo de punta a
+punta: alta y autorización masiva de proveedores y alta de un usuario PMO (Administrador), primer acceso de un proveedor
+nuevo, registro y envío de una factura (Proveedor), primer acceso del PMO creado, autorización y pago (PMO) y
+Complemento de Pago (Proveedor). Lleva rótulos por paso, cursor visible, la plantilla de Excel llena, las cargas de
+archivos una por una y los correos que genera el portal. Resultado: `evidencias/video/recorrido-flujo-completo.webm`
+(1440×900). Va aparte
+de la suite (`playwright.video.config.ts`, `video/`): no toca los resultados de las HUs y crea datos propios en cada
+corrida. `RECORRIDO_SLOWMO=0 npm run video` quita la pausa entre acciones.
+
 ## Resultado
 
 - `PASS`: todos los escenarios pasaron. `FAIL`: algún paso no cumplió lo esperado (se captura la pantalla del fallo).

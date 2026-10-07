@@ -38,13 +38,13 @@ test('HU-10 · Cambio de contraseña en primer inicio de sesión', async ({ brow
       await hu.paso(
         proveedor,
         `Iniciar sesión con el usuario (${credencial.correo}) y la contraseña temporal del correo de HU-03`,
-        'En lugar de entrar al portal, Keycloak muestra "Modificar contraseña" (acción requerida UPDATE_PASSWORD).',
+        'En lugar de entrar al portal, Keycloak muestra "Cambiar contraseña" (acción requerida UPDATE_PASSWORD).',
         async () => {
           await loginKeycloak(proveedor, credencial.correo, temporal);
           await expect(proveedor).toHaveURL(/required-action\?execution=UPDATE_PASSWORD/);
-          await expect(proveedor.locator('h1')).toHaveText(/Modificar contraseña/);
+          await expect(proveedor.locator('h1')).toHaveText(/Cambiar contraseña/);
           await expect(proveedor.locator('#password-new')).toBeVisible();
-          await hu.captura(proveedor, 'solicitud-cambio-contrasena', 'Keycloak exige "Modificar contraseña" en el primer inicio de sesión.');
+          await hu.captura(proveedor, 'solicitud-cambio-contrasena', 'Keycloak exige "Cambiar contraseña" en el primer inicio de sesión.');
           return `Pantalla "${await texto(proveedor, 'h1')}" con los campos nueva contraseña y confirmación (URL con execution=UPDATE_PASSWORD).`;
         },
       );
@@ -68,10 +68,10 @@ test('HU-10 · Cambio de contraseña en primer inicio de sesión', async ({ brow
         await hu.paso(
           proveedor,
           'Volver a iniciar sesión con la contraseña temporal',
-          'Keycloak vuelve a exigir "Modificar contraseña".',
+          'Keycloak vuelve a exigir "Cambiar contraseña".',
           async () => {
             await loginKeycloak(proveedor, credencial.correo, temporal);
-            await expect(proveedor.locator('h1')).toHaveText(/Modificar contraseña/);
+            await expect(proveedor.locator('h1')).toHaveText(/Cambiar contraseña/);
             return `Se muestra otra vez "${await texto(proveedor, 'h1')}".`;
           },
         );
@@ -92,12 +92,12 @@ test('HU-10 · Cambio de contraseña en primer inicio de sesión', async ({ brow
           await hu.paso(
             proveedor,
             `Capturar la contraseña "${clave}" (${motivo})`,
-            'Se rechaza con un mensaje de la política y se permanece en "Modificar contraseña".',
+            'Se rechaza con un mensaje de la política y se permanece en "Cambiar contraseña".',
             async () => {
               await proveedor.locator('#password-new').fill(clave);
               await proveedor.locator('#password-confirm').fill(clave);
               await clicNavegando(proveedor, proveedor.locator('#kc-submit'));
-              await expect(proveedor.locator('h1')).toHaveText(/Modificar contraseña/);
+              await expect(proveedor.locator('h1')).toHaveText(/Cambiar contraseña/);
               const mensaje = errorKeycloak(proveedor);
               await expect(mensaje).toBeVisible();
               await hu.captura(proveedor, `rechazo-${motivo}`, `Contraseña "${clave}" rechazada (${motivo}).`);

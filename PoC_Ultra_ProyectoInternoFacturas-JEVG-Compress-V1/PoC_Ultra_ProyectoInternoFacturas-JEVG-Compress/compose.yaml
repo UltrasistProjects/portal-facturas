@@ -1,7 +1,11 @@
-# PostgreSQL y Keycloak corren en contenedores; la aplicacion sigue en el host.
+# PostgreSQL, Keycloak y Mailpit (correo de pruebas de Keycloak) corren en contenedores; la aplicacion sigue en el host.
 # Compose lee las variables de .env (el mismo archivo que usa la aplicacion): python scripts/create_env.py lo genera.
-#   docker compose up -d --wait db keycloak    arranca PostgreSQL y Keycloak y espera a que esten "healthy"
-#   docker compose down                        los detiene conservando los datos (con -v tambien borra los volumenes)
+#   docker compose up -d --wait db keycloak mailpit
+#       arranca los servicios y espera a que esten "healthy"
+#   docker compose exec -T keycloak bash /opt/keycloak/scripts/configure-realm.sh
+#       aplica el tema de login y el correo de Keycloak al realm ya importado
+#   docker compose down
+#       los detiene conservando los datos (con -v tambien borra los volumenes)
 name: portal-facturas
 
 services:
@@ -45,6 +49,15 @@ services:
       KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET:-}
       KEYCLOAK_ADMIN_CLIENT_SECRET: ${KEYCLOAK_ADMIN_CLIENT_SECRET:-}
       KC_HEALTH_ENABLED: "true"
+      # Correo de Keycloak (restablecimiento de contrasena) que aplica infra/keycloak/configure-realm.sh. En local va
+      # a Mailpit, nunca al SMTP real del portal (SMTP_*); en QA y produccion se usa el del portal, sin versionar la
+      # clave.
+      KEYCLOAK_SMTP_HOST: ${KEYCLOAK_SMTP_HOST:-mailpit}
+      KEYCLOAK_SMTP_PORT: ${KEYCLOAK_SMTP_PORT:-1025}
+      KEYCLOAK_SMTP_FROM: ${KEYCLOAK_SMTP_FROM:-no-reply@portal-facturas.local}
+      KEYCLOAK_SMTP_SECURITY: ${KEYCLOAK_SMTP_SECURITY:-none}
+      KEYCLOAK_SMTP_USER: ${KEYCLOAK_SMTP_USER:-}
+      KEYCLOAK_SMTP_PASSWORD: ${KEYCLOAK_SMTP_PASSWORD:-}
     # Solo en localhost, como PostgreSQL.
     ports:
       - "127.0.0.1:${KEYCLOAK_PORT:-58080}:8080"
@@ -54,6 +67,10 @@ services:
       - keycloak-data:/opt/keycloak/data
       - ./infra/keycloak/realm-ultrasist-portal.json:/opt/keycloak/data/import/realm-ultrasist-portal.json:ro
       - ./infra/keycloak/common_passwords.txt:/opt/keycloak/data/password-blacklists/common_passwords.txt:ro
+      # Tema de login "ultrasist" (con start-dev no hay cache: los cambios se ven al recargar) y el script que lo asigna
+      # al realm existente, porque --import-realm no reimporta un realm que ya existe.
+      - ./infra/keycloak/themes/ultrasist:/opt/keycloak/themes/ultrasist:ro
+      - ./infra/keycloak/configure-realm.sh:/opt/keycloak/scripts/configure-realm.sh:ro
     # La imagen no trae curl: la sonda usa /dev/tcp de bash contra el puerto de administracion (9000).
     healthcheck:
       test:
@@ -65,6 +82,19 @@ services:
       start_period: 30s
       retries: 30
     # Sin reinicio automatico: con una variable faltante, "up --wait" falla en lugar de reintentar sin fin.
+    restart: "no"
+
+  mailpit:
+    # Servidor de correo de pruebas: captura los correos de Keycloak de desarrollo sin enviarlos. Version exacta fija;
+    # se actualiza por PR. Interfaz web y API (/api/v1/messages) solo en localhost; el SMTP (1025) no se publica: solo
+    # lo alcanza Keycloak por la red de compose.
+    image: axllent/mailpit:v1.31.4
+    ports:
+      - "127.0.0.1:${MAILPIT_PORT:-58025}:8025"
+    healthcheck:
+      test: ["CMD", "/mailpit", "readyz"]
+      interval: 5s
+      retries: 10
     restart: "no"
 
 volumes:
