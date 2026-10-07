@@ -586,3 +586,43 @@ def test_pago_y_complemento_en_el_historial(client):
     login(client, PMO)
     history = client.get(f"/invoices/{invoice.id}").text
     assert pmo_name in history and "Complemento de pago adjuntado" in history
+
+
+# --- Tipo del complemento eliminado (ajustes-finales-configuracion) -----------------------------------------------
+
+
+@pytest.fixture()
+def complement_type_deleted():
+    """Elimina (baja logica) el tipo "Complemento de pago (XML)" y lo restaura al terminar."""
+    from app.models import InvoiceDocumentType, now_utc
+
+    complement = InvoiceDocumentType.code == "PAYMENT_COMPLEMENT_XML"
+    with SessionLocal() as db:
+        db.execute(update(InvoiceDocumentType).where(complement).values(is_active=False, deleted_at=now_utc()))
+        db.commit()
+    yield
+    with SessionLocal() as db:
+        db.execute(
+            update(InvoiceDocumentType).where(complement).values(is_active=True, deleted_at=None, deleted_by=None)
+        )
+        db.commit()
+
+
+@pytest.mark.usefixtures("complement_type_deleted")
+def test_pago_sin_complemento_si_su_tipo_esta_eliminado(client):
+    invoice = accepted()
+    login(client, PMO)
+    assert pay(client, invoice.id).status_code == 303
+    stored = reload(invoice.id)
+    assert stored.status == InvoiceStatus.PAID and stored.payment_complement_due_at is None
+    [entry] = audits(invoice.id, "INVOICE_PAID")
+    assert entry.new_value["requires_complement"] is False
+
+
+def test_vencido_no_bloquea_si_el_tipo_esta_eliminado(client, complement_type_deleted):
+    paid(hours_ago=73)
+    invoice = invoice_for(status=InvoiceStatus.UPLOADED)
+    login(client, PROVIDER)
+    response = submit(client, invoice.id)
+    assert response.status_code == 409 and OVERDUE_PREFIX not in response.text
+    assert "Faltan archivos obligatorios" in response.text

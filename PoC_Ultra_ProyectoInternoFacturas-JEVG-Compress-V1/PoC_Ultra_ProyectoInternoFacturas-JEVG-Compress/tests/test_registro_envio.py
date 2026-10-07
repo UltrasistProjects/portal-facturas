@@ -9,7 +9,7 @@ import pytest
 from sqlalchemy import delete, select, update
 
 from app.core.database import SessionLocal
-from app.models import AuditLog, Contract, Invoice, Supplier, User, ValidationResult, ValidationSettings
+from app.models import AuditLog, Contract, Invoice, Supplier, User, ValidationResult, ValidationRule
 from tests.conftest import ROOT, csrf, invoice_by_number, login, supplier_by_email
 
 DEMO = ROOT / "data" / "demo_documents"
@@ -221,7 +221,7 @@ def test_el_envio_usa_las_reglas_vigentes(provider):
     assert verify(provider, invoice).status_code == 303
     assert results(invoice)["XML-004"].status == "PASS"
     with SessionLocal() as db:
-        db.execute(update(ValidationSettings).values(payment_form="03"))
+        db.execute(update(ValidationRule).where(ValidationRule.rule_code == "XML-004").values(parameter="03"))
         db.commit()
     assert submit(provider, invoice).status_code == 409
     rule = results(invoice)["XML-004"]
@@ -233,7 +233,7 @@ def test_envio_desde_borrador(provider):
     invoice = load(provider, create_invoice(provider), cfdi(), vobo=False)
     response = submit(provider, invoice)
     assert response.status_code == 409
-    assert "Faltan archivos obligatorios. Cárguelos antes de enviar" in response.text
+    assert "Faltan archivos obligatorios: Vo.Bo. del líder de proyecto. Cárguelos antes de enviar" in response.text
     assert reload(invoice).status == "DRAFT"
     assert results(invoice) == {}
     assert not audits(invoice, "VALIDATION_STARTED")
@@ -454,3 +454,78 @@ def test_verificar_una_factura_enviada(provider):
     before = {code: r.id for code, r in results(invoice).items()}
     assert verify(provider, invoice).status_code == 409
     assert {code: r.id for code, r in results(invoice).items()} == before
+
+
+# --- Archivos obligatorios en la transicion a "Enviada" (ajustes-finales-configuracion) ---------------------------
+
+
+def test_envio_por_peticion_directa_con_varios_faltantes(provider):
+    invoice = create_invoice(provider)
+    assert upload(provider, invoice, "INVOICE_XML", "cfdi.xml", cfdi()).status_code == 303
+    response = submit(provider, invoice)
+    assert response.status_code == 409
+    assert (
+        "Faltan archivos obligatorios: PDF del CFDI, Orden de compra, Vo.Bo. del líder de proyecto. "
+        "Cárguelos antes de enviar"
+    ) in response.text
+
+
+def test_transicion_directa_sin_archivos_obligatorios(provider):
+    """La regla vive en el servicio de transicion: ni una llamada directa envia sin los obligatorios (409)."""
+    from app.core.constants import InvoiceStatus
+    from app.core.errors import BusinessRuleError
+    from app.services.invoice_service import transition_invoice
+
+    invoice = load(provider, create_invoice(provider), cfdi(), vobo=False)
+    with SessionLocal() as db:
+        db.execute(update(Invoice).where(Invoice.id == invoice.id).values(status="REQUIRES_CORRECTION"))
+        db.commit()
+        stored = db.get(Invoice, invoice.id)
+        with pytest.raises(BusinessRuleError) as error:
+            transition_invoice(db, stored, InvoiceStatus.UNDER_REVIEW)
+        db.rollback()
+    assert error.value.status_code == 409
+    assert (
+        error.value.message == "Faltan archivos obligatorios: Vo.Bo. del líder de proyecto. Cárguelos antes de enviar"
+    )
+    assert reload(invoice).status == "REQUIRES_CORRECTION"
+
+
+@pytest.fixture()
+def approval_deleted():
+    from app.models import InvoiceDocumentType, now_utc
+
+    approval = InvoiceDocumentType.code == "APPROVAL"
+    with SessionLocal() as db:
+        db.execute(update(InvoiceDocumentType).where(approval).values(is_active=False, deleted_at=now_utc()))
+        db.commit()
+    yield
+    with SessionLocal() as db:
+        db.execute(update(InvoiceDocumentType).where(approval).values(is_active=True, deleted_at=None, deleted_by=None))
+        db.commit()
+
+
+def test_tipo_eliminado_deja_de_exigirse_al_enviar(provider, approval_deleted):
+    invoice = load(provider, create_invoice(provider), cfdi(), vobo=False)
+    assert reload(invoice).status == "UPLOADED"
+    assert submit(provider, invoice).status_code == 303
+    assert reload(invoice).status == "UNDER_REVIEW"
+
+
+def test_requisito_nuevo_no_afecta_a_una_factura_enviada(provider):
+    from app.models import InvoiceDocumentType
+
+    invoice = uploaded_invoice(provider)
+    assert submit(provider, invoice).status_code == 303
+    contract = InvoiceDocumentType.code == "CONTRACT"
+    with SessionLocal() as db:
+        db.execute(update(InvoiceDocumentType).where(contract).values(national_requirement="REQUIRED"))
+        db.commit()
+    try:
+        assert reload(invoice).status == "UNDER_REVIEW"
+        pmo_decides(provider, invoice, "ACCEPTED")
+        assert reload(invoice).status == "ACCEPTED"
+    finally:
+        with SessionLocal() as db:
+            db.execute(update(InvoiceDocumentType).where(contract).values(national_requirement="OPTIONAL"))
+            db.commit()

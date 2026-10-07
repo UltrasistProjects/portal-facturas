@@ -1,6 +1,7 @@
 from collections.abc import Generator
 
 from sqlalchemy import MetaData, create_engine
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 from app.core.config import settings
@@ -26,3 +27,8 @@ SessionLocal = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False
 def get_db() -> Generator[Session, None, None]:
     with SessionLocal() as session:
         yield session
+
+
+def violates(exc: IntegrityError, constraint_name: str) -> bool:
+    """True si el IntegrityError proviene de la restriccion con ese nombre (psycopg lo expone en diag)."""
+    return getattr(getattr(exc.orig, "diag", None), "constraint_name", None) == constraint_name

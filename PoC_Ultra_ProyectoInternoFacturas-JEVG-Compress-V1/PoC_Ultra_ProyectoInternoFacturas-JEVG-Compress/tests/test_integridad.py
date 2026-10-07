@@ -413,30 +413,37 @@ def insert_document_type(db, name: str, formats: str = "{PDF}") -> None:
     )
 
 
+# Baja logica de los tres catalogos de Requisitos minimos (ajustes-finales-configuracion): inactivo si y solo si tiene
+# fecha de eliminacion. Los tipos del sistema se pueden eliminar y sus niveles ya no son fijos.
+TYPE_TABLES = {
+    "invoice_document_types": "PURCHASE_ORDER",
+    "supplier_document_types": "TAX_STATUS",
+    "contract_document_types": "CONTRACT_ANNEXES",
+}
+
+
+@pytest.mark.parametrize(("table", "code"), TYPE_TABLES.items())
+def test_baja_logica_incoherente_por_sql(db, table, code):
+    with pytest.raises(IntegrityError, match=f'violates check constraint "ck_{table}_soft_delete"'):
+        db.execute(text(f"UPDATE {table} SET is_active = false WHERE code = :code"), {"code": code})
+
+
+@pytest.mark.parametrize(("table", "code"), TYPE_TABLES.items())
+def test_tipo_del_sistema_eliminado_por_sql(db, table, code):
+    db.execute(text(f"UPDATE {table} SET is_active = false, deleted_at = now() WHERE code = :code"), {"code": code})
+
+
 @pytest.mark.parametrize(
     "sql",
     [
         "UPDATE invoice_document_types SET national_requirement = 'OPTIONAL' WHERE code = 'INVOICE_XML'",
-        "UPDATE invoice_document_types SET international_requirement = 'OPTIONAL' WHERE code = 'INVOICE_PDF'",
-        "UPDATE invoice_document_types SET national_requirement = 'OPTIONAL' WHERE code = 'FOREIGN_INVOICE'",
-        "UPDATE invoice_document_types SET international_requirement = 'OPTIONAL' WHERE code = 'FOREIGN_INVOICE'",
-        # HU-14: el acuse de cancelacion no se exige en la carga documental.
         "UPDATE invoice_document_types SET national_requirement = 'REQUIRED' WHERE code = 'CANCELLATION_ACK'",
-        "UPDATE invoice_document_types SET international_requirement = 'OPTIONAL' WHERE code = 'CANCELLATION_ACK'",
-        # HU Complemento de Pagos: el complemento es Opcional fijo para el nacional y No aplica para el internacional.
-        "UPDATE invoice_document_types SET national_requirement = 'REQUIRED' WHERE code = 'PAYMENT_COMPLEMENT_XML'",
-        "UPDATE invoice_document_types SET international_requirement = 'OPTIONAL'"
-        " WHERE code = 'PAYMENT_COMPLEMENT_PDF'",
+        "UPDATE supplier_document_types SET persona_moral_requirement = 'OPTIONAL' WHERE code = 'SUPPLIER_CONTRACT'",
+        "UPDATE contract_document_types SET requirement = 'OPTIONAL' WHERE code = 'SIGNED_CONTRACT'",
     ],
 )
-def test_nivel_fijo_cambiado_por_sql(db, sql):
-    with pytest.raises(IntegrityError, match='violates check constraint "ck_invoice_document_types_fixed_levels"'):
-        db.execute(text(sql))
-
-
-def test_tipo_del_sistema_desactivado_por_sql(db):
-    with pytest.raises(IntegrityError, match='violates check constraint "ck_invoice_document_types_system_active"'):
-        db.execute(text("UPDATE invoice_document_types SET is_active = false WHERE code = 'PURCHASE_ORDER'"))
+def test_niveles_ya_no_fijos(db, sql):
+    db.execute(text(sql))
 
 
 def test_nombre_repetido_con_otra_capitalizacion(db):
@@ -455,11 +462,6 @@ def test_formatos_invalidos(db, formats):
         insert_document_type(db, f"Formato {uuid4().hex[:8]}", formats)
 
 
-def test_tipo_soporte_se_puede_desactivar(db):
-    insert_document_type(db, "Reporte de pruebas")
-    db.execute(text("UPDATE invoice_document_types SET is_active = false WHERE name = 'Reporte de pruebas'"))
-
-
 # Requisitos de alta del proveedor (HU-21).
 
 
@@ -474,11 +476,6 @@ def insert_supplier_requirement(db, name: str) -> None:
     )
 
 
-def test_requisito_del_sistema_desactivado_por_sql(db):
-    with pytest.raises(IntegrityError, match='violates check constraint "ck_supplier_document_types_system_active"'):
-        db.execute(text("UPDATE supplier_document_types SET is_active = false WHERE code = 'TAX_STATUS'"))
-
-
 def test_requisito_con_nombre_repetido_con_otra_capitalizacion(db):
     with pytest.raises(IntegrityError, match='violates unique constraint "uq_supplier_document_types_name_lower"'):
         insert_supplier_requirement(db, "PODERES")
@@ -487,20 +484,6 @@ def test_requisito_con_nombre_repetido_con_otra_capitalizacion(db):
 def test_requisito_con_clave_repetida(db):
     with pytest.raises(IntegrityError, match='violates unique constraint "uq_supplier_document_types_code"'):
         db.execute(text("UPDATE supplier_document_types SET code = 'TAX_STATUS' WHERE code = 'LOCATION'"))
-
-
-def test_requisito_del_administrador_se_puede_desactivar(db):
-    insert_supplier_requirement(db, "Requisito de pruebas")
-    db.execute(text("UPDATE supplier_document_types SET is_active = false WHERE name = 'Requisito de pruebas'"))
-
-
-SUPPLIER_LEVEL_COLUMNS = ["persona_moral_requirement", "persona_fisica_requirement", "international_requirement"]
-
-
-@pytest.mark.parametrize("column", SUPPLIER_LEVEL_COLUMNS)
-def test_contrato_devuelto_al_alta_del_proveedor_por_sql(db, column):
-    with pytest.raises(IntegrityError, match='violates check constraint "ck_supplier_document_types_fixed_levels"'):
-        db.execute(text(f"UPDATE supplier_document_types SET {column} = 'OPTIONAL' WHERE code = 'SUPPLIER_CONTRACT'"))
 
 
 # Requisitos de alta del contrato (HU-22).
@@ -516,16 +499,6 @@ def insert_contract_requirement(db, name: str) -> None:
     )
 
 
-def test_contrato_opcional_por_sql(db):
-    with pytest.raises(IntegrityError, match='violates check constraint "ck_contract_document_types_fixed_levels"'):
-        db.execute(text("UPDATE contract_document_types SET requirement = 'OPTIONAL' WHERE code = 'SIGNED_CONTRACT'"))
-
-
-def test_requisito_del_contrato_del_sistema_desactivado_por_sql(db):
-    with pytest.raises(IntegrityError, match='violates check constraint "ck_contract_document_types_system_active"'):
-        db.execute(text("UPDATE contract_document_types SET is_active = false WHERE code = 'CONTRACT_ANNEXES'"))
-
-
 def test_requisito_del_contrato_con_nombre_repetido_con_otra_capitalizacion(db):
     with pytest.raises(IntegrityError, match='violates unique constraint "uq_contract_document_types_name_lower"'):
         insert_contract_requirement(db, "ANEXOS")
@@ -536,13 +509,6 @@ def test_requisito_del_contrato_con_clave_repetida(db):
         db.execute(
             text("UPDATE contract_document_types SET code = 'CONTRACT_PURCHASE_ORDER' WHERE code = 'CONTRACT_ANNEXES'")
         )
-
-
-def test_requisito_del_contrato_del_administrador_se_puede_desactivar(db):
-    insert_contract_requirement(db, "Requisito de contrato de pruebas")
-    db.execute(
-        text("UPDATE contract_document_types SET is_active = false WHERE name = 'Requisito de contrato de pruebas'")
-    )
 
 
 @pytest.mark.parametrize("owner", ["invoice_id", "supplier_id"])
@@ -684,9 +650,13 @@ def test_evento_de_credenciales_aceptado_en_las_tablas_de_notificaciones(db):
         ("UPDATE catalog_entries SET catalog = 'COUNTRY'", "catalogtype"),
         ("UPDATE catalog_entries SET code = 'mxn' WHERE code = 'MXN'", "ck_catalog_entries_code"),
         ("UPDATE catalog_entries SET name = '' WHERE code = 'MXN'", "ck_catalog_entries_name_length"),
-        ("UPDATE validation_settings SET receiver_postal_code = '3930'", "ck_validation_settings_postal_code"),
-        ("UPDATE validation_settings SET allowed_cfdi_uses = '{}'", "ck_validation_settings_cfdi_uses"),
-        ("UPDATE validation_settings SET version = 0", "ck_validation_settings_version_positive"),
+        ("UPDATE validation_rules SET version = 0", "ck_validation_rules_version_positive"),
+        (
+            "UPDATE validation_rules SET is_active = false WHERE rule_code = 'XML-002'",
+            "ck_validation_rules_soft_delete",
+        ),
+        ("UPDATE validation_rules SET origin = 'FOREIGN'", "supplierorigin"),
+        ("UPDATE validation_rules SET name = 'R'", "ck_validation_rules_name_length"),
     ],
 )
 def test_restricciones_de_reglas_y_catalogos_por_sql_directo(db, sql, constraint):
@@ -694,14 +664,13 @@ def test_restricciones_de_reglas_y_catalogos_por_sql_directo(db, sql, constraint
         db.execute(text(sql))
 
 
-def test_segunda_configuracion_de_reglas(db):
-    with pytest.raises(IntegrityError, match='violates check constraint "ck_validation_settings_single_row"'):
+def test_regla_repetida_por_sql_directo(db):
+    with pytest.raises(IntegrityError, match='violates unique constraint "uq_validation_rules_origin_code"'):
         db.execute(
             text(
-                "INSERT INTO validation_settings SELECT 2, receiver_rfc, receiver_name, receiver_address,"
-                " receiver_postal_code, receiver_tax_regime, payment_method, payment_form, allowed_cfdi_uses,"
-                " check_receiver_rfc, check_receiver_name, check_receiver_postal_code, check_payment_method,"
-                " check_payment_form, check_cfdi_use, version, updated_at, updated_by FROM validation_settings"
+                "INSERT INTO validation_rules (origin, rule_code, name, parameter, is_active, version, created_at,"
+                " updated_at) SELECT origin, rule_code, name, parameter, is_active, 1, now(), now()"
+                " FROM validation_rules WHERE rule_code = 'XML-002'"
             )
         )
 

@@ -437,12 +437,43 @@ def test_acuse_fuera_de_la_carga_documental(client):
     assert response.status_code == 400 and acknowledgments(invoice.id) == []
 
 
-def test_nivel_fijo_en_la_matriz_del_administrador(client):
+def test_acuse_editable_en_la_matriz_del_administrador(client):
+    """Ya no hay niveles fijos (ajustes-finales-configuracion): el acuse tiene selectores como cualquier tipo."""
     login(client, "admin@poc.local")
     page = client.get("/admin/required-documents").text
     row = page.split("Acuse de cancelación", 1)[1].split("</tr>", 1)[0]
-    assert row.count("bi-lock-fill") == 2 and row.count("Se carga al cancelar la factura") == 2
-    assert "__CANCELLATION_ACK" not in page
+    assert "bi-lock-fill" not in row and row.count("__CANCELLATION_ACK") == 2
+    assert "La cancelación de facturas dejará de pedir el acuse." in row
+
+
+@pytest.fixture()
+def acknowledgment_deleted():
+    """Elimina (baja logica) el tipo del acuse y lo restaura al terminar."""
+    from sqlalchemy import update
+
+    from app.models import InvoiceDocumentType, now_utc
+
+    ack = InvoiceDocumentType.code == "CANCELLATION_ACK"
+    with SessionLocal() as db:
+        db.execute(update(InvoiceDocumentType).where(ack).values(is_active=False, deleted_at=now_utc()))
+        db.commit()
+    yield
+    with SessionLocal() as db:
+        db.execute(update(InvoiceDocumentType).where(ack).values(is_active=True, deleted_at=None, deleted_by=None))
+        db.commit()
+
+
+@pytest.mark.usefixtures("acknowledgment_deleted")
+def test_cancelacion_sin_acuse_si_su_tipo_esta_eliminado(client):
+    invoice = provider_invoice(InvoiceStatus.UPLOADED)
+    login(client, PROVIDER_EMAIL)
+    page = client.get(f"/invoices/{invoice.id}").text
+    assert 'name="upload"' not in page and "Confirmo que la factura se canceló</label>" in page
+    assert cancel(client, invoice.id, filename=None).status_code == 303
+    assert reload(invoice.id).status == InvoiceStatus.CANCELLED
+    assert acknowledgments(invoice.id) == [] and stored_files(invoice.id) == []
+    [entry] = audits(invoice.id, "INVOICE_CANCELLED")
+    assert entry.new_value["document_id"] is None
 
 
 def test_nombre_del_invoice_de_una_factura_cancelada(client):

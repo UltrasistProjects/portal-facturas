@@ -8,13 +8,13 @@ from collections.abc import Iterable
 from datetime import datetime, timezone
 from uuid import uuid4
 
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.constants import ALLOWED_TRANSITIONS, CANCELLATION_WINDOW, InvoiceStatus, RuleStatus, Severity
 from app.core.errors import BusinessRuleError, InvalidTransitionError
 from app.core.timeutils import to_business
 from app.models import Invoice
+from app.services import document_requirements_service as requirements
 from app.services.audit_service import audit
 from app.services.validation_score_service import calculate_score
 
@@ -32,11 +32,6 @@ def provisional_folio() -> str:
 def internal_folio(invoice_id: int, created_at: datetime) -> str:
     """Folio derivado del id asignado por la BD: sin carrera entre altas concurrentes (AUDITORIA COD-06)."""
     return f"FAC-{to_business(created_at).year}-{invoice_id:05d}"
-
-
-def violates(exc: IntegrityError, constraint_name: str) -> bool:
-    """True si el IntegrityError proviene de la restriccion con ese nombre (psycopg lo expone en diag)."""
-    return getattr(getattr(exc.orig, "diag", None), "constraint_name", None) == constraint_name
 
 
 def lock_invoice(db: Session, invoice: Invoice) -> None:
@@ -57,7 +52,7 @@ def ensure_editable(invoice: Invoice) -> None:
 def sync_upload_status(db: Session, invoice: Invoice, complete: bool, user_id: int | None = None) -> None:
     """ "Borrador" <-> "Cargada" segun si estan completos los archivos obligatorios (RN-HU12-01). Otro estatus no
     cambia: "Observaciones" se conserva mientras el proveedor corrige. `complete` lo calcula quien llama con el
-    checklist de HU-04 (document_requirements_service ya depende de este modulo)."""
+    checklist de HU-04."""
     if invoice.status == InvoiceStatus.DRAFT and complete:
         transition_invoice(db, invoice, InvoiceStatus.UPLOADED, user_id)
     elif invoice.status == InvoiceStatus.UPLOADED and not complete:
@@ -82,6 +77,12 @@ def transition_invoice(db: Session, invoice: Invoice, target: InvoiceStatus, use
     old = invoice.status
     if target not in ALLOWED_TRANSITIONS.get(old, set()):
         raise InvalidTransitionError(f"Transicion no permitida: {old.value} -> {target.value}")
+    if target == InvoiceStatus.UNDER_REVIEW:
+        # Regla inviolable: nunca se envia a validacion sin los archivos obligatorios vigentes (409 con sus nombres).
+        # Solo rige al enviar: una factura ya enviada no se reevalua si la configuracion cambia.
+        missing = requirements.missing_required(db, invoice)
+        if missing:
+            raise BusinessRuleError(requirements.missing_message(missing))
     invoice.status = target
     now = datetime.now(timezone.utc)
     if target == InvoiceStatus.UNDER_REVIEW:

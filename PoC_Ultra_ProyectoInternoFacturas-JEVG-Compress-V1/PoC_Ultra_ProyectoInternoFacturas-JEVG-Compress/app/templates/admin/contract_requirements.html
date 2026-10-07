@@ -1,17 +1,18 @@
 {% extends "base.html" %}{% block title %}Requisitos de alta del contrato{% endblock %}{% block content %}
-{% from "admin/_type_actions.html" import type_actions, delete_forms, edit_open with context %}
+{% from "admin/_type_actions.html" import type_actions, delete_forms, restore_action, deleted_toggle, type_origin, edit_open with context %}
+{% set base_url = "/admin/contract-requirements" %}
 {% macro level_select(name, current, label, field_id=None) %}<select{% if field_id %} id="{{ field_id }}"{% endif %} name="{{ name }}" class="form-select form-select-sm" aria-label="{{ label }}">{% for level, level_label in levels.items() %}<option value="{{ level.value }}"{% if current == level or (current is none and level.value == 'NOT_APPLICABLE') %} selected{% endif %}>{{ level_label }}</option>{% endfor %}</select>{% endmacro %}
 <div class="page-heading"><div><span class="eyebrow">REQUISITOS MÍNIMOS</span><h1>Requisitos de alta del contrato</h1><p>Documentos que debe tener el expediente de un contrato para poder activarlo.</p></div></div>
 {% if error %}<div class="alert alert-danger">{{ error }}</div>{% endif %}{% if notice %}<div class="alert alert-success">{{ notice }}</div>{% endif %}
 <section class="panel">
-<div class="panel-header"><div><h2>Configuración</h2><p>Obligatorio: el contrato no se activa sin el documento y DOC-005 lo exige al validar sus facturas. Opcional: se pide pero no se exige. No aplica: no se pide.</p></div></div>
-<form method="post" action="/admin/contract-requirements">
+<div class="panel-header"><div><h2>Configuración</h2><p>Obligatorio: el contrato no se activa sin el documento y DOC-005 lo exige al validar sus facturas. Opcional: se pide pero no se exige. No aplica: no se pide.</p></div><div>{{ deleted_toggle(base_url) }}</div></div>
+<form method="post" action="{{ base_url }}">
 <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
 <input type="hidden" name="config_version" value="{{ config_version }}">
 <div class="table-responsive"><table class="table enterprise-table requirements-table">
 <thead><tr><th>Requisito</th><th>Varios archivos</th><th>Nivel</th><th>Acciones</th></tr></thead>
 <tbody>
-{% for t in active_types %}<tr><td><strong>{{ t.name }}</strong><small>{% if t.is_system %}Requisito del sistema{% else %}Requisito del Administrador · {{ t.code }}{% endif %}{% if t.description %} · {{ t.description }}{% endif %}</small></td><td>{{ "Sí" if t.allows_multiple else "No" }}</td><td>{% set fixed = fixed_requirement(t.code) %}{% if fixed %}<span class="fixed-level"><i class="bi bi-lock-fill" aria-hidden="true"></i> {{ levels[fixed] }}</span><small class="d-block text-muted">{{ fixed_reasons[t.code] }}</small>{% else %}{{ level_select('requirement__' ~ t.code, t.requirement, t.name ~ ' · Nivel') }}{% endif %}</td><td>{{ type_actions(t) }}</td></tr>{% endfor %}
+{% for t in active_types %}<tr><td><strong>{{ t.name }}</strong><small>{{ type_origin(t, "Requisito del sistema", "Requisito del Administrador") }}{% if t.description %} · {{ t.description }}{% endif %}</small></td><td>{{ "Sí" if t.allows_multiple else "No" }}</td><td>{{ level_select('requirement__' ~ t.code, t.requirement, t.name ~ ' · Nivel') }}</td><td>{{ type_actions(t) }}</td></tr>{% endfor %}
 </tbody>
 </table></div>
 <div class="form-actions m-0 px-4 pb-4"><button class="btn btn-primary">Guardar configuración</button></div>
@@ -20,7 +21,7 @@
 
 <section class="panel">
 <details class="admin-create"><summary>Nuevo requisito</summary>
-<form method="post" action="/admin/contract-requirements/types" class="form-grid">
+<form method="post" action="{{ base_url }}/types" class="form-grid">
 <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
 <div class="field"><label for="new-name">Nombre</label><input id="new-name" name="name" class="form-control" minlength="3" maxlength="80" required></div>
 <div class="field"><label for="new-description">Descripción (opcional)</label><input id="new-description" name="description" class="form-control" maxlength="300"></div>
@@ -32,31 +33,25 @@
 </details>
 </section>
 
-{% set admin_types = (active_types + inactive_types)|rejectattr('is_system')|list %}
 <section class="panel">
-<div class="panel-header"><div><h2>Requisitos del Administrador</h2><p>Los requisitos del sistema sólo cambian de nivel; no se editan, no se desactivan ni se eliminan.</p></div></div>
-{% for t in admin_types %}<details id="editar-{{ t.id }}" class="admin-create border-bottom"{{ edit_open(t) }}><summary>{{ t.name }} <small class="text-muted">· {{ t.code }}{% if not t.is_active %} · Inactivo{% endif %}</small></summary>
-<form method="post" action="/admin/contract-requirements/types/{{ t.id }}" class="form-grid">
+<div class="panel-header"><div><h2>Editar requisitos</h2><p>Nombre y descripción de cualquier requisito. La clave y si admite varios archivos no cambian; los documentos ya cargados se conservan.</p></div></div>
+{% for t in active_types + deleted_types %}<details id="editar-{{ t.id }}" class="admin-create border-bottom"{{ edit_open(t) }}><summary>{{ t.name }} <small class="text-muted">· {{ t.code }}{% if not t.is_active %} · Eliminado{% endif %}</small></summary>
+<form method="post" action="{{ base_url }}/types/{{ t.id }}" class="form-grid">
 <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
 <div class="field"><label for="name-{{ t.id }}">Nombre</label><input id="name-{{ t.id }}" name="name" class="form-control" value="{{ t.name }}" minlength="3" maxlength="80" required></div>
 <div class="field"><label for="description-{{ t.id }}">Descripción (opcional)</label><input id="description-{{ t.id }}" name="description" class="form-control" value="{{ t.description or '' }}" maxlength="300"></div>
 <div class="form-actions span-2"><button class="btn btn-primary">Guardar cambios</button></div>
 </form>
-{% if t.is_active %}<form method="post" action="/admin/contract-requirements/types/{{ t.id }}/status" class="mt-2">
-<input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
-<input type="hidden" name="active" value="false">
-<button class="btn btn-outline-danger btn-sm">Desactivar</button> <small class="text-muted">Deja de pedirse y de exigirse; conserva su nivel y los documentos ya cargados.</small>
-</form>{% endif %}
 </details>
-{% else %}<p class="empty-state">Aún no hay requisitos del Administrador.</p>{% endfor %}</section>
+{% else %}<p class="empty-state">No hay requisitos.</p>{% endfor %}</section>
 
-<section class="panel inactive-types">
-<div class="panel-header"><div><h2>Requisitos inactivos</h2><p>No se piden ni se exigen. Al reactivarlos recuperan su nivel.</p></div></div>
-{% if inactive_types %}<div class="table-responsive"><table class="table enterprise-table">
-<thead><tr><th>Requisito</th><th>Varios archivos</th><th>Nivel</th><th>Acciones</th></tr></thead>
+{% if show_deleted %}<section class="panel inactive-types" id="eliminados">
+<div class="panel-header"><div><h2>Requisitos eliminados</h2><p>No se piden ni se exigen. Sus documentos ya cargados se conservan. Al restaurarlos recuperan su nivel.</p></div></div>
+{% if deleted_types %}<div class="table-responsive"><table class="table enterprise-table">
+<thead><tr><th>Requisito</th><th>Varios archivos</th><th>Nivel</th><th>Eliminado</th><th>Acciones</th></tr></thead>
 <tbody>
-{% for t in inactive_types %}<tr><td><strong>{{ t.name }}</strong><small>{{ t.code }}</small></td><td>{{ "Sí" if t.allows_multiple else "No" }}</td><td>{{ levels[t.requirement] }}</td><td><form method="post" action="/admin/contract-requirements/types/{{ t.id }}/status"><input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}"><input type="hidden" name="active" value="true"><button class="btn btn-outline-primary btn-sm">Reactivar</button></form>{{ type_actions(t) }}</td></tr>{% endfor %}
+{% for t in deleted_types %}<tr><td><strong>{{ t.name }}</strong><small>{{ t.code }}</small></td><td>{{ "Sí" if t.allows_multiple else "No" }}</td><td>{{ levels[t.requirement] }}</td><td>{{ t.deleted_at|business_datetime }}</td><td>{{ restore_action(t, base_url) }}</td></tr>{% endfor %}
 </tbody>
-</table></div>{% else %}<p class="empty-state">No hay requisitos inactivos.</p>{% endif %}</section>
-{{ delete_forms(active_types + inactive_types, "/admin/contract-requirements") }}
+</table></div>{% else %}<p class="empty-state">No hay requisitos eliminados.</p>{% endif %}</section>{% endif %}
+{{ delete_forms(active_types, base_url) }}
 {% endblock %}

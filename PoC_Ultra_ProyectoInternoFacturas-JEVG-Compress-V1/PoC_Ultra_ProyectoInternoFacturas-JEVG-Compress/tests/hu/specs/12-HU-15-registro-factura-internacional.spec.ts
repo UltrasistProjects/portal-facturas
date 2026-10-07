@@ -4,7 +4,7 @@ import { guardarDato, leerEstado } from '../lib/estado';
 import { ejecutarHU } from '../lib/hu';
 import { cargarDocumento, clicNavegando, enviarAlta, estatusFactura, llenarAltaFactura, resumenObligatorios, texto } from '../lib/portal';
 
-const IMPORTES = { fecha: '2026-08-31', moneda: 'USD', subtotal: '1000.00', impuestos: '0.00', total: '1000.00' };
+const IMPORTES = { fecha: '2026-08-31', moneda: 'USD', subtotal: '1000.00', impuestos: '0.00' };
 
 test('HU-15 · Registro de factura por proveedor internacional', async ({ browser }, testInfo) => {
   await ejecutarHU('HU-15', browser, testInfo, async (hu) => {
@@ -17,7 +17,7 @@ test('HU-15 · Registro de factura por proveedor internacional', async ({ browse
       await hu.paso(
         proveedor,
         'Abrir "Nueva factura"',
-        'El formulario pide, además de los datos generales, la sección "Datos del Invoice" (fecha, moneda, subtotal, impuestos y total) y sólo ofrece el contrato del proveedor.',
+        'El formulario pide, además de los datos generales, la sección "Datos del Invoice" (fecha, moneda del catálogo, subtotal e impuestos; el total se calcula) y sólo ofrece el contrato del proveedor.',
         async () => {
           await proveedor.goto('/invoices/new');
           await expect(proveedor.locator('h1')).toHaveText('Registrar factura');
@@ -26,21 +26,21 @@ test('HU-15 · Registro de factura por proveedor internacional', async ({ browse
           const contratos = await proveedor.locator('#contract option').allInnerTexts();
           expect(contratos).toEqual([expect.stringContaining('Analitica Global 2026')]);
           await hu.captura(proveedor, 'formulario-invoice', 'Formulario de registro del proveedor internacional con "Datos del Invoice".', { completa: true });
-          return `Contrato ofrecido: ${contratos.join(' | ')}; campos del Invoice: fecha, moneda, subtotal, impuestos y total.`;
+          const monedas = await proveedor.locator('#currency option').allInnerTexts();
+          return `Contrato ofrecido: ${contratos.join(' | ')}; monedas del catálogo: ${monedas.join(', ')}; total de solo lectura.`;
         },
       );
       await hu.paso(
         proveedor,
-        'Capturar importes inconsistentes (subtotal 1,000.00 + impuestos 0.00 ≠ total 1,500.00) y continuar',
-        'Se rechaza el registro con un mensaje sobre el total y no se crea la factura.',
+        'Capturar subtotal 1,000.50 e impuestos 160.08',
+        'El Total se recalcula al capturar (1,160.58) y no se puede editar: el servidor lo vuelve a calcular e ignora cualquier total enviado.',
         async () => {
-          await llenarAltaFactura(proveedor, { numero, invoice: { ...IMPORTES, total: '1500.00' } });
-          await clicNavegando(proveedor, proveedor.getByRole('button', { name: /Continuar a documentos/ }));
-          const error = proveedor.locator('.alert-danger');
-          await expect(error).toBeVisible();
-          await expect(proveedor.locator('h1')).toHaveText('Registrar factura');
-          await hu.captura(proveedor, 'importes-inconsistentes', 'Registro rechazado: el total no es igual al subtotal más impuestos.');
-          return `Mensaje: "${await texto(proveedor, '.alert-danger')}"; se permanece en "Registrar factura".`;
+          await llenarAltaFactura(proveedor, { numero, invoice: { ...IMPORTES, subtotal: '1,000.50', impuestos: '160.08' } });
+          const total = proveedor.locator('#total');
+          await expect(total).toHaveValue('1,160.58');
+          await expect(total).toHaveAttribute('readonly', '');
+          await hu.captura(proveedor, 'total-calculado', 'Total calculado en vivo: subtotal + impuestos, de solo lectura.', { enfocar: total });
+          return `Total mostrado "${await total.inputValue()}" (solo lectura).`;
         },
       );
     });

@@ -20,7 +20,6 @@ from app.services.invoice_service import is_editable, lock_invoice, sync_upload_
 from app.services.validation_engine import run_validation
 
 MSG_NOT_SUBMITTABLE = "La factura no puede enviarse en su estatus actual"
-MSG_MISSING_REQUIRED = "Faltan archivos obligatorios. Cárguelos antes de enviar"
 
 
 class SubmissionOutcome(StrEnum):
@@ -34,6 +33,12 @@ class SubmissionResult:
     outcome: SubmissionOutcome
     # Resultados en FAIL (RuleOutcome del motor) cuando las reglas impiden el envio.
     failures: list = field(default_factory=list)
+    # Tipos obligatorios sin documento cuando la factura queda en "Borrador".
+    missing: list = field(default_factory=list)
+
+    @property
+    def missing_message(self) -> str:
+        return requirements.missing_message(self.missing)
 
 
 def submit_invoice(db: Session, invoice: Invoice, user_id: int) -> SubmissionResult:
@@ -41,7 +46,8 @@ def submit_invoice(db: Session, invoice: Invoice, user_id: int) -> SubmissionRes
 
     Orden: bloqueo de fila, estatus editable (409 si no), complementos de pago vencidos del proveedor (409, HU
     Complemento de Pagos), recalculo de "Borrador"/"Cargada" (en "Borrador" no se ejecuta el motor), motor y, sin
-    FAIL, transicion a UNDER_REVIEW (asigna submitted_at) e INVOICE_SUBMITTED."""
+    FAIL, transicion a UNDER_REVIEW (asigna submitted_at; verifica de nuevo los archivos obligatorios) e
+    INVOICE_SUBMITTED."""
     lock_invoice(db, invoice)
     if not is_editable(invoice):
         raise BusinessRuleError(MSG_NOT_SUBMITTABLE)
@@ -49,7 +55,7 @@ def submit_invoice(db: Session, invoice: Invoice, user_id: int) -> SubmissionRes
     complete = requirements.pending_required(requirements.checklist(db, invoice)) == 0
     sync_upload_status(db, invoice, complete, user_id)
     if invoice.status == InvoiceStatus.DRAFT:
-        return SubmissionResult(SubmissionOutcome.MISSING_REQUIRED)
+        return SubmissionResult(SubmissionOutcome.MISSING_REQUIRED, missing=requirements.missing_required(db, invoice))
     outcome = run_validation(db, invoice, user_id)
     failures = [result for result in outcome["results"] if result.status == RuleStatus.FAIL]
     if failures:

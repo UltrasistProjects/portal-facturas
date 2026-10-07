@@ -1,7 +1,8 @@
 {# Datos del Invoice del proveedor internacional (HU-15). Espera `values` (texto capturado) y `currencies`. #}
-<div class="field span-2 foreign-invoice-heading"><h2>Datos del Invoice</h2><p>El Invoice no es un CFDI: capture los datos tal como aparecen en su documento. El total debe ser igual al subtotal más impuestos.</p></div>
+<div class="field span-2 foreign-invoice-heading"><h2>Datos del Invoice</h2><p>El Invoice no es un CFDI: capture los datos tal como aparecen en su documento. El total es el subtotal más impuestos.</p></div>
 <div class="field"><label for="invoice_date">Fecha de la factura</label><input type="date" id="invoice_date" name="invoice_date" class="form-control" value="{{ values.invoice_date or '' }}" required></div>
 <div class="field"><label for="currency">Moneda</label><select id="currency" name="currency" class="form-select" required>{% for entry in currencies %}<option value="{{ entry.code }}"{% if values.currency == entry.code %} selected{% endif %}>{{ entry.code }} · {{ entry.name }}</option>{% endfor %}</select></div>
-<div class="field"><label for="subtotal">Subtotal</label><input id="subtotal" name="subtotal" class="form-control" inputmode="decimal" placeholder="1,000.00" value="{{ values.subtotal or '' }}" required></div>
-<div class="field"><label for="tax">Impuestos</label><input id="tax" name="tax" class="form-control" inputmode="decimal" placeholder="0.00" value="{{ values.tax or '' }}" required></div>
-<div class="field"><label for="total">Total</label><input id="total" name="total" class="form-control" inputmode="decimal" placeholder="1,000.00" value="{{ values.total or '' }}" required></div>
+<div class="field"><label for="subtotal">Subtotal</label><input id="subtotal" name="subtotal" data-amount class="form-control" inputmode="decimal" placeholder="1,000.00" value="{{ values.subtotal or '' }}" required></div>
+<div class="field"><label for="tax">Impuestos</label><input id="tax" name="tax" data-amount class="form-control" inputmode="decimal" placeholder="0.00" value="{{ values.tax or '' }}" required></div>
+<div class="field"><label for="total">Total</label><input id="total" class="form-control" value="{{ values.total or '' }}" readonly aria-describedby="total-help" data-amount-total><small id="total-help" class="form-text">Subtotal más impuestos; se calcula solo.</small></div>
+<script src="{{ url_for('static', path='/js/invoice_amounts.js') }}" defer></script>

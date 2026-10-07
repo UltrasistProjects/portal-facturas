@@ -29,7 +29,7 @@ test('HU-22 · Requisitos de alta del contrato', async ({ browser }, testInfo) =
       await hu.paso(
         admin,
         'Abrir Requisitos mínimos › Alta de contrato',
-        'El menú agrupa las tres configuraciones de documentos; la tabla muestra Contrato como Obligatorio fijo (con candado), y Orden de compra y Anexos como Opcionales con varios archivos.',
+        'El menú agrupa las tres configuraciones de documentos; la tabla muestra Contrato como Obligatorio, y Orden de compra y Anexos como Opcionales con varios archivos; todos los niveles son editables.',
         async () => {
           await admin.goto('/admin/contract-requirements');
           await expect(admin.locator('h1')).toHaveText('Requisitos de alta del contrato');
@@ -39,17 +39,16 @@ test('HU-22 · Requisitos de alta del contrato', async ({ browser }, testInfo) =
           }
           const filas = admin.locator('.requirements-table tbody tr');
           const firmado = filas.filter({ has: admin.getByText('Contrato', { exact: true }) });
-          await expect(firmado.locator('.fixed-level')).toContainText('Obligatorio');
-          await expect(firmado).toContainText('Todo contrato activo tiene su contrato firmado');
+          await expect(firmado.locator('select')).toHaveValue('REQUIRED');
           for (const nombre of ['Orden de compra', 'Anexos']) {
             const fila = filas.filter({ has: admin.getByText(nombre, { exact: true }) });
             await expect(fila.locator('select')).toHaveValue('OPTIONAL');
             await expect(fila.locator('td').nth(1)).toHaveText('Sí');
           }
-          await hu.captura(admin, 'configuracion-requisitos-contrato', 'Requisitos del contrato: Contrato obligatorio fijo; Orden de compra y Anexos opcionales.', {
+          await hu.captura(admin, 'configuracion-requisitos-contrato', 'Requisitos del contrato: Contrato obligatorio; Orden de compra y Anexos opcionales; niveles editables.', {
             completa: true,
           });
-          return 'Menú "Requisitos mínimos": Archivos de factura, Alta de proveedor y Alta de contrato. Contrato: Obligatorio con candado; Orden de compra y Anexos: Opcional, varios archivos.';
+          return 'Menú "Requisitos mínimos": Archivos de factura, Alta de proveedor y Alta de contrato. Contrato: Obligatorio (editable); Orden de compra y Anexos: Opcional, varios archivos.';
         },
       );
     });
@@ -159,6 +158,7 @@ test('HU-22 · Requisitos de alta del contrato', async ({ browser }, testInfo) =
       url: '/admin/contract-requirements',
       nombre: `Requisito de contrato temporal QA ${run}`,
       avisoEditado: 'Requisito actualizado',
+      avisoEliminado: 'Requisito eliminado',
       crear: async (nombre) => {
         await admin.locator('summary', { hasText: 'Nuevo requisito' }).click();
         await admin.locator('#new-name').fill(nombre);

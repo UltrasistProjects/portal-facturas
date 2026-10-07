@@ -371,20 +371,18 @@ def test_autorizacion_con_requisitos_incompletos_registrada(
 
 
 def test_cambio_de_reglas_de_validacion_registrado(client, restore_validation_rules):
-    from app.models import ValidationSettings
-    from app.services.validation_settings_service import CHECK_FIELDS, LABELS
+    from app.models import ValidationRule
 
     with SessionLocal() as db:
-        current = db.get(ValidationSettings, 1)
-        data = {name: getattr(current, name) for name in LABELS} | {"version": current.version}
-        data |= {name: "on" for name in CHECK_FIELDS}
+        rule = db.scalar(select(ValidationRule).where(ValidationRule.rule_code == "XML-009"))
     login(client)
     offset = log_offset()
-    data |= {"receiver_name": "RAZON SOCIAL DEL LOG", "payment_form": "03", "csrf_token": csrf(client, "/")}
-    assert client.post("/admin/rules", data=data, follow_redirects=False).status_code == 303
+    data = {"name": "Razón social", "parameter": "RAZON SOCIAL DEL LOG", "version": rule.version}
+    data["csrf_token"] = csrf(client, "/")
+    assert client.post(f"/admin/rules/national/{rule.id}", data=data, follow_redirects=False).status_code == 303
     events = events_since(offset)
-    [updated] = [e for e in events if e.get("event") == "validation_settings.updated"]
-    assert (updated["fields"], updated["version"]) == (["receiver_name", "payment_form"], 2)
+    [updated] = [e for e in events if e.get("event") == "validation_rule.updated"]
+    assert (updated["origin"], updated["rule_id"], updated["fields"]) == ("NATIONAL", rule.id, ["name", "parameter"])
     assert "RAZON SOCIAL DEL LOG" not in json.dumps(events, ensure_ascii=False)
 
 

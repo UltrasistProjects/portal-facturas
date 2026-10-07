@@ -1,6 +1,7 @@
 """Factura del proveedor internacional: datos del Invoice, duplicados por nombre de archivo y validacion (HU-15 y
 HU-16, specs factura-internacional y motor-validacion)."""
 
+import re
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from uuid import uuid4
@@ -13,7 +14,7 @@ from app.core.config import settings
 from app.core.constants import InvoiceStatus, Role, SupplierOrigin, SupplierStatus, SupplierType
 from app.core.database import SessionLocal
 from app.core.timeutils import to_business
-from app.models import AuditLog, Contract, Document, Invoice, Supplier, User, ValidationResult, ValidationSettings
+from app.models import AuditLog, Contract, Document, Invoice, Supplier, User, ValidationResult, ValidationRule, now_utc
 from app.services.foreign_invoice_service import MSG_NOT_INTERNATIONAL
 from tests.conftest import active_contract, csrf, identity_account, invoice_by_number, login
 
@@ -192,12 +193,25 @@ def test_registro_de_un_invoice(client):
     )
 
 
-def test_total_que_no_cuadra(client):
+def test_total_manipulado_por_el_cliente(client):
+    """El total no se captura: el servidor lo calcula (subtotal + impuestos) e ignora el que envie el cliente."""
     login(client, INTERNATIONAL)
-    response, number = register(client, subtotal="1000.00", tax="160.00", total="1100.00")
-    assert response.status_code == 400
-    assert "Total: debe ser igual al subtotal más impuestos" in response.text
-    assert 'value="1100.00"' in response.text and number in response.text  # conserva lo capturado
+    response, number = register(client, subtotal="1000.00", tax="160.00", total="1.00")
+    assert response.status_code == 303
+    assert invoice_by_number(number).total == Decimal("1160.00")
+
+
+def test_total_de_solo_lectura_en_el_formulario(client):
+    login(client, INTERNATIONAL)
+    page = client.get("/invoices/new").text
+    assert re.search(r'<input id="total" class="form-control" value="" readonly', page)
+    assert 'name="total"' not in page and "/static/js/invoice_amounts.js" in page
+
+
+def test_moneda_inexistente_por_peticion_directa(client):
+    login(client, INTERNATIONAL)
+    response, number = register(client, currency="XYZ")
+    assert response.status_code == 400 and "Moneda: la clave no está activa en el catálogo" in response.text
     assert invoice_by_number(number) is None
 
 
@@ -279,9 +293,16 @@ def test_edicion_sin_cambios_sin_auditoria(client):
 def test_edicion_con_errores(client):
     login(client, INTERNATIONAL)
     created = new_invoice(client)
-    response = edit(client, created.id, total="999.00")
-    assert response.status_code == 400 and "Total: debe ser igual al subtotal más impuestos" in response.text
-    assert 'value="999.00"' in response.text and invoice(created.id).total == Decimal("1000.00")
+    response = edit(client, created.id, tax="-1")
+    assert response.status_code == 400 and "Impuestos: no puede ser negativo" in response.text
+    assert invoice(created.id).total == Decimal("1000.00")
+
+
+def test_total_manipulado_en_la_edicion(client):
+    login(client, INTERNATIONAL)
+    created = new_invoice(client)
+    assert edit(client, created.id, subtotal="500.00", tax="80.00", total="999.99").status_code == 303
+    assert (invoice(created.id).subtotal, invoice(created.id).total) == (Decimal("500.00"), Decimal("580.00"))
 
 
 def test_edicion_de_factura_enviada(client):
@@ -418,20 +439,31 @@ def test_invoice_escaneado(client):
     complete(client, created.id, pdf([]))
     assert post(client, f"/invoices/{created.id}/validation").status_code == 303
     by_code = results(created.id)
-    for code in ("INT-001", "INT-002", "INT-003", "INT-004"):
+    for code in ("INT-001", "INT-002", "INT-003"):
         assert (by_code[code].status, by_code[code].message) == (
             "NOT_EVALUATED",
             "No se pudo leer el texto del Invoice",
         )
+    # INT-004 nace eliminada (sin direccion de ULTRASIST): no se evalua.
+    assert (by_code["INT-004"].status, by_code["INT-004"].message) == (
+        "NOT_APPLICABLE",
+        "Regla inactiva en Reglas de Validación",
+    )
     assert "Sin texto legible (posible escaneo)" in client.get(f"/invoices/{created.id}").text
 
 
 def test_comparaciones_desactivadas_y_direccion(client, restore_validation_rules):
     with SessionLocal() as db:
+        international = ValidationRule.origin == SupplierOrigin.INTERNATIONAL
         db.execute(
-            update(ValidationSettings).values(
-                check_receiver_postal_code=False, receiver_address="Av. Insurgentes Sur 1, Ciudad de México"
-            )
+            update(ValidationRule)
+            .where(international, ValidationRule.rule_code == "INT-003")
+            .values(is_active=False, deleted_at=now_utc())
+        )
+        db.execute(
+            update(ValidationRule)
+            .where(international, ValidationRule.rule_code == "INT-004")
+            .values(is_active=True, deleted_at=None, parameter="Av. Insurgentes Sur 1, Ciudad de México")
         )
         db.commit()
     login(client, INTERNATIONAL)
@@ -441,7 +473,7 @@ def test_comparaciones_desactivadas_y_direccion(client, restore_validation_rules
     by_code = results(created.id)
     assert (by_code["INT-003"].status, by_code["INT-003"].message) == (
         "NOT_APPLICABLE",
-        "Comparación desactivada en Reglas de Validación",
+        "Regla inactiva en Reglas de Validación",
     )
     assert by_code["INT-004"].status == "PASS"  # sin acentos ni signos: "Ciudad de México" = "Ciudad de Mexico"
 

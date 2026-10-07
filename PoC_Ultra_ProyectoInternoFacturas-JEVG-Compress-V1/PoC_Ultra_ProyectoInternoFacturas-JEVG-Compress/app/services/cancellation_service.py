@@ -26,9 +26,14 @@ MSG_PAID = "Una factura pagada no se puede cancelar"
 ENTITY = "Invoice"
 
 
-def acknowledgment_type(db: Session) -> InvoiceDocumentType:
-    """Tipo del sistema "Acuse de cancelacion": su nombre y formatos viven en el catalogo (HU-04)."""
-    return db.scalar(select(InvoiceDocumentType).where(InvoiceDocumentType.code == DocumentType.CANCELLATION_ACK))
+def acknowledgment_type(db: Session) -> InvoiceDocumentType | None:
+    """Tipo del sistema "Acuse de cancelacion": su nombre y formatos viven en el catalogo (HU-04). None si el
+    Administrador lo elimino: la cancelacion procede solo con la confirmacion (ajustes-finales-configuracion)."""
+    return db.scalar(
+        select(InvoiceDocumentType).where(
+            InvoiceDocumentType.code == DocumentType.CANCELLATION_ACK, InvoiceDocumentType.is_active.is_(True)
+        )
+    )
 
 
 def ensure_cancellable(invoice: Invoice) -> None:
@@ -46,18 +51,38 @@ def check_request(db: Session, invoice: Invoice, confirmed: bool, filename: str 
     if not confirmed:
         raise InvalidInputError(MSG_CONFIRM)
     ack = acknowledgment_type(db)
+    if ack is None:
+        return
     if not filename:
         raise InvalidInputError(f"Cargue el {ack.name}")
     requirements.ensure_format(ack, filename)
 
 
-async def cancel(db: Session, invoice: Invoice, upload: UploadFile, user_id: int) -> Document:
-    """Cancela la factura con su acuse. Bloquea la fila antes de comprobar el estatus: de dos cancelaciones
-    simultaneas, la segunda encuentra la factura cancelada (409) sin escribir su archivo. Un archivo vacio, demasiado
-    grande o cuyo contenido no corresponde a la extension es InvalidInputError (400) y nada cambia."""
+async def cancel(db: Session, invoice: Invoice, upload: UploadFile | None, user_id: int) -> Document | None:
+    """Cancela la factura con su acuse, o sin archivo si el tipo del acuse esta eliminado. Bloquea la fila antes de
+    comprobar el estatus: de dos cancelaciones simultaneas, la segunda encuentra la factura cancelada (409) sin
+    escribir su archivo. Un archivo vacio, demasiado grande o cuyo contenido no corresponde a la extension es
+    InvalidInputError (400) y nada cambia."""
     lock_invoice(db, invoice)
     ensure_cancellable(invoice)
     previous_status = invoice.status
+    document = await _store_acknowledgment(db, invoice, upload, user_id) if acknowledgment_type(db) else None
+    transition_invoice(db, invoice, InvoiceStatus.CANCELLED, user_id)
+    db.flush()
+    audit(
+        db,
+        "INVOICE_CANCELLED",
+        ENTITY,
+        invoice.id,
+        user_id,
+        old={"status": previous_status.value},
+        new={"document_id": document.id if document else None, "deadline": invoice.cancellation_deadline.isoformat()},
+    )
+    logger.info("invoice.cancelled", extra={"event": "invoice.cancelled", "invoice_id": invoice.id})
+    return document
+
+
+async def _store_acknowledgment(db: Session, invoice: Invoice, upload: UploadFile, user_id: int) -> Document:
     try:
         stored = await LocalFileStorage().save_invoice_file(invoice.id, upload)
     except ValueError as exc:
@@ -78,17 +103,6 @@ async def cancel(db: Session, invoice: Invoice, upload: UploadFile, user_id: int
         metadata_json={},
     )
     db.add(document)
-    transition_invoice(db, invoice, InvoiceStatus.CANCELLED, user_id)
     db.flush()
     log_upload(DocumentType.CANCELLATION_ACK.value, stored, invoice_id=invoice.id)
-    audit(
-        db,
-        "INVOICE_CANCELLED",
-        ENTITY,
-        invoice.id,
-        user_id,
-        old={"status": previous_status.value},
-        new={"document_id": document.id, "deadline": invoice.cancellation_deadline.isoformat()},
-    )
-    logger.info("invoice.cancelled", extra={"event": "invoice.cancelled", "invoice_id": invoice.id})
     return document

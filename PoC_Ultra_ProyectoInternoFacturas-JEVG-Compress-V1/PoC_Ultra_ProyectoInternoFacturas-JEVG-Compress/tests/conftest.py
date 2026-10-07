@@ -501,12 +501,27 @@ def restore_validation_rules():
     from sqlalchemy import delete, update
 
     from app.core.database import SessionLocal
-    from app.models import CatalogEntry, ValidationSettings
+    from app.models import CatalogEntry, ValidationRule, now_utc
 
     seed = migration_module("0007_validation_rules_catalogs")
     entries = {**seed.ENTRIES, **migration_module("0009_supplier_profile").ENTRIES}
     with SessionLocal() as db:
-        db.execute(update(ValidationSettings).values(**{k: v for k, v in seed.SETTINGS.items() if k != "id"}))
+        for origin, code, name, parameter, active in migration_module("0020_validation_rules").rule_values(
+            seed.SETTINGS
+        ):
+            db.execute(
+                update(ValidationRule)
+                .where(ValidationRule.origin == origin, ValidationRule.rule_code == code)
+                .values(
+                    name=name,
+                    parameter=parameter,
+                    is_active=active,
+                    deleted_at=None if active else now_utc(),
+                    deleted_by=None,
+                    version=1,
+                    updated_by=None,
+                )
+            )
         for catalog, rows in entries.items():
             codes = [code for code, _ in rows]
             db.execute(delete(CatalogEntry).where(CatalogEntry.catalog == catalog, CatalogEntry.code.not_in(codes)))

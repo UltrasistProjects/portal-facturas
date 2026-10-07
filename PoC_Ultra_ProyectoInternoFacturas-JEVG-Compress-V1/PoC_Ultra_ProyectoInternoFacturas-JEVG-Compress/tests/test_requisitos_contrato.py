@@ -367,18 +367,20 @@ def test_pmo_y_proveedor_no_cargan(client, new_contracts, email):
 
 @pytest.fixture()
 def restore_contract_requirements():
-    """La base de pruebas es compartida: restaura los niveles de los requisitos del sistema y borra los creados por
-    la prueba (sus documentos los borra new_contracts)."""
+    """La base de pruebas es compartida: restaura los requisitos del sistema (nombre, descripcion, nivel y baja logica)
+    y borra los creados por la prueba (sus documentos los borra new_contracts)."""
+    fields = ("name", "description", "requirement", "is_active", "deleted_at", "deleted_by")
     with SessionLocal() as db:
         saved = {
-            t.code: t.requirement
+            t.code: {field: getattr(t, field) for field in fields}
             for t in db.scalars(select(ContractDocumentType).where(ContractDocumentType.is_system))
         }
     yield
     with SessionLocal() as db:
         db.execute(delete(ContractDocumentType).where(ContractDocumentType.is_system.is_(False)))
         for document_type in db.scalars(select(ContractDocumentType).where(ContractDocumentType.is_system)):
-            document_type.requirement = saved[document_type.code]
+            for field, value in saved[document_type.code].items():
+                setattr(document_type, field, value)
         db.commit()
 
 
@@ -616,7 +618,7 @@ def config_snapshot() -> tuple:
                         "CONTRACT_REQUIREMENTS_UPDATED",
                         "CONTRACT_DOCUMENT_TYPE_CREATED",
                         "CONTRACT_DOCUMENT_TYPE_UPDATED",
-                        "CONTRACT_DOCUMENT_TYPE_STATUS_CHANGED",
+                        "CONTRACT_DOCUMENT_TYPE_RESTORED",
                         "CONTRACT_DOCUMENT_TYPE_DELETED",
                     ]
                 )
@@ -646,9 +648,9 @@ def create_requirement(client, name: str, **fields: str):
     return client.post(f"{URL}/types", data=data, follow_redirects=False)
 
 
-def set_status(client, type_id: int, active: bool):
-    data = {"active": "true" if active else "false", "csrf_token": csrf(client, URL)}
-    return client.post(f"{URL}/types/{type_id}/status", data=data, follow_redirects=False)
+def restore_requirement(client, type_id: int):
+    data = {"csrf_token": csrf(client, URL)}
+    return client.post(f"{URL}/types/{type_id}/restore", data=data, follow_redirects=False)
 
 
 @pytest.mark.parametrize("email", ["pmo@poc.local", MORAL])
@@ -662,7 +664,7 @@ def test_configuracion_sin_acceso_para_pmo_y_proveedor(client, email):
         URL,
         f"{URL}/types",
         f"{URL}/types/{type_id}",
-        f"{URL}/types/{type_id}/status",
+        f"{URL}/types/{type_id}/restore",
         f"{URL}/types/{type_id}/delete",
     )
     for route in routes:
@@ -714,18 +716,15 @@ def test_dejar_de_pedir_los_anexos(client, new_contracts, restore_contract_requi
     assert "Anexos" not in requirement_rows(page) and 'value="CONTRACT_ANNEXES"' not in page
 
 
-def test_contrato_con_nivel_fijo(client, restore_contract_requirements):
+def test_contrato_con_nivel_editable(client, new_contracts, restore_contract_requirements):
     login(client)
     page = html.unescape(client.get(URL).text)
     row = page.split("<strong>Contrato</strong>")[1].split("</tr>")[0]
-    assert "bi-lock-fill" in row and "Obligatorio" in row and "Todo contrato activo tiene su contrato firmado" in row
-    assert "<select" not in row and "requirement__SIGNED_CONTRACT" not in levels_form(page)
-    before = config_snapshot()
-    response = save_levels(
-        client, {"requirement__CONTRACT_ANNEXES": "REQUIRED", "requirement__SIGNED_CONTRACT": "OPTIONAL"}
-    )
-    assert response.status_code == 409 and "Contrato tiene un nivel fijo" in html.unescape(response.text)
-    assert config_snapshot() == before
+    assert "<select" in row and "bi-lock-fill" not in row
+    assert save_levels(client, {"requirement__SIGNED_CONTRACT": "OPTIONAL"}).status_code == 303
+    contract = new_contracts(codes=[])
+    with SessionLocal() as db:
+        assert requirements.pending_names(db, db.get(Contract, contract.id)) == []
 
 
 def test_guardar_sin_cambios(client, restore_contract_requirements):
@@ -815,36 +814,43 @@ def test_requisito_con_nombre_repetido(client, restore_contract_requirements):
     assert config_snapshot() == before
 
 
-def test_desactivacion_y_reactivacion(client, new_contracts, restore_contract_requirements):
+def test_eliminacion_logica_y_restauracion(client, new_contracts, restore_contract_requirements):
     login(client)
     create_requirement(client, NDA, requirement="REQUIRED")
     created = requirement_by(name=NDA)
     contract = new_contracts(codes=["SIGNED_CONTRACT", created.code])
-    assert set_status(client, created.id, False).status_code == 303
-    inactive = html.unescape(client.get(URL).text).split("Requisitos inactivos")[1]
-    assert NDA in inactive and created.code in inactive and "Reactivar" in inactive
+    assert delete_requirement(client, created.id).headers["location"] == f"{URL}?ok=deleted"
+    deleted = requirement_by(id=created.id)
+    assert (deleted.is_active, deleted.deleted_at is not None, deleted.deleted_by) == (False, True, admin_id())
+    listed = html.unescape(client.get(f"{URL}?eliminados=1").text).split("Requisitos eliminados")[1]
+    assert NDA in listed and created.code in listed and "Restaurar" in listed
     page = contract_page(client, contract.id)
     assert NDA not in requirement_rows(page)
     others = page.split("Otros documentos del contrato")[1]
     assert NDA in others and f"/contracts/{contract.id}/documents/" in others
     with SessionLocal() as db:
         assert requirements.pending_names(db, db.get(Contract, contract.id)) == []
-    assert set_status(client, created.id, True).status_code == 303
-    reactivated = requirement_by(id=created.id)
-    assert reactivated.is_active and reactivated.requirement == "REQUIRED"
-    assert len(audit_entries("CONTRACT_DOCUMENT_TYPE_STATUS_CHANGED", created.id)) == 2
+    assert restore_requirement(client, created.id).headers["location"] == f"{URL}?ok=restored"
+    restored = requirement_by(id=created.id)
+    assert restored.is_active and restored.requirement == "REQUIRED"
+    assert len(audit_entries("CONTRACT_DOCUMENT_TYPE_DELETED", created.id)) == 1
+    assert len(audit_entries("CONTRACT_DOCUMENT_TYPE_RESTORED", created.id)) == 1
 
 
-def test_requisito_del_sistema_no_se_edita_ni_se_desactiva(client):
+def test_requisito_del_sistema_se_edita_y_se_elimina(client, new_contracts, restore_contract_requirements):
     login(client)
     annexes = requirement_by(code="CONTRACT_ANNEXES")
-    before = config_snapshot()
-    data = {"name": "Otro nombre", "description": "", "csrf_token": csrf(client, URL)}
-    response = client.post(f"{URL}/types/{annexes.id}", data=data, follow_redirects=False)
-    assert response.status_code == 409
-    assert "Los requisitos del sistema no se pueden editar ni desactivar" in response.text
-    assert set_status(client, annexes.id, False).status_code == 409
-    assert config_snapshot() == before
+    data = {"name": "Anexos técnicos", "description": "", "csrf_token": csrf(client, URL)}
+    assert client.post(f"{URL}/types/{annexes.id}", data=data, follow_redirects=False).status_code == 303
+    assert (requirement_by(id=annexes.id).name, requirement_by(id=annexes.id).code) == (
+        "Anexos técnicos",
+        "CONTRACT_ANNEXES",
+    )
+    signed = requirement_by(code="SIGNED_CONTRACT")
+    assert delete_requirement(client, signed.id).status_code == 303
+    contract = new_contracts(codes=[])
+    assert activate(client, contract.id).status_code == 303
+    assert contract_status(contract.id) == "ACTIVE"
 
 
 def test_edicion_de_un_requisito(client, restore_contract_requirements):
@@ -890,11 +896,9 @@ def test_datos_invalidos_y_operaciones_sin_cambios(client, restore_contract_requ
     data = {"name": NDA, "description": "", "csrf_token": csrf(client, URL)}
     response = client.post(f"{URL}/types/{created.id}", data=data, follow_redirects=False)
     assert "Sin cambios" in client.get(response.headers["location"]).text
-    response = set_status(client, created.id, True)  # ya estaba activo
+    response = restore_requirement(client, created.id)  # ya estaba activo
     assert "Sin cambios" in client.get(response.headers["location"]).text
-    data = {"active": "quizas", "csrf_token": csrf(client, URL)}
-    assert client.post(f"{URL}/types/{created.id}/status", data=data, follow_redirects=False).status_code == 400
-    assert set_status(client, 999999, False).status_code == 404
+    assert restore_requirement(client, 999999).status_code == 404
     assert config_snapshot() == before
 
 
@@ -911,7 +915,7 @@ def config_row(page: str, name: str) -> str:
     return re.search(rf"<tr><td><strong>{re.escape(name)}</strong>.*?</tr>", table, re.S).group(0)
 
 
-def test_acciones_editar_y_eliminar_solo_en_requisitos_del_administrador(client, restore_contract_requirements):
+def test_acciones_editar_y_eliminar_en_todos_los_requisitos(client, restore_contract_requirements):
     login(client)
     create_requirement(client, NDA)
     created = requirement_by(name=NDA)
@@ -919,37 +923,11 @@ def test_acciones_editar_y_eliminar_solo_en_requisitos_del_administrador(client,
     row = config_row(page, NDA)
     assert f'href="?editar={created.id}#editar-{created.id}"' in row and f'form="eliminar-{created.id}"' in row
     assert f"¿Eliminar «{NDA}»?" in row
+    annexes = requirement_by(code="CONTRACT_ANNEXES")
     system = config_row(page, "Anexos")
-    assert "Editar" not in system and "Eliminar" not in system
+    assert f'href="?editar={annexes.id}#editar-{annexes.id}"' in system and "Eliminar" in system
     opened = client.get(f"{URL}?editar={created.id}").text
     assert f'id="editar-{created.id}" class="admin-create border-bottom" open' in opened
-    assert set_status(client, created.id, False).status_code == 303
-    inactive = html.unescape(client.get(URL).text).split("Requisitos inactivos")[1]
-    assert f'href="?editar={created.id}#editar-{created.id}"' in inactive
-
-
-@pytest.mark.parametrize("inactive", [False, True])
-def test_eliminacion_de_un_requisito_sin_documentos(client, restore_contract_requirements, inactive):
-    login(client)
-    create_requirement(client, NDA, requirement="REQUIRED")
-    created = requirement_by(name=NDA)
-    if inactive:
-        assert set_status(client, created.id, False).status_code == 303
-    response = delete_requirement(client, created.id)
-    assert response.status_code == 303 and response.headers["location"] == f"{URL}?ok=deleted"
-    assert requirement_by(id=created.id) is None
-    page = html.unescape(client.get(response.headers["location"]).text)
-    assert "Tipo eliminado" in page and NDA not in page
-    (entry,) = audit_entries("CONTRACT_DOCUMENT_TYPE_DELETED", created.id)
-    assert entry.user_id == admin_id()
-    assert entry.old_value == {
-        "code": created.code,
-        "name": NDA,
-        "description": None,
-        "is_active": not inactive,
-        "requirement": "REQUIRED",
-        "allows_multiple": False,
-    }
 
 
 def test_eliminacion_de_un_requisito_con_documentos(client, new_contracts, restore_contract_requirements):
@@ -958,18 +936,15 @@ def test_eliminacion_de_un_requisito_con_documentos(client, new_contracts, resto
     create_requirement(client, NDA, requirement="REQUIRED")
     created = requirement_by(name=NDA)
     assert upload(client, contract.id, created.code).status_code == 303
-    before = config_snapshot()
-    response = delete_requirement(client, created.id)
-    assert response.status_code == 409
-    assert "El tipo ya tiene documentos cargados; desactívelo en su lugar" in html.unescape(response.text)
-    assert config_snapshot() == before
+    assert delete_requirement(client, created.id).status_code == 303
+    assert requirement_by(id=created.id).is_active is False
+    (entry,) = audit_entries("CONTRACT_DOCUMENT_TYPE_DELETED", created.id)
+    assert (entry.user_id, entry.old_value, entry.new_value) == (admin_id(), {"is_active": True}, {"is_active": False})
+    assert NDA in contract_page(client, contract.id).split("Otros documentos del contrato")[1]
 
 
-def test_eliminacion_de_un_requisito_del_sistema_inexistente_o_sin_csrf(client, restore_contract_requirements):
+def test_eliminacion_de_un_requisito_inexistente_o_sin_csrf(client, restore_contract_requirements):
     login(client)
-    before = config_snapshot()
-    response = delete_requirement(client, requirement_by(code="CONTRACT_ANNEXES").id)
-    assert response.status_code == 409 and "Los elementos del sistema no se pueden eliminar" in response.text
     assert delete_requirement(client, 999_999).status_code == 404
     create_requirement(client, NDA)
     created = requirement_by(name=NDA)

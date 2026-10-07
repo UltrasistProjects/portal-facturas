@@ -1,8 +1,12 @@
-from app.rules.base import NOT_FOR_INTERNATIONAL, not_applicable, outcome
-from app.services.validation_settings_service import RuleParameters, normalize_name
+import unicodedata
 
-# Una comparacion desactivada en Reglas de Validacion (HU-06) conserva su codigo y severidad pero no afecta el score.
-DISABLED = "Comparación desactivada en Reglas de Validación"
+from app.rules.base import NOT_FOR_INTERNATIONAL, not_applicable, outcome
+from app.rules.definitions import RuleSet
+
+# Una regla eliminada en Reglas de Validacion conserva su codigo y severidad pero no afecta el score.
+DISABLED = "Regla inactiva en Reglas de Validación"
+# Sin XML vigente y con el XML del CFDI fuera de los archivos obligatorios del proveedor nacional.
+XML_NOT_REQUIRED = "El XML del CFDI no se exige en Archivos mínimos"
 # Severidad de cada regla del CFDI; la conservan sus resultados NOT_APPLICABLE.
 SEVERITIES = {
     "XML-001": "CRITICAL",
@@ -15,40 +19,54 @@ SEVERITIES = {
     "XML-008": "CRITICAL",
     "XML-009": "ERROR",
     "XML-010": "ERROR",
+    "XML-011": "ERROR",
 }
 
 
+def normalize_name(text: str | None) -> str:
+    """Razon social comparable: sin acentos, sin distinguir mayusculas y con los espacios colapsados (S6)."""
+    plain = "".join(c for c in unicodedata.normalize("NFKD", text or "") if not unicodedata.combining(c))
+    return " ".join(plain.split()).casefold()
+
+
 def _compare(
-    enabled: bool,
+    rules: RuleSet,
     code: str,
-    severity: str,
-    passed: bool,
+    passed,
     message_pass: str,
     message_fail: str,
-    expected,
     detected,
     source_reference: str | None = None,
+    expected=None,
 ):
+    """Comparacion con el valor esperado de una regla nacional; NOT_APPLICABLE si la regla esta eliminada.
+    `passed` recibe el valor esperado."""
+    severity = SEVERITIES[code]
     source = "CFDI.xml" if source_reference else None
-    if not enabled:
-        return not_applicable(code, "XML", severity, DISABLED, expected, source)
+    parameter = rules.parameter(code)
+    shown = expected if expected is not None else parameter
+    if not rules.active(code):
+        return not_applicable(code, "XML", severity, DISABLED, shown, source)
     return outcome(
-        code, "XML", passed, severity, message_pass, message_fail, expected, detected, source, source_reference
+        code, "XML", passed(parameter), severity, message_pass, message_fail, shown, detected, source, source_reference
     )
 
 
-def xml_rules(data: dict | None, error: str | None, params: RuleParameters, international: bool = False):
-    """Reglas del CFDI con la configuracion vigente de Reglas de Validacion y el catalogo de monedas (D3). El Invoice
-    del proveedor internacional no es un CFDI: todas resultan NOT_APPLICABLE (HU-16)."""
+def xml_rules(data: dict | None, error: str | None, rules: RuleSet, international: bool = False, required: bool = True):
+    """Reglas del CFDI con las reglas nacionales vigentes de Reglas de Validacion y el catalogo de monedas. El Invoice
+    del proveedor internacional no es un CFDI: todas resultan NOT_APPLICABLE (HU-16). Sin XML y con el XML del CFDI
+    fuera de los obligatorios (`required` falso), tambien."""
     if international:
         return [not_applicable(code, "XML", severity, NOT_FOR_INTERNATIONAL) for code, severity in SEVERITIES.items()]
+    if data is None and error is None and not required:
+        return [not_applicable(code, "XML", severity, XML_NOT_REQUIRED) for code, severity in SEVERITIES.items()]
     if data is None:
         return [outcome("XML-001", "XML", False, "CRITICAL", "XML valido", error or "XML invalido")]
     essentials = all(
         data.get(k) is not None for k in ("issuer_rfc", "receiver_rfc", "date", "subtotal", "total", "currency")
     )
-    currencies = sorted(params.currencies)
     detected_name = data.get("receiver_name")
+    uses = rules.parameter("XML-005") or []
     return [
         outcome(
             "XML-001",
@@ -61,45 +79,38 @@ def xml_rules(data: dict | None, error: str | None, params: RuleParameters, inte
             "CFDI parseable",
         ),
         _compare(
-            params.check_receiver_rfc,
+            rules,
             "XML-002",
-            "CRITICAL",
-            data.get("receiver_rfc") == params.receiver_rfc,
+            lambda rfc: data.get("receiver_rfc") == rfc,
             "RFC receptor correcto",
             "RFC receptor incorrecto",
-            params.receiver_rfc,
             data.get("receiver_rfc"),
             "Receptor.Rfc",
         ),
         _compare(
-            params.check_payment_method,
+            rules,
             "XML-003",
-            "ERROR",
-            data.get("payment_method") == params.payment_method,
+            lambda method: data.get("payment_method") == method,
             "MetodoPago correcto",
-            f"MetodoPago debe ser {params.payment_method}",
-            params.payment_method,
+            f"MetodoPago debe ser {rules.parameter('XML-003')}",
             data.get("payment_method"),
         ),
         _compare(
-            params.check_payment_form,
+            rules,
             "XML-004",
-            "ERROR",
-            data.get("payment_form") == params.payment_form,
+            lambda form: data.get("payment_form") == form,
             "FormaPago correcta",
-            f"FormaPago debe ser {params.payment_form}",
-            params.payment_form,
+            f"FormaPago debe ser {rules.parameter('XML-004')}",
             data.get("payment_form"),
         ),
         _compare(
-            params.check_cfdi_use,
+            rules,
             "XML-005",
-            "ERROR",
-            data.get("cfdi_use") in params.allowed_cfdi_uses,
+            lambda allowed: data.get("cfdi_use") in allowed,
             "UsoCFDI permitido",
             "UsoCFDI no permitido",
-            ", ".join(params.allowed_cfdi_uses),
             data.get("cfdi_use"),
+            expected=", ".join(uses),
         ),
         outcome(
             "XML-006",
@@ -114,34 +125,39 @@ def xml_rules(data: dict | None, error: str | None, params: RuleParameters, inte
         outcome(
             "XML-007",
             "XML",
-            data.get("currency") in params.currencies,
+            data.get("currency") in rules.currencies,
             "ERROR",
             "Moneda valida",
             "Moneda no valida",
-            "/".join(currencies),
+            "/".join(sorted(rules.currencies)),
             data.get("currency"),
         ),
         outcome("XML-008", "XML", essentials, "CRITICAL", "Datos esenciales presentes", "Faltan datos esenciales"),
         _compare(
-            params.check_receiver_name,
+            rules,
             "XML-009",
-            "ERROR",
-            bool(detected_name) and normalize_name(detected_name) == normalize_name(params.receiver_name),
+            lambda name: bool(detected_name) and normalize_name(detected_name) == normalize_name(name),
             "Razón social del receptor correcta",
             "Razón social del receptor incorrecta",
-            params.receiver_name,
             detected_name,
             "Receptor.Nombre",
         ),
         _compare(
-            params.check_receiver_postal_code,
+            rules,
             "XML-010",
-            "ERROR",
-            data.get("receiver_postal_code") == params.receiver_postal_code,
+            lambda postal_code: data.get("receiver_postal_code") == postal_code,
             "Código postal del receptor correcto",
             "Código postal del receptor incorrecto",
-            params.receiver_postal_code,
             data.get("receiver_postal_code"),
             "Receptor.DomicilioFiscalReceptor",
+        ),
+        _compare(
+            rules,
+            "XML-011",
+            lambda regime: data.get("receiver_regime") == regime,
+            "Régimen fiscal del receptor correcto",
+            f"RegimenFiscalReceptor debe ser {rules.parameter('XML-011')}",
+            data.get("receiver_regime"),
+            "Receptor.RegimenFiscalReceptor",
         ),
     ]

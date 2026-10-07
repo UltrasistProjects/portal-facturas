@@ -16,19 +16,17 @@ from pathlib import Path
 from uuid import uuid4
 
 from pydantic import ValidationError
-from sqlalchemy import func, select, text
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.constants import (
-    FIXED_REQUIREMENTS,
     FORMAT_EXTENSIONS,
     PAYMENT_COMPLEMENT_TYPES,
     DocumentRequirement,
     InvoiceStatus,
     SupplierOrigin,
 )
-from app.core.errors import BusinessRuleError, InvalidInputError, NotFoundError
+from app.core.errors import BusinessRuleError, InvalidInputError
 from app.models import Document, Invoice, InvoiceDocumentType
 from app.schemas import (
     INVALID_REQUIREMENT,
@@ -38,10 +36,8 @@ from app.schemas import (
     parse_requirement,
 )
 from app.services.audit_service import audit
-from app.services.invoice_service import violates
+from app.services.type_catalog import TypeCatalog, share_lock
 
-# Clave del bloqueo consultivo que serializa las escrituras de la configuracion (pg_advisory_xact_lock).
-CONFIG_LOCK_KEY = 4_0400_0001
 ENTITY = "InvoiceDocumentType"
 LEVEL_FIELDS = {
     SupplierOrigin.NATIONAL: "national_requirement",
@@ -53,11 +49,18 @@ ORIGIN_PLURALS = {SupplierOrigin.NATIONAL: "nacionales", SupplierOrigin.INTERNAT
 
 MSG_CHANGED = "La configuración cambió mientras la editaba. Recargue la página."
 MSG_DUPLICATE_NAME = "Ya existe un tipo de documento con ese nombre"
-MSG_SYSTEM_TYPE = "Los tipos de documento del sistema no se pueden editar ni desactivar"
 MSG_NOT_FOUND = "Tipo de documento no encontrado"
-MSG_SYSTEM_DELETE = "Los elementos del sistema no se pueden eliminar"
-MSG_IN_USE = "El tipo ya tiene documentos cargados; desactívelo en su lugar"
 MSG_NOT_OFFERED = "El tipo de documento no aplica a esta factura"
+# Bloqueo consultivo 4_0400_0001: serializa las escrituras de la configuracion (pg_advisory_xact_lock).
+CATALOG = TypeCatalog(
+    model=InvoiceDocumentType,
+    entity=ENTITY,
+    action_prefix="INVOICE_DOCUMENT_TYPE",
+    lock_key=4_0400_0001,
+    name_index="uq_invoice_document_types_name_lower",
+    duplicate_message=MSG_DUPLICATE_NAME,
+    not_found_message=MSG_NOT_FOUND,
+)
 
 
 # --- Lectura ------------------------------------------------------------------------------------------------------
@@ -77,10 +80,6 @@ def catalog(db: Session) -> list[InvoiceDocumentType]:
 
 def requirement(document_type: InvoiceDocumentType, origin: SupplierOrigin) -> DocumentRequirement:
     return getattr(document_type, LEVEL_FIELDS[origin])
-
-
-def fixed_requirement(code: str, origin: SupplierOrigin) -> DocumentRequirement | None:
-    return FIXED_REQUIREMENTS.get(code, {}).get(origin)
 
 
 def offered_types(db: Session, origin: SupplierOrigin) -> list[InvoiceDocumentType]:
@@ -144,6 +143,17 @@ def pending_required(items: Iterable[ChecklistItem]) -> int:
     return sum(item.level == DocumentRequirement.REQUIRED and item.document is None for item in items)
 
 
+def missing_required(db: Session, invoice: Invoice) -> list[InvoiceDocumentType]:
+    """Tipos activos y Obligatorios para el origen del proveedor sin documento vigente, en el orden del catalogo: lo
+    que impide enviar la factura a validacion. Un tipo eliminado no se exige."""
+    present = {document.document_type for document in invoice.documents if document.is_current}
+    return [t for t in required_types(db, invoice.supplier.origin) if t.code not in present]
+
+
+def missing_message(types: Iterable[InvoiceDocumentType]) -> str:
+    return f"Faltan archivos obligatorios: {', '.join(t.name for t in types)}. Cárguelos antes de enviar"
+
+
 def pending_label(pending: int) -> str:
     if pending == 0:
         return "Archivos obligatorios completos"
@@ -157,7 +167,7 @@ def offered_type(db: Session, invoice: Invoice, code: str) -> InvoiceDocumentTyp
     offered = next((t for t in invoice_types(db, invoice) if t.code == code), None)
     if offered is None:
         raise InvalidInputError(MSG_NOT_OFFERED)
-    _share_lock(db, InvoiceDocumentType, offered.id)
+    share_lock(db, InvoiceDocumentType, offered.id)
     return offered
 
 
@@ -171,74 +181,25 @@ def ensure_format(document_type: InvoiceDocumentType, filename: str | None) -> N
 # --- Escritura ----------------------------------------------------------------------------------------------------
 
 
-def _lock(db: Session) -> None:
-    db.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": CONFIG_LOCK_KEY})
-
-
-def _support_type(db: Session, type_id: int) -> InvoiceDocumentType:
-    document_type = db.get(InvoiceDocumentType, type_id)
-    if document_type is None:
-        raise NotFoundError(MSG_NOT_FOUND)
-    if document_type.is_system:
-        raise BusinessRuleError(MSG_SYSTEM_TYPE)
-    return document_type
-
-
-def _in_use(db: Session, code: str) -> bool:
-    return db.scalar(select(Document.id).where(Document.document_type == code).limit(1)) is not None
-
-
-def _share_lock(db: Session, model, type_id: int) -> None:
-    """Bloqueo compartido de la fila del tipo durante la carga: impide su eliminacion hasta el commit."""
-    db.execute(select(model.id).where(model.id == type_id).with_for_update(key_share=True, read=True))
-
-
-def _ensure_unique_name(db: Session, name: str, exclude_id: int | None = None) -> None:
-    stmt = select(InvoiceDocumentType.id).where(func.lower(InvoiceDocumentType.name) == name.lower())
-    if exclude_id is not None:
-        stmt = stmt.where(InvoiceDocumentType.id != exclude_id)
-    if db.scalar(stmt) is not None:
-        raise BusinessRuleError(MSG_DUPLICATE_NAME)
-
-
-def _flush(db: Session) -> None:
-    """flush que traduce la unicidad del nombre a 409 (la BD es la autoridad aunque el servicio ya lo verifico)."""
-    try:
-        db.flush()
-    except IntegrityError as exc:
-        db.rollback()
-        if violates(exc, "uq_invoice_document_types_name_lower"):
-            raise BusinessRuleError(MSG_DUPLICATE_NAME) from exc
-        raise
-
-
 def save_requirements(db: Session, form: Mapping[str, str], user_id: int) -> bool:
     """Guarda la matriz de niveles en una sola transaccion. True si hubo cambios; False si no habia nada que cambiar.
 
-    Orden de las verificaciones: huella (409), niveles recibidos (400) y niveles fijos (409). Una pagina vieja puede
-    carecer de un tipo nuevo, y "Recargue la pagina" es mas util que "falta un nivel". Los campos de claves
-    desconocidas o de tipos inactivos se ignoran: no se escriben."""
-    _lock(db)
+    Orden de las verificaciones: huella (409) y niveles recibidos (400). Una pagina vieja puede carecer de un tipo
+    nuevo, y "Recargue la pagina" es mas util que "falta un nivel". Los campos de claves desconocidas o de tipos
+    eliminados se ignoran: no se escriben."""
+    CATALOG.lock(db)
     types = catalog(db)
     if form.get("config_version") != config_version(types):
         raise BusinessRuleError(MSG_CHANGED)
     received: dict[tuple[InvoiceDocumentType, SupplierOrigin], DocumentRequirement] = {}
     for document_type in (t for t in types if t.is_active):
         for origin in SupplierOrigin:
-            value = form.get(f"{ORIGIN_KEYS[origin]}__{document_type.code}")
-            if value is None:
-                if fixed_requirement(document_type.code, origin) is None:
-                    raise InvalidInputError(INVALID_REQUIREMENT)
-                continue
             try:
-                received[document_type, origin] = parse_requirement(value)
+                received[document_type, origin] = parse_requirement(
+                    form.get(f"{ORIGIN_KEYS[origin]}__{document_type.code}")
+                )
             except ValueError:
                 raise InvalidInputError(INVALID_REQUIREMENT) from None
-    for (document_type, origin), level in received.items():
-        fixed = fixed_requirement(document_type.code, origin)
-        if fixed is not None and level != fixed:
-            plural = ORIGIN_PLURALS[origin]
-            raise BusinessRuleError(f"{document_type.name} tiene un nivel fijo para proveedores {plural}")
     changed = {key: level for key, level in received.items() if requirement(*key) != level}
     if not changed:
         return False
@@ -272,8 +233,8 @@ def create_type(
         )
     except ValidationError as exc:
         raise InvalidInputError(document_type_message(exc)) from None
-    _lock(db)
-    _ensure_unique_name(db, data.name)
+    CATALOG.lock(db)
+    CATALOG.ensure_unique_name(db, data.name)
     created = InvoiceDocumentType(
         code=f"SOPORTE_PENDIENTE_{uuid4().hex}",
         name=data.name,
@@ -285,7 +246,7 @@ def create_type(
         international_requirement=data.international_requirement,
     )
     db.add(created)
-    _flush(db)
+    CATALOG.flush(db)
     created.code = f"SOPORTE_{created.id}"
     audit(
         db,
@@ -307,75 +268,19 @@ def create_type(
 def update_type(
     db: Session, type_id: int, user_id: int, name: str, description: str | None, formats: list[str]
 ) -> bool:
-    """Edita nombre, descripcion y formatos de un tipo soporte. True si hubo cambios. Los documentos ya cargados no
-    cambian."""
-    _lock(db)
-    document_type = _support_type(db, type_id)
+    """Edita nombre, descripcion y formatos de cualquier tipo, del sistema o soporte. True si hubo cambios. La clave
+    y los documentos ya cargados no cambian."""
     try:
         data = DocumentTypeUpdate(name=name, description=description, formats=formats)
     except ValidationError as exc:
         raise InvalidInputError(document_type_message(exc)) from None
-    _ensure_unique_name(db, data.name, exclude_id=document_type.id)
-    old, new = {}, {}
-    for field in ("name", "description", "formats"):
-        before, after = getattr(document_type, field), getattr(data, field)
-        if before != after:
-            old[field], new[field] = before, after
-    if not new:
-        return False
-    for field, value in new.items():
-        setattr(document_type, field, value)
-    _flush(db)
-    audit(db, "INVOICE_DOCUMENT_TYPE_UPDATED", ENTITY, document_type.id, user_id, old, new)
-    return True
+    return CATALOG.update(db, type_id, user_id, data.model_dump())
 
 
-def set_active(db: Session, type_id: int, user_id: int, active: bool) -> bool:
-    """Desactiva o reactiva un tipo soporte con un estado destino explicito (no un conmutador). Conserva sus niveles."""
-    _lock(db)
-    document_type = _support_type(db, type_id)
-    if document_type.is_active == active:
-        return False
-    document_type.is_active = active
-    audit(
-        db,
-        "INVOICE_DOCUMENT_TYPE_STATUS_CHANGED",
-        ENTITY,
-        document_type.id,
-        user_id,
-        {"is_active": not active},
-        {"is_active": active},
-    )
-    return True
+def delete_type(db: Session, type_id: int, user_id: int) -> bool:
+    """Baja logica de cualquier tipo, aunque tenga documentos: deja de ofrecerse y de exigirse."""
+    return CATALOG.delete(db, type_id, user_id)
 
 
-def delete_type(db: Session, type_id: int, user_id: int) -> None:
-    """Elimina un tipo soporte sin documentos. La fila se bloquea FOR UPDATE: una carga concurrente la
-    tiene FOR KEY SHARE, asi que no queda un documento con la clave de un tipo eliminado. Con documentos (vigentes o
-    reemplazados) responde 409 y sugiere desactivarlo."""
-    _lock(db)
-    document_type = db.get(InvoiceDocumentType, type_id, with_for_update=True)
-    if document_type is None:
-        raise NotFoundError(MSG_NOT_FOUND)
-    if document_type.is_system:
-        raise BusinessRuleError(MSG_SYSTEM_DELETE)
-    if _in_use(db, document_type.code):
-        raise BusinessRuleError(MSG_IN_USE)
-    audit(
-        db,
-        "INVOICE_DOCUMENT_TYPE_DELETED",
-        ENTITY,
-        document_type.id,
-        user_id,
-        old={
-            "code": document_type.code,
-            "name": document_type.name,
-            "description": document_type.description,
-            "formats": document_type.formats,
-            "is_active": document_type.is_active,
-            "national": document_type.national_requirement.value,
-            "international": document_type.international_requirement.value,
-        },
-    )
-    db.delete(document_type)
-    db.flush()
+def restore_type(db: Session, type_id: int, user_id: int) -> bool:
+    return CATALOG.restore(db, type_id, user_id)

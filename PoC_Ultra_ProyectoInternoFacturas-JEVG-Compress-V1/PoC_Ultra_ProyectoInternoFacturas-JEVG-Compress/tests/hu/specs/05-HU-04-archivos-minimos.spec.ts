@@ -22,22 +22,21 @@ test('HU-04 · Definición de archivos requeridos por tipo de proveedor', async 
       await hu.paso(
         admin,
         'Abrir Requisitos mínimos › Archivos de factura',
-        'La tabla muestra cada tipo de documento con un nivel (Obligatorio / Opcional / No aplica) para Nacional y otro para Internacional; los niveles fijos (CFDI e Invoice) aparecen con candado.',
+        'La tabla muestra cada tipo de documento con un nivel (Obligatorio / Opcional / No aplica) para Nacional y otro para Internacional; todos los niveles son editables, también los de los tipos del sistema.',
         async () => {
           await admin.goto('/admin/required-documents');
           await expect(admin.locator('h1')).toHaveText('Archivos mínimos');
           const encabezados = await admin.locator('.requirements-table thead th').allInnerTexts();
           expect(encabezados.map((h) => h.trim().toUpperCase())).toEqual(['TIPO DE DOCUMENTO', 'FORMATOS', 'NACIONAL', 'INTERNACIONAL', 'ACCIONES']);
           const xml = admin.locator('.requirements-table tbody tr').filter({ hasText: 'XML del CFDI' });
-          await expect(xml.locator('td').nth(2)).toContainText('Obligatorio');
-          await expect(xml.locator('td').nth(2)).toContainText('El proveedor nacional factura con CFDI');
-          await expect(xml.locator('td').nth(3)).toContainText('No aplica');
+          await expect(xml.locator('td').nth(2).locator('select')).toHaveValue('REQUIRED');
+          await expect(xml.locator('td').nth(3).locator('select')).toHaveValue('NOT_APPLICABLE');
           const invoice = admin.locator('.requirements-table tbody tr').filter({ hasText: 'Invoice (PDF)' });
-          await expect(invoice.locator('td').nth(2)).toContainText('No aplica');
-          await expect(invoice.locator('td').nth(3)).toContainText('Obligatorio');
-          const fijos = await admin.locator('.requirements-table .fixed-level').count();
-          await hu.captura(admin, 'configuracion-por-origen', 'Archivos mínimos por origen: columnas Nacional e Internacional y niveles fijos con candado.', { completa: true });
-          return `Columnas: ${encabezados.join(' | ')}. XML del CFDI: Nacional "Obligatorio" fijo / Internacional "No aplica"; Invoice (PDF): Nacional "No aplica" / Internacional "Obligatorio". ${fijos} niveles fijos con candado.`;
+          await expect(invoice.locator('td').nth(2).locator('select')).toHaveValue('NOT_APPLICABLE');
+          await expect(invoice.locator('td').nth(3).locator('select')).toHaveValue('REQUIRED');
+          await expect(admin.locator('.requirements-table .bi-lock-fill')).toHaveCount(0);
+          await hu.captura(admin, 'configuracion-por-origen', 'Archivos mínimos por origen: columnas Nacional e Internacional, todos los niveles editables.', { completa: true });
+          return `Columnas: ${encabezados.join(' | ')}. XML del CFDI: Nacional "Obligatorio" / Internacional "No aplica"; Invoice (PDF): Nacional "No aplica" / Internacional "Obligatorio". Sin niveles fijos: todos tienen selector.`;
         },
       );
       await hu.paso(
@@ -183,6 +182,7 @@ test('HU-04 · Definición de archivos requeridos por tipo de proveedor', async 
       url: '/admin/required-documents',
       nombre: `Temporal QA ${run}`,
       avisoEditado: 'Tipo de documento actualizado',
+      avisoEliminado: 'Tipo eliminado',
       crear: async (nombre) => {
         await admin.locator('summary', { hasText: 'Nuevo tipo de documento soporte' }).click();
         await admin.locator('#new-name').fill(nombre);

@@ -22,8 +22,9 @@ from sqlalchemy.orm import Session
 
 from app.core.constants import CATALOG_CODE_FORMATS, CATALOG_LABELS, CatalogType
 from app.core.errors import BusinessRuleError, InvalidInputError, NotFoundError
-from app.models import CatalogEntry, ValidationSettings, now_utc
+from app.models import CatalogEntry, ValidationRule, now_utc
 from app.repositories.pagination import Page, paginate, search
+from app.rules.definitions import DEFINITIONS
 from app.services.audit_service import audit
 
 # Lectura segura del .xlsx compartida con la carga masiva de proveedores (HU-01): inspeccion del paquete ZIP
@@ -62,6 +63,8 @@ MSG_TEMPLATE = "El archivo no corresponde a la plantilla del catálogo. Descargu
 MSG_EMPTY = "El archivo no contiene claves"
 MSG_TOO_MANY = f"El archivo excede el máximo de {MAX_ROWS} claves por carga"
 MSG_LAST_CURRENCY = "El catálogo de monedas debe conservar al menos una moneda activa."
+# La moneda de un contrato o de una factura es siempre una clave activa del catalogo (ajustes-finales-configuracion).
+MSG_INACTIVE_CURRENCY = "Moneda: la clave no está activa en el catálogo"
 
 
 def catalog_for_code(code: str) -> CatalogType:
@@ -132,17 +135,15 @@ def summaries(db: Session) -> list[CatalogSummary]:
 
 
 def in_use(db: Session) -> dict[CatalogType, set[str]]:
-    """Claves que usan las Reglas de Validacion: no se pueden desactivar (D4). Una actividad economica si: el
-    proveedor la conserva y el formulario de edicion la sigue ofreciendo."""
-    settings = db.get(ValidationSettings, 1)
-    return {
-        CatalogType.CURRENCY: set(),
-        CatalogType.CFDI_USE: set(settings.allowed_cfdi_uses),
-        CatalogType.PAYMENT_FORM: {settings.payment_form},
-        CatalogType.PAYMENT_METHOD: {settings.payment_method},
-        CatalogType.TAX_REGIME: {settings.receiver_tax_regime},
-        CatalogType.INDUSTRY: set(),
-    }
+    """Claves que usa el valor esperado de una regla activa de Reglas de Validacion, de cualquier origen: no se pueden
+    desactivar (D4). Una regla eliminada no protege sus claves. Una actividad economica si: el proveedor la conserva y
+    el formulario de edicion la sigue ofreciendo."""
+    used: dict[CatalogType, set[str]] = {catalog: set() for catalog in CatalogType}
+    for rule in db.scalars(select(ValidationRule).where(ValidationRule.is_active.is_(True))):
+        catalog = DEFINITIONS[rule.origin, rule.rule_code].catalog
+        if catalog is not None:
+            used[catalog].update(rule.parameter if isinstance(rule.parameter, list) else [rule.parameter])
+    return used
 
 
 # --- Validacion ---------------------------------------------------------------------------------------------------

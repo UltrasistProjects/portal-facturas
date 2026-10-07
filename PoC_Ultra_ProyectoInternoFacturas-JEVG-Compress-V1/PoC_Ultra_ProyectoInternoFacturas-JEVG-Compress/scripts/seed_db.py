@@ -113,6 +113,8 @@ def seed_international(
         foreign_tax_id="98-7654321",
         country="US",
         supplier_type=SupplierType.PERSONA_MORAL,
+        # Demo: el proveedor nace "Registrado" (Supplier.status); el seed lo deja autorizado de forma explicita.
+        status="ACTIVE",
         email="proveedor3@poc.local",
         phone="+1 512 555 0142",
         confidentiality_agreement=True,

@@ -18,6 +18,7 @@ from app.rules.supplier_rules import supplier_rules
 from app.services import supplier_requirements_service as requirements
 from app.services.keycloak_admin import get_identity_admin
 from tests.conftest import (
+    ROOT,
     add_expedient_documents,
     csrf,
     invoice_by_number,
@@ -448,9 +449,16 @@ PROFILE_KEYS = ("persona_moral", "persona_fisica", "international")
 
 @pytest.fixture()
 def restore_requirements():
-    """La base de pruebas es compartida: restaura los niveles de los requisitos del sistema y borra los creados por
-    la prueba (sus documentos los borra registered_suppliers)."""
-    fields = [f"{key}_requirement" for key in PROFILE_KEYS]
+    """La base de pruebas es compartida: restaura los requisitos del sistema (nombre, descripcion, niveles y baja
+    logica) y borra los creados por la prueba (sus documentos los borra registered_suppliers)."""
+    fields = [
+        "name",
+        "description",
+        *(f"{key}_requirement" for key in PROFILE_KEYS),
+        "is_active",
+        "deleted_at",
+        "deleted_by",
+    ]
     with SessionLocal() as db:
         saved = {
             t.code: tuple(getattr(t, field) for field in fields)
@@ -492,7 +500,7 @@ def config_snapshot() -> tuple:
                         "SUPPLIER_REQUIREMENTS_UPDATED",
                         "SUPPLIER_DOCUMENT_TYPE_CREATED",
                         "SUPPLIER_DOCUMENT_TYPE_UPDATED",
-                        "SUPPLIER_DOCUMENT_TYPE_STATUS_CHANGED",
+                        "SUPPLIER_DOCUMENT_TYPE_RESTORED",
                         "SUPPLIER_DOCUMENT_TYPE_DELETED",
                     ]
                 )
@@ -526,9 +534,9 @@ def create_requirement(client, name: str, **levels: str):
     return client.post(f"{URL}/types", data=data, follow_redirects=False)
 
 
-def set_status(client, type_id: int, active: bool):
-    data = {"active": "true" if active else "false", "csrf_token": csrf(client, URL)}
-    return client.post(f"{URL}/types/{type_id}/status", data=data, follow_redirects=False)
+def restore_requirement(client, type_id: int):
+    data = {"csrf_token": csrf(client, URL)}
+    return client.post(f"{URL}/types/{type_id}/restore", data=data, follow_redirects=False)
 
 
 @pytest.mark.parametrize("email", ["pmo@poc.local", "proveedor1@poc.local"])
@@ -693,36 +701,44 @@ def test_requisito_con_nombre_repetido(client, restore_requirements):
     assert config_snapshot() == before
 
 
-def test_desactivacion_y_reactivacion(client, registered_suppliers, restore_requirements):
+def test_eliminacion_logica_y_restauracion(client, registered_suppliers, restore_requirements):
     login(client)
     create_requirement(client, ISR, persona_moral_requirement="REQUIRED")
     created = requirement_by(name=ISR)
     (moral,) = registered_suppliers()  # sus requisitos ya incluyen el nuevo
-    assert set_status(client, created.id, False).status_code == 303
-    inactive = html.unescape(client.get(URL).text).split("Requisitos inactivos")[1]
-    assert ISR in inactive and created.code in inactive and "Reactivar" in inactive
+    assert delete_requirement(client, created.id).headers["location"] == f"{URL}?ok=deleted"
+    deleted = requirement_by(id=created.id)
+    assert (deleted.is_active, deleted.deleted_at is not None, deleted.deleted_by) == (False, True, current_admin_id())
+    page = html.unescape(client.get(URL).text)
+    assert "Mostrar eliminados (1)" in page and ISR not in config_section(page)
+    listed = html.unescape(client.get(f"{URL}?eliminados=1").text).split("Requisitos eliminados")[1]
+    assert ISR in listed and created.code in listed and "Restaurar" in listed
     assert ISR not in requirement_rows(expediente(client, moral.id))
     others = expediente(client, moral.id).split("Otros documentos del expediente")[1]
     assert ISR in others and f"/suppliers/{moral.id}/documents/" in others
     with SessionLocal() as db:
         found = db.get(type(supplier_by_email("proveedor1@poc.local")), moral.id)
         assert all(t.code != created.code for t in requirements.pending_requirements(db, [found])[moral.id])
-    assert set_status(client, created.id, True).status_code == 303
-    reactivated = requirement_by(id=created.id)
-    assert reactivated.is_active and reactivated.persona_moral_requirement == "REQUIRED"
-    assert len(audit_entries("SUPPLIER_DOCUMENT_TYPE_STATUS_CHANGED", created.id)) == 2
+    assert restore_requirement(client, created.id).headers["location"] == f"{URL}?ok=restored"
+    restored = requirement_by(id=created.id)
+    assert restored.is_active and restored.deleted_at is None and restored.persona_moral_requirement == "REQUIRED"
+    assert len(audit_entries("SUPPLIER_DOCUMENT_TYPE_DELETED", created.id)) == 1
+    assert len(audit_entries("SUPPLIER_DOCUMENT_TYPE_RESTORED", created.id)) == 1
 
 
-def test_requisito_del_sistema_no_se_edita_ni_se_desactiva(client):
+def config_section(page: str) -> str:
+    return re.search(r"<h2>Configuración por tipo de proveedor</h2>.*?</table>", page, re.S).group(0)
+
+
+def test_requisito_del_sistema_se_edita_y_se_elimina(client, restore_requirements):
     login(client)
     tax_status = requirement_by(code="TAX_STATUS")
-    before = config_snapshot()
-    data = {"name": "Otro nombre", "description": "", "csrf_token": csrf(client, URL)}
-    response = client.post(f"{URL}/types/{tax_status.id}", data=data, follow_redirects=False)
-    assert response.status_code == 409
-    assert "Los requisitos del sistema no se pueden editar ni desactivar" in response.text
-    assert set_status(client, tax_status.id, False).status_code == 409
-    assert config_snapshot() == before
+    data = {"name": "Constancia de situación fiscal", "description": "Del SAT", "csrf_token": csrf(client, URL)}
+    assert client.post(f"{URL}/types/{tax_status.id}", data=data, follow_redirects=False).status_code == 303
+    edited = requirement_by(id=tax_status.id)
+    assert (edited.code, edited.name, edited.description) == ("TAX_STATUS", "Constancia de situación fiscal", "Del SAT")
+    assert delete_requirement(client, tax_status.id).status_code == 303
+    assert not requirement_by(id=tax_status.id).is_active
 
 
 def test_edicion_de_un_requisito(client, restore_requirements):
@@ -752,7 +768,7 @@ def config_row(page: str, name: str) -> str:
     return re.search(rf"<tr><td><strong>{re.escape(name)}</strong>.*?</tr>", table, re.S).group(0)
 
 
-def test_acciones_editar_y_eliminar_solo_en_requisitos_del_administrador(client, restore_requirements):
+def test_acciones_editar_y_eliminar_en_todos_los_requisitos(client, restore_requirements):
     login(client)
     create_requirement(client, ISR)
     created = requirement_by(name=ISR)
@@ -760,38 +776,14 @@ def test_acciones_editar_y_eliminar_solo_en_requisitos_del_administrador(client,
     row = config_row(page, ISR)
     assert f'href="?editar={created.id}#editar-{created.id}"' in row and f'form="eliminar-{created.id}"' in row
     assert f"¿Eliminar «{ISR}»?" in row
+    tax_status = requirement_by(code="TAX_STATUS")
     system = config_row(page, "Cédula fiscal")
-    assert "Editar" not in system and "Eliminar" not in system
+    assert f'href="?editar={tax_status.id}#editar-{tax_status.id}"' in system and "Eliminar" in system
     opened = client.get(f"{URL}?editar={created.id}").text
     assert f'id="editar-{created.id}" class="admin-create border-bottom" open' in opened
-    assert set_status(client, created.id, False).status_code == 303
-    inactive = html.unescape(client.get(URL).text).split("Requisitos inactivos")[1]
-    assert f'href="?editar={created.id}#editar-{created.id}"' in inactive
-
-
-@pytest.mark.parametrize("inactive", [False, True])
-def test_eliminacion_de_un_requisito_sin_documentos(client, restore_requirements, inactive):
-    login(client)
-    create_requirement(client, ISR, persona_moral_requirement="REQUIRED")
-    created = requirement_by(name=ISR)
-    if inactive:
-        assert set_status(client, created.id, False).status_code == 303
-    response = delete_requirement(client, created.id)
-    assert response.status_code == 303 and response.headers["location"] == f"{URL}?ok=deleted"
-    assert requirement_by(id=created.id) is None
-    page = html.unescape(client.get(response.headers["location"]).text)
-    assert "Tipo eliminado" in page and ISR not in page
-    (entry,) = audit_entries("SUPPLIER_DOCUMENT_TYPE_DELETED", created.id)
-    assert entry.user_id == current_admin_id()
-    assert entry.old_value == {
-        "code": created.code,
-        "name": ISR,
-        "description": None,
-        "is_active": not inactive,
-        "persona_moral": "REQUIRED",
-        "persona_fisica": "NOT_APPLICABLE",
-        "international": "NOT_APPLICABLE",
-    }
+    assert delete_requirement(client, created.id).status_code == 303
+    deleted = html.unescape(client.get(f"{URL}?eliminados=1").text).split("Requisitos eliminados")[1]
+    assert f'href="?editar={created.id}&eliminados=1#editar-{created.id}"' in deleted
 
 
 def test_eliminacion_de_un_requisito_con_documentos(client, registered_suppliers, restore_requirements):
@@ -800,49 +792,90 @@ def test_eliminacion_de_un_requisito_con_documentos(client, registered_suppliers
     created = requirement_by(name=ISR)
     (moral,) = registered_suppliers()
     assert upload(client, moral.id, created.code).status_code == 303
-    before = config_snapshot()
-    response = delete_requirement(client, created.id)
-    assert response.status_code == 409
-    assert "El tipo ya tiene documentos cargados; desactívelo en su lugar" in html.unescape(response.text)
-    assert config_snapshot() == before
+    assert delete_requirement(client, created.id).status_code == 303
+    assert requirement_by(id=created.id).is_active is False
+    (entry,) = audit_entries("SUPPLIER_DOCUMENT_TYPE_DELETED", created.id)
+    assert (entry.user_id, entry.old_value, entry.new_value) == (
+        current_admin_id(),
+        {"is_active": True},
+        {"is_active": False},
+    )
+    others = expediente(client, moral.id).split("Otros documentos del expediente")[1]
+    assert ISR in others
 
 
-def test_eliminacion_de_un_requisito_del_sistema_inexistente_o_sin_csrf(client, restore_requirements):
+def test_eliminacion_de_un_requisito_inexistente_sin_csrf_o_con_otro_rol(client, restore_requirements):
     login(client)
     before = config_snapshot()
-    response = delete_requirement(client, requirement_by(code="TAX_STATUS").id)
-    assert response.status_code == 409 and "Los elementos del sistema no se pueden eliminar" in response.text
     assert delete_requirement(client, 999_999).status_code == 404
+    assert restore_requirement(client, 999_999).status_code == 404
     create_requirement(client, ISR)
     created = requirement_by(name=ISR)
     before = config_snapshot()
     assert delete_requirement(client, created.id, None).status_code == 403
     assert delete_requirement(client, created.id, "invalido").status_code == 403
+    login(client, "pmo@poc.local")
+    assert client.post(f"{URL}/types/{created.id}/delete", data={"csrf_token": csrf(client, "/")}).status_code == 403
     assert config_snapshot() == before
+
+
+# --- Autorizacion solo con los requisitos vigentes (ajustes-finales-configuracion) --------------------------------
+
+
+@pytest.mark.usefixtures("restore_notification_recipients")
+def test_requisito_eliminado_deja_de_exigirse_al_autorizar(client, registered_suppliers, restore_requirements):
+    (incomplete,) = registered_suppliers(requirements=False)
+    add_expedient_documents(incomplete.id, [code for code in MORAL_CODES if code != "POWER_OF_ATTORNEY"])
+    login(client)
+    authorize(client, [incomplete.id])
+    assert current(incomplete.id)[0].status == "REGISTERED"
+    assert delete_requirement(client, requirement_by(code="POWER_OF_ATTORNEY").id).status_code == 303
+    authorize(client, [incomplete.id])
+    assert current(incomplete.id)[0].status == "ACTIVE"
+
+
+@pytest.mark.usefixtures("restore_notification_recipients")
+def test_requisito_nuevo_no_desactiva_a_los_autorizados(client, registered_suppliers, restore_requirements):
+    (complete,) = registered_suppliers()
+    login(client)
+    authorize(client, [complete.id])
+    before = current(complete.id)[0]
+    create_requirement(client, ISR, persona_moral_requirement="REQUIRED")
+    after = current(complete.id)[0]
+    assert (after.status, after.updated_at) == ("ACTIVE", before.updated_at)
+
+
+def test_proveedor_nuevo_nace_registrado():
+    from app.models import Supplier
+
+    assert Supplier.__table__.c.status.default.arg == "REGISTERED"
+
+
+def test_un_solo_camino_a_autorizado():
+    """Solo supplier_access_service asigna SupplierStatus.ACTIVE: ningun otro codigo de app/ autoriza proveedores."""
+    import ast
+
+    assigners = set()
+    for path in (ROOT / "app").rglob("*.py"):
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+            targets = node.targets if isinstance(node, ast.Assign) else []
+            keywords = node.keywords if isinstance(node, ast.Call) else []
+            values = [node.value] if targets else [k.value for k in keywords if k.arg == "status"]
+            if any(ast.unparse(value) == "SupplierStatus.ACTIVE" for value in values):
+                assigners.add(path.name)
+    assert assigners == {"supplier_access_service.py"}
 
 
 # --- El Contrato sale del alta del proveedor (HU-22) --------------------------------------------------------------
 
 
-def test_contrato_con_nivel_fijo_en_la_pantalla(client):
+def test_contrato_con_nivel_editable(client, restore_requirements):
     login(client)
     page = html.unescape(client.get(URL).text)
     row = page.split("<strong>Contrato</strong>")[1].split("</tr>")[0]
-    assert row.count("bi-lock-fill") == 3 and row.count("No aplica") == 3 and "Se carga en cada contrato" in row
-    assert "<select" not in row
-    assert "persona_moral__SUPPLIER_CONTRACT" not in matrix(page)
-
-
-@pytest.mark.parametrize(
-    ("key", "plural"), [("persona_moral", "personas morales"), ("international", "proveedores internacionales")]
-)
-def test_peticion_manipulada_sobre_el_contrato(client, restore_requirements, key, plural):
-    login(client)
-    before = config_snapshot()
-    response = save_matrix(client, {"persona_moral__LOCATION": "REQUIRED", f"{key}__SUPPLIER_CONTRACT": "OPTIONAL"})
-    assert response.status_code == 409
-    assert f"Contrato tiene un nivel fijo para {plural}" in html.unescape(response.text)
-    assert config_snapshot() == before
+    assert row.count("<select") == 3 and "bi-lock-fill" not in row
+    assert save_matrix(client, {"persona_moral__SUPPLIER_CONTRACT": "OPTIONAL"}).status_code == 303
+    assert requirement_by(code="SUPPLIER_CONTRACT").persona_moral_requirement == "OPTIONAL"
 
 
 def test_guardar_sin_los_niveles_del_contrato(client, restore_requirements):

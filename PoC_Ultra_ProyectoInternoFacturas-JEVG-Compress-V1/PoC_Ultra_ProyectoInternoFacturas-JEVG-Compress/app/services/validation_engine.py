@@ -19,13 +19,17 @@ from app.rules.international_rules import international_rules, invoice_duplicate
 from app.rules.semantic_rules import semantic_not_evaluated, semantic_outcomes
 from app.rules.supplier_rules import supplier_rules
 from app.rules.xml_rules import xml_rules
-from app.services import contract_requirements_service, foreign_invoice_service, supplier_requirements_service
+from app.services import (
+    contract_requirements_service,
+    foreign_invoice_service,
+    supplier_requirements_service,
+    validation_rules_service,
+)
 from app.services.ai import get_document_analyzer
 from app.services.audit_service import audit
 from app.services.document_requirements_service import required_types
 from app.services.file_service import LocalFileStorage
 from app.services.validation_score_service import calculate_score
-from app.services.validation_settings_service import rule_parameters
 from app.services.xml_service import XMLParseError, parse_cfdi
 
 logger = logging.getLogger(__name__)
@@ -66,6 +70,8 @@ def run_validation(db: Session, invoice: Invoice, user_id: int | None = None) ->
         else next((d for d in documents if d.document_type == DocumentType.INVOICE_XML.value), None)
     )
     xml_data, xml_error, duplicate_uuid = None, None, False
+    # Reglas de Validacion del origen del proveedor (sin cache): las nacionales o las internacionales, nunca ambas.
+    rules = validation_rules_service.rule_set(db, origin)
     if xml_document:
         try:
             xml_data = parse_cfdi(LocalFileStorage().resolve(xml_document.path))
@@ -83,7 +89,9 @@ def run_validation(db: Session, invoice: Invoice, user_id: int | None = None) ->
             invoice.subtotal = to_money(xml_data.get("subtotal") or invoice.subtotal)
             invoice.tax = to_money(xml_data.get("tax") or invoice.tax)
             invoice.total = to_money(xml_data.get("total") or invoice.total)
-            invoice.currency = xml_data.get("currency") or invoice.currency
+            # Solo una moneda activa del catalogo llega a la factura; otra la reporta XML-007.
+            if xml_data.get("currency") in rules.currencies:
+                invoice.currency = xml_data["currency"]
         except (XMLParseError, ValueError) as exc:
             logger.warning(
                 "xml.parse_failed",
@@ -116,10 +124,10 @@ def run_validation(db: Session, invoice: Invoice, user_id: int | None = None) ->
     # Configuracion vigente de archivos minimos, sin cache: la leida en esta prevalidacion queda en sus resultados.
     # Requisitos del contrato con la configuracion vigente (HU-22): solo los documentos del contrato.
     contract_pending = contract_requirements_service.pending_names(db, contract)
-    results += document_rules(types, required_types(db, origin), origin, processable, contract_pending)
-    # Reglas de Validacion vigentes (HU-06) y monedas activas (HU-07), sin cache, como los archivos minimos.
-    params = rule_parameters(db)
-    results += xml_rules(xml_data, xml_error, params, international=international)
+    required = required_types(db, origin)
+    results += document_rules(types, required, origin, processable, contract_pending)
+    xml_required = any(t.code == DocumentType.INVOICE_XML for t in required)
+    results += xml_rules(xml_data, xml_error, rules, international=international, required=xml_required)
     results += supplier_rules(invoice.supplier, contract, requirements)
     results += contract_rules(invoice, contract, descriptions)
     results += date_rules(invoice)
@@ -129,7 +137,7 @@ def run_validation(db: Session, invoice: Invoice, user_id: int | None = None) ->
     if international:
         # Texto del Invoice leido de nuevo (HU-16) y duplicado por nombre de archivo (FIN-007, HU-15).
         text = foreign_invoice_service.invoice_text(invoice)
-        results += international_rules(text.text, text.readable, invoice.supplier, params)
+        results += international_rules(text.text, text.readable, invoice.supplier, rules)
         filename = text.document.original_filename if text.document else None
         folios = foreign_invoice_service.duplicate_folios(db, invoice, filename) if filename else []
         results.append(invoice_duplicate_rule(filename, folios))

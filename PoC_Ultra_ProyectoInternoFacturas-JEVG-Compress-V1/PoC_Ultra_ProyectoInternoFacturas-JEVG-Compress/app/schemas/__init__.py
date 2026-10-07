@@ -28,6 +28,7 @@ from app.core.constants import (
 )
 from app.core.countries import COUNTRIES
 from app.core.timeutils import to_business
+from app.core.types import to_money
 
 MIN_INCORPORATION_DATE = date(1900, 1, 1)
 FIELD_LABELS = {
@@ -293,10 +294,6 @@ class InvoiceCreate(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
 
 
-# Tolerancia de FIN-002 entre subtotal + impuestos y total.
-AMOUNT_TOLERANCE = Decimal("0.02")
-
-
 def _amount_text(value):
     """Importe capturado en un formulario: admite el separador de miles "," y el simbolo "$"."""
     if isinstance(value, str):
@@ -308,12 +305,12 @@ def _amount_text(value):
 
 class ForeignInvoiceData(BaseModel):
     """Datos del Invoice de un proveedor internacional (HU-15): sin XML, el proveedor los captura. Se guardan en las
-    columnas de la factura que el XML llena para el proveedor nacional."""
+    columnas de la factura que el XML llena para el proveedor nacional. El total no se captura: es subtotal +
+    impuestos (ajustes-finales-configuracion)."""
 
     invoice_date: date
     subtotal: Decimal = Field(gt=0, max_digits=16, decimal_places=2)
     tax: Decimal = Field(ge=0, max_digits=16, decimal_places=2)
-    total: Decimal = Field(gt=0, max_digits=16, decimal_places=2)
     currency: str = Field(pattern=r"^[A-Z]{3}$")
     model_config = ConfigDict(str_strip_whitespace=True)
 
@@ -331,24 +328,20 @@ class ForeignInvoiceData(BaseModel):
             raise ValueError("no puede ser posterior a hoy")
         return value
 
-    @field_validator("subtotal", "tax", "total", mode="before")
+    @field_validator("subtotal", "tax", mode="before")
     @classmethod
     def amount_text(cls, value):
         return _amount_text(value)
-
-    @field_validator("total")
-    @classmethod
-    def total_matches(cls, value: Decimal, info: ValidationInfo) -> Decimal:
-        subtotal, tax = info.data.get("subtotal"), info.data.get("tax")
-        # Solo si subtotal e impuestos son validos: su propio error ya se reporta.
-        if subtotal is not None and tax is not None and abs(subtotal + tax - value) > AMOUNT_TOLERANCE:
-            raise ValueError("debe ser igual al subtotal más impuestos")
-        return value
 
     @field_validator("currency", mode="before")
     @classmethod
     def currency_upper(cls, value):
         return value.strip().upper() if isinstance(value, str) else value
+
+    @property
+    def total(self) -> Decimal:
+        """Subtotal mas impuestos, calculado en el servidor: el total que envie el cliente se ignora."""
+        return to_money(self.subtotal + self.tax)
 
 
 INVALID_REQUIREMENT = "Nivel de exigencia inválido"

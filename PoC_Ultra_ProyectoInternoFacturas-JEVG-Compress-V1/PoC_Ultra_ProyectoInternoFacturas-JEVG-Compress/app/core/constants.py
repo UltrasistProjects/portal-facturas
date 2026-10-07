@@ -177,43 +177,17 @@ FORMAT_EXTENSIONS: dict[str, tuple[str, ...]] = {
     "TXT": (".txt",),
 }
 
-# Niveles que el Administrador no puede cambiar (RD-04): el nacional factura con CFDI, el internacional con Invoice;
-# el acuse de cancelacion no se pide en la carga documental (HU-14); el Complemento de Pago es Opcional para el
-# nacional, porque solo existe despues del pago (HU Complemento de Pagos).
-# Clave -> {origen: nivel}. La base de datos los garantiza con ck_invoice_document_types_fixed_levels.
-FIXED_REQUIREMENTS: dict[str, dict[SupplierOrigin, DocumentRequirement]] = {
-    DocumentType.INVOICE_XML: {
-        SupplierOrigin.NATIONAL: DocumentRequirement.REQUIRED,
-        SupplierOrigin.INTERNATIONAL: DocumentRequirement.NOT_APPLICABLE,
-    },
-    DocumentType.INVOICE_PDF: {
-        SupplierOrigin.NATIONAL: DocumentRequirement.REQUIRED,
-        SupplierOrigin.INTERNATIONAL: DocumentRequirement.NOT_APPLICABLE,
-    },
-    DocumentType.FOREIGN_INVOICE: {
-        SupplierOrigin.NATIONAL: DocumentRequirement.NOT_APPLICABLE,
-        SupplierOrigin.INTERNATIONAL: DocumentRequirement.REQUIRED,
-    },
-    DocumentType.CANCELLATION_ACK: {
-        SupplierOrigin.NATIONAL: DocumentRequirement.NOT_APPLICABLE,
-        SupplierOrigin.INTERNATIONAL: DocumentRequirement.NOT_APPLICABLE,
-    },
-    DocumentType.PAYMENT_COMPLEMENT_XML: {
-        SupplierOrigin.NATIONAL: DocumentRequirement.OPTIONAL,
-        SupplierOrigin.INTERNATIONAL: DocumentRequirement.NOT_APPLICABLE,
-    },
-    DocumentType.PAYMENT_COMPLEMENT_PDF: {
-        SupplierOrigin.NATIONAL: DocumentRequirement.OPTIONAL,
-        SupplierOrigin.INTERNATIONAL: DocumentRequirement.NOT_APPLICABLE,
-    },
-}
-FIXED_REQUIREMENT_REASONS = {
-    DocumentType.INVOICE_XML: "El proveedor nacional factura con CFDI",
-    DocumentType.INVOICE_PDF: "El proveedor nacional factura con CFDI",
-    DocumentType.FOREIGN_INVOICE: "El proveedor internacional factura con Invoice",
-    DocumentType.CANCELLATION_ACK: "Se carga al cancelar la factura",
-    DocumentType.PAYMENT_COMPLEMENT_XML: "Se carga después del pago de la factura",
-    DocumentType.PAYMENT_COMPLEMENT_PDF: "Se carga después del pago de la factura",
+# Consecuencia de eliminar un tipo de documento de factura que usa el codigo: la confirmacion de "Eliminar" la muestra
+# (ajustes-finales-configuracion). Cualquier tipo se puede editar y eliminar; los flujos toleran su ausencia.
+CODE_BOUND_WARNINGS = {
+    DocumentType.INVOICE_XML: "Las facturas nacionales dejarán de exigir el CFDI y sus reglas no se evaluarán sin XML.",
+    DocumentType.INVOICE_PDF: "Las facturas nacionales dejarán de exigir el PDF del CFDI.",
+    DocumentType.FOREIGN_INVOICE: "Las facturas internacionales dejarán de exigir el Invoice y sus reglas INT no se "
+    "evaluarán sin él.",
+    DocumentType.CANCELLATION_ACK: "La cancelación de facturas dejará de pedir el acuse.",
+    DocumentType.PAYMENT_COMPLEMENT_XML: "Las facturas pagadas dejarán de requerir el Complemento de Pago y los "
+    "complementos vencidos dejarán de bloquear los envíos.",
+    DocumentType.PAYMENT_COMPLEMENT_PDF: "Las facturas pagadas dejarán de ofrecer el PDF del Complemento de Pago.",
 }
 # Tipos del Complemento de Pago: los unicos que admite una factura "Pagada". El XML es el CFDI de pago que cuenta
 # como complemento adjuntado; el PDF es su representacion opcional.
@@ -261,8 +235,8 @@ ALLOWED_TRANSITIONS: dict[InvoiceStatus, set[InvoiceStatus]] = {
 }
 
 
-# Pesos del score por severidad. Los datos de ULTRASIST y los parametros del CFDI viven en la configuracion de Reglas
-# de Validacion (tabla validation_settings, HU-06); las monedas aceptadas, en el catalogo de monedas (HU-07).
+# Pesos del score por severidad. Los valores esperados de las reglas viven en Reglas de Validacion (tabla
+# validation_rules, por origen); las monedas aceptadas, en el catalogo de monedas (HU-07).
 BUSINESS_RULES = {
     "score_weights": {Severity.CRITICAL: 35, Severity.ERROR: 18, Severity.WARNING: 6, Severity.INFO: 0},
 }
@@ -274,20 +248,9 @@ BUSINESS_RULES = {
 QUOTATION_DOCUMENT = "ECONOMIC_PROPOSAL"
 # Documentos con vigencia: advertencia (SUP-004) si su fecha tiene mas de tres meses; no impiden la autorizacion.
 DATED_SUPPLIER_DOCUMENTS = {"TAX_STATUS", "SAT_OPINION", "ADDRESS_PROOF", "LEGAL_REP_ADDRESS_PROOF", "BANK_STATEMENT"}
-# El contrato firmado se carga en cada contrato (HU-22): en el expediente del proveedor queda fijo en "No aplica".
-# Clave -> {perfil: nivel}. La base de datos lo garantiza con ck_supplier_document_types_fixed_levels.
-SUPPLIER_CONTRACT_DOCUMENT = "SUPPLIER_CONTRACT"
-FIXED_SUPPLIER_REQUIREMENTS: dict[str, dict[RequirementProfile, DocumentRequirement]] = {
-    SUPPLIER_CONTRACT_DOCUMENT: {profile: DocumentRequirement.NOT_APPLICABLE for profile in RequirementProfile},
-}
-FIXED_SUPPLIER_REQUIREMENT_REASONS = {SUPPLIER_CONTRACT_DOCUMENT: "Se carga en cada contrato"}
 
-
-# Requisitos de alta del contrato (HU-22): el catalogo vive en contract_document_types. El contrato firmado es
-# Obligatorio fijo; la base de datos lo garantiza con ck_contract_document_types_fixed_levels.
+# Requisitos de alta del contrato (HU-22): el catalogo vive en contract_document_types. Clave del contrato firmado.
 SIGNED_CONTRACT_DOCUMENT = "SIGNED_CONTRACT"
-FIXED_CONTRACT_REQUIREMENTS = {SIGNED_CONTRACT_DOCUMENT: DocumentRequirement.REQUIRED}
-FIXED_CONTRACT_REQUIREMENT_REASONS = {SIGNED_CONTRACT_DOCUMENT: "Todo contrato activo tiene su contrato firmado"}
 
 
 class NotificationEvent(StrEnum):

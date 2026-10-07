@@ -19,13 +19,11 @@ from datetime import date, timedelta
 from uuid import uuid4
 
 from pydantic import ValidationError
-from sqlalchemy import func, select, text
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.constants import (
     DATED_SUPPLIER_DOCUMENTS,
-    FIXED_SUPPLIER_REQUIREMENTS,
     QUOTATION_DOCUMENT,
     REQUIREMENT_PROFILE_PLURALS,
     DocumentRequirement,
@@ -33,7 +31,7 @@ from app.core.constants import (
     SupplierOrigin,
     SupplierType,
 )
-from app.core.errors import BusinessRuleError, InvalidInputError, NotFoundError
+from app.core.errors import BusinessRuleError, InvalidInputError
 from app.models import Document, Supplier, SupplierDocumentType
 from app.schemas import (
     INVALID_REQUIREMENT,
@@ -43,10 +41,8 @@ from app.schemas import (
     parse_requirement,
 )
 from app.services.audit_service import audit
-from app.services.invoice_service import violates
+from app.services.type_catalog import TypeCatalog, share_lock
 
-# Clave del bloqueo consultivo que serializa las escrituras de la configuracion (pg_advisory_xact_lock).
-CONFIG_LOCK_KEY = 21_2100_0001
 ENTITY = "SupplierDocumentType"
 LEVEL_FIELDS = {profile: f"{profile.value}_requirement" for profile in RequirementProfile}
 # Documentos con fecha de mas de tres meses: advertencia de vigencia (SUP-004), sin bloquear la autorizacion.
@@ -54,13 +50,20 @@ VALIDITY_DAYS = 93
 
 MSG_CHANGED = "La configuración cambió mientras la editaba. Recargue la página."
 MSG_DUPLICATE_NAME = "Ya existe un requisito con ese nombre"
-MSG_SYSTEM_TYPE = "Los requisitos del sistema no se pueden editar ni desactivar"
 MSG_NOT_FOUND = "Requisito no encontrado"
-MSG_SYSTEM_DELETE = "Los elementos del sistema no se pueden eliminar"
-MSG_IN_USE = "El tipo ya tiene documentos cargados; desactívelo en su lugar"
 MSG_NOT_APPLICABLE = "El documento no aplica a este proveedor"
 NOTE_QUOTATION = "Alta por cotización o licitación"
 NOTE_QUOTATION_OPTIONAL = "Exigible si el alta es por cotización o licitación"
+# Bloqueo consultivo 21_2100_0001: serializa las escrituras de la configuracion (pg_advisory_xact_lock).
+CATALOG = TypeCatalog(
+    model=SupplierDocumentType,
+    entity=ENTITY,
+    action_prefix="SUPPLIER_DOCUMENT_TYPE",
+    lock_key=21_2100_0001,
+    name_index="uq_supplier_document_types_name_lower",
+    duplicate_message=MSG_DUPLICATE_NAME,
+    not_found_message=MSG_NOT_FOUND,
+)
 
 
 # --- Lectura ------------------------------------------------------------------------------------------------------
@@ -89,11 +92,6 @@ def catalog(db: Session) -> list[SupplierDocumentType]:
 
 def requirement(document_type: SupplierDocumentType, target: RequirementProfile) -> DocumentRequirement:
     return getattr(document_type, LEVEL_FIELDS[target])
-
-
-def fixed_requirement(code: str, target: RequirementProfile) -> DocumentRequirement | None:
-    """Nivel que el Administrador no puede cambiar: el Contrato se carga en cada contrato (HU-22)."""
-    return FIXED_SUPPLIER_REQUIREMENTS.get(code, {}).get(target)
 
 
 def applicable(types: Iterable[SupplierDocumentType], target: RequirementProfile) -> list[SupplierDocumentType]:
@@ -241,80 +239,30 @@ def applicable_type(db: Session, supplier: Supplier, code: str) -> SupplierDocum
     found = next((t for t in applicable(catalog(db), profile(supplier)) if t.code == code), None)
     if found is None:
         raise InvalidInputError(MSG_NOT_APPLICABLE)
-    _share_lock(db, SupplierDocumentType, found.id)
+    share_lock(db, SupplierDocumentType, found.id)
     return found
 
 
 # --- Escritura ----------------------------------------------------------------------------------------------------
 
 
-def _lock(db: Session) -> None:
-    db.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": CONFIG_LOCK_KEY})
-
-
-def _admin_type(db: Session, type_id: int) -> SupplierDocumentType:
-    document_type = db.get(SupplierDocumentType, type_id)
-    if document_type is None:
-        raise NotFoundError(MSG_NOT_FOUND)
-    if document_type.is_system:
-        raise BusinessRuleError(MSG_SYSTEM_TYPE)
-    return document_type
-
-
-def _in_use(db: Session, code: str) -> bool:
-    return db.scalar(select(Document.id).where(Document.document_type == code).limit(1)) is not None
-
-
-def _share_lock(db: Session, model, type_id: int) -> None:
-    """Bloqueo compartido de la fila del tipo durante la carga: impide su eliminacion hasta el commit."""
-    db.execute(select(model.id).where(model.id == type_id).with_for_update(key_share=True, read=True))
-
-
-def _ensure_unique_name(db: Session, name: str, exclude_id: int | None = None) -> None:
-    stmt = select(SupplierDocumentType.id).where(func.lower(SupplierDocumentType.name) == name.lower())
-    if exclude_id is not None:
-        stmt = stmt.where(SupplierDocumentType.id != exclude_id)
-    if db.scalar(stmt) is not None:
-        raise BusinessRuleError(MSG_DUPLICATE_NAME)
-
-
-def _flush(db: Session) -> None:
-    """flush que traduce la unicidad del nombre a 409 (la BD es la autoridad aunque el servicio ya lo verifico)."""
-    try:
-        db.flush()
-    except IntegrityError as exc:
-        db.rollback()
-        if violates(exc, "uq_supplier_document_types_name_lower"):
-            raise BusinessRuleError(MSG_DUPLICATE_NAME) from exc
-        raise
-
-
 def save_requirements(db: Session, form: Mapping[str, str], user_id: int) -> bool:
     """Guarda la matriz de niveles en una sola transaccion. True si hubo cambios; False si no habia nada que cambiar.
 
-    Orden de las verificaciones, como en HU-04: huella (409), niveles recibidos (400) y niveles fijos (409). Una pagina
-    vieja puede carecer de un requisito nuevo, y "Recargue la pagina" es mas util que "falta un nivel". Un nivel fijo
-    puede faltar: la pagina no tiene selector para el. Los campos de claves desconocidas o de requisitos inactivos se
-    ignoran."""
-    _lock(db)
+    Orden de las verificaciones, como en HU-04: huella (409) y niveles recibidos (400). Una pagina vieja puede carecer
+    de un requisito nuevo, y "Recargue la pagina" es mas util que "falta un nivel". Los campos de claves desconocidas o
+    de requisitos eliminados se ignoran."""
+    CATALOG.lock(db)
     types = catalog(db)
     if form.get("config_version") != config_version(types):
         raise BusinessRuleError(MSG_CHANGED)
     received: dict[tuple[SupplierDocumentType, RequirementProfile], DocumentRequirement] = {}
     for document_type in (t for t in types if t.is_active):
         for target in RequirementProfile:
-            value = form.get(f"{target.value}__{document_type.code}")
-            if value is None and fixed_requirement(document_type.code, target) is not None:
-                continue
             try:
-                received[document_type, target] = parse_requirement(value)
+                received[document_type, target] = parse_requirement(form.get(f"{target.value}__{document_type.code}"))
             except ValueError:
                 raise InvalidInputError(INVALID_REQUIREMENT) from None
-    for (document_type, target), level in received.items():
-        fixed = fixed_requirement(document_type.code, target)
-        if fixed is not None and level != fixed:
-            plural = REQUIREMENT_PROFILE_PLURALS[target]
-            raise BusinessRuleError(f"{document_type.name} tiene un nivel fijo para {plural}")
     changed = {key: level for key, level in received.items() if requirement(*key) != level}
     if not changed:
         return False
@@ -335,8 +283,8 @@ def create_type(db: Session, user_id: int, name: str, description: str | None, *
         data = SupplierDocumentTypeCreate(name=name, description=description, **levels)
     except ValidationError as exc:
         raise InvalidInputError(document_type_message(exc)) from None
-    _lock(db)
-    _ensure_unique_name(db, data.name)
+    CATALOG.lock(db)
+    CATALOG.ensure_unique_name(db, data.name)
     created = SupplierDocumentType(
         code=f"REQUISITO_PENDIENTE_{uuid4().hex}",
         name=data.name,
@@ -346,7 +294,7 @@ def create_type(db: Session, user_id: int, name: str, description: str | None, *
         **{LEVEL_FIELDS[p]: getattr(data, LEVEL_FIELDS[p]) for p in RequirementProfile},
     )
     db.add(created)
-    _flush(db)
+    CATALOG.flush(db)
     created.code = f"REQUISITO_{created.id}"
     audit(
         db,
@@ -364,74 +312,19 @@ def create_type(db: Session, user_id: int, name: str, description: str | None, *
 
 
 def update_type(db: Session, type_id: int, user_id: int, name: str, description: str | None) -> bool:
-    """Edita nombre y descripcion de un requisito del Administrador. True si hubo cambios."""
-    _lock(db)
-    document_type = _admin_type(db, type_id)
+    """Edita nombre y descripcion de cualquier requisito, del sistema o del Administrador. True si hubo cambios."""
     try:
         data = SupplierDocumentTypeUpdate(name=name, description=description)
     except ValidationError as exc:
         raise InvalidInputError(document_type_message(exc)) from None
-    _ensure_unique_name(db, data.name, exclude_id=document_type.id)
-    old, new = {}, {}
-    for attr in ("name", "description"):
-        before, after = getattr(document_type, attr), getattr(data, attr)
-        if before != after:
-            old[attr], new[attr] = before, after
-    if not new:
-        return False
-    for attr, value in new.items():
-        setattr(document_type, attr, value)
-    _flush(db)
-    audit(db, "SUPPLIER_DOCUMENT_TYPE_UPDATED", ENTITY, document_type.id, user_id, old, new)
-    return True
+    return CATALOG.update(db, type_id, user_id, data.model_dump())
 
 
-def set_active(db: Session, type_id: int, user_id: int, active: bool) -> bool:
-    """Desactiva o reactiva un requisito del Administrador con un estado destino explicito. Conserva sus niveles."""
-    _lock(db)
-    document_type = _admin_type(db, type_id)
-    if document_type.is_active == active:
-        return False
-    document_type.is_active = active
-    audit(
-        db,
-        "SUPPLIER_DOCUMENT_TYPE_STATUS_CHANGED",
-        ENTITY,
-        document_type.id,
-        user_id,
-        {"is_active": not active},
-        {"is_active": active},
-    )
-    return True
+def delete_type(db: Session, type_id: int, user_id: int) -> bool:
+    """Baja logica de cualquier requisito, aunque tenga documentos: deja de pedirse y de exigirse al autorizar. Ningun
+    proveedor cambia de estatus."""
+    return CATALOG.delete(db, type_id, user_id)
 
 
-def delete_type(db: Session, type_id: int, user_id: int) -> None:
-    """Elimina un requisito del Administrador sin documentos. La fila se bloquea FOR UPDATE: una carga concurrente la
-    tiene FOR KEY SHARE, asi que no queda un documento con la clave de un tipo eliminado. Con documentos (vigentes o
-    reemplazados) responde 409 y sugiere desactivarlo."""
-    _lock(db)
-    document_type = db.get(SupplierDocumentType, type_id, with_for_update=True)
-    if document_type is None:
-        raise NotFoundError(MSG_NOT_FOUND)
-    if document_type.is_system:
-        raise BusinessRuleError(MSG_SYSTEM_DELETE)
-    if _in_use(db, document_type.code):
-        raise BusinessRuleError(MSG_IN_USE)
-    audit(
-        db,
-        "SUPPLIER_DOCUMENT_TYPE_DELETED",
-        ENTITY,
-        document_type.id,
-        user_id,
-        old={
-            "code": document_type.code,
-            "name": document_type.name,
-            "description": document_type.description,
-            "is_active": document_type.is_active,
-            "persona_moral": document_type.persona_moral_requirement.value,
-            "persona_fisica": document_type.persona_fisica_requirement.value,
-            "international": document_type.international_requirement.value,
-        },
-    )
-    db.delete(document_type)
-    db.flush()
+def restore_type(db: Session, type_id: int, user_id: int) -> bool:
+    return CATALOG.restore(db, type_id, user_id)

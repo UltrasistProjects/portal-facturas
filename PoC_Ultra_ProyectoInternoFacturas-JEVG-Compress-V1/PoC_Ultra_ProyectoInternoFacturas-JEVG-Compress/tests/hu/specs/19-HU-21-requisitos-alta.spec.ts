@@ -133,6 +133,7 @@ test('HU-21 · Requisitos de alta del proveedor', async ({ browser }, testInfo) 
       url: '/admin/supplier-requirements',
       nombre: `Requisito temporal QA ${run}`,
       avisoEditado: 'Requisito actualizado',
+      avisoEliminado: 'Requisito eliminado',
       crear: async (nombre) => {
         await admin.locator('summary', { hasText: 'Nuevo requisito' }).click();
         await admin.locator('#new-name').fill(nombre);

@@ -31,20 +31,18 @@ test('HU-23 · Complemento de pagos', async ({ browser }, testInfo) => {
 
     await hu.escenario('Configuración de requisitos: "Complemento de pago" Opcional (nota de la HU)', async () => {
       const admin = await hu.sesion('admin');
-      await hu.paso(admin, 'Abrir Administración › Archivos mínimos', 'El Complemento de pago (XML y PDF) aparece como Opcional para Nacional y No aplica para Internacional, con candado.', async () => {
+      await hu.paso(admin, 'Abrir Administración › Archivos mínimos', 'El Complemento de pago (XML y PDF) aparece como Opcional para Nacional y No aplica para Internacional.', async () => {
         await admin.goto('/admin/required-documents');
         const filas = admin.locator('tr').filter({ hasText: /^Complemento de pago/ });
         const resultados: string[] = [];
         for (const nombre of ['Complemento de pago (XML)', 'Complemento de pago (PDF)']) {
           const fila = admin.locator('tr').filter({ has: admin.locator('strong', { hasText: nombre }) });
           await expect(fila).toHaveCount(1);
-          await expect(fila.locator('select')).toHaveCount(0);
-          await expect(fila).toContainText('Opcional');
-          await expect(fila).toContainText('No aplica');
-          await expect(fila).toContainText('Se carga después del pago de la factura');
-          resultados.push(`${nombre}: ${(await fila.innerText()).replace(/\s+/g, ' ').trim()}`);
+          await expect(fila.locator('select').nth(0)).toHaveValue('OPTIONAL');
+          await expect(fila.locator('select').nth(1)).toHaveValue('NOT_APPLICABLE');
+          resultados.push(`${nombre}: Nacional Opcional, Internacional No aplica`);
         }
-        await hu.captura(admin, 'requisitos-complemento-opcional', 'Configuración de archivos mínimos: Complemento de pago Opcional fijo para Nacional.', {
+        await hu.captura(admin, 'requisitos-complemento-opcional', 'Configuración de archivos mínimos: Complemento de pago Opcional para Nacional.', {
           enfocar: filas.first(),
         });
         return resultados.join(' · ');

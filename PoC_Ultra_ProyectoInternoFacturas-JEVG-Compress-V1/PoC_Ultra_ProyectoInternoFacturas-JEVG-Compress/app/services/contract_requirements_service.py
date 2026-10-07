@@ -19,12 +19,10 @@ from dataclasses import dataclass, field
 from uuid import uuid4
 
 from pydantic import ValidationError
-from sqlalchemy import func, select, text
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.constants import (
-    FIXED_CONTRACT_REQUIREMENTS,
     ContractStatus,
     DocumentRequirement,
     ProcessingStatus,
@@ -41,20 +39,15 @@ from app.schemas import (
 )
 from app.services.audit_service import audit
 from app.services.file_service import StoredFile
-from app.services.invoice_service import violates
+from app.services.type_catalog import TypeCatalog, share_lock
 
-# Clave del bloqueo consultivo que serializa las escrituras de la configuracion (pg_advisory_xact_lock).
-CONFIG_LOCK_KEY = 22_2200_0001
 ENTITY = "ContractDocumentType"
 FIELD_PREFIX = "requirement__"
 UPLOAD_STATUSES = {ContractStatus.REGISTERED, ContractStatus.ACTIVE}
 
 MSG_CHANGED = "La configuración cambió mientras la editaba. Recargue la página."
 MSG_DUPLICATE_NAME = "Ya existe un requisito con ese nombre"
-MSG_SYSTEM_TYPE = "Los requisitos del sistema no se pueden editar ni desactivar"
 MSG_NOT_FOUND = "Requisito no encontrado"
-MSG_SYSTEM_DELETE = "Los elementos del sistema no se pueden eliminar"
-MSG_IN_USE = "El tipo ya tiene documentos cargados; desactívelo en su lugar"
 MSG_CONTRACT_NOT_FOUND = "Contrato no encontrado"
 MSG_NOT_APPLICABLE = "El documento no aplica a este contrato"
 MSG_BAD_REPLACEMENT = "El documento a reemplazar no corresponde a este requisito"
@@ -62,6 +55,16 @@ MSG_UPLOAD_STATUS = "Sólo se cargan documentos en un contrato Registrado o Acti
 MSG_NOT_REGISTERED = "Sólo se puede activar un contrato Registrado"
 MSG_SUPPLIER_NOT_AUTHORIZED = "No se activó el contrato: el proveedor no está autorizado"
 MSG_PENDING = "No se activó el contrato: faltan requisitos obligatorios ({names})"
+# Bloqueo consultivo 22_2200_0001: serializa las escrituras de la configuracion (pg_advisory_xact_lock).
+CATALOG = TypeCatalog(
+    model=ContractDocumentType,
+    entity=ENTITY,
+    action_prefix="CONTRACT_DOCUMENT_TYPE",
+    lock_key=22_2200_0001,
+    name_index="uq_contract_document_types_name_lower",
+    duplicate_message=MSG_DUPLICATE_NAME,
+    not_found_message=MSG_NOT_FOUND,
+)
 
 
 # --- Lectura ------------------------------------------------------------------------------------------------------
@@ -77,10 +80,6 @@ def sort_key(document_type: ContractDocumentType) -> tuple:
 
 def catalog(db: Session) -> list[ContractDocumentType]:
     return sorted(db.scalars(select(ContractDocumentType)), key=sort_key)
-
-
-def fixed_requirement(code: str) -> DocumentRequirement | None:
-    return FIXED_CONTRACT_REQUIREMENTS.get(code)
 
 
 def applicable(types: Iterable[ContractDocumentType]) -> list[ContractDocumentType]:
@@ -194,7 +193,7 @@ def applicable_type(db: Session, code: str) -> ContractDocumentType:
     found = next((t for t in applicable(catalog(db)) if t.code == code), None)
     if found is None:
         raise InvalidInputError(MSG_NOT_APPLICABLE)
-    _share_lock(db, ContractDocumentType, found.id)
+    share_lock(db, ContractDocumentType, found.id)
     return found
 
 
@@ -309,72 +308,21 @@ def activate(db: Session, contract_id: int, user_id: int) -> Contract:
 # --- Configuracion ------------------------------------------------------------------------------------------------
 
 
-def _lock(db: Session) -> None:
-    db.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": CONFIG_LOCK_KEY})
-
-
-def _admin_type(db: Session, type_id: int) -> ContractDocumentType:
-    document_type = db.get(ContractDocumentType, type_id)
-    if document_type is None:
-        raise NotFoundError(MSG_NOT_FOUND)
-    if document_type.is_system:
-        raise BusinessRuleError(MSG_SYSTEM_TYPE)
-    return document_type
-
-
-def _in_use(db: Session, code: str) -> bool:
-    return db.scalar(select(Document.id).where(Document.document_type == code).limit(1)) is not None
-
-
-def _share_lock(db: Session, model, type_id: int) -> None:
-    """Bloqueo compartido de la fila del tipo durante la carga: impide su eliminacion hasta el commit."""
-    db.execute(select(model.id).where(model.id == type_id).with_for_update(key_share=True, read=True))
-
-
-def _ensure_unique_name(db: Session, name: str, exclude_id: int | None = None) -> None:
-    stmt = select(ContractDocumentType.id).where(func.lower(ContractDocumentType.name) == name.lower())
-    if exclude_id is not None:
-        stmt = stmt.where(ContractDocumentType.id != exclude_id)
-    if db.scalar(stmt) is not None:
-        raise BusinessRuleError(MSG_DUPLICATE_NAME)
-
-
-def _flush(db: Session) -> None:
-    """flush que traduce la unicidad del nombre a 409 (la BD es la autoridad aunque el servicio ya lo verifico)."""
-    try:
-        db.flush()
-    except IntegrityError as exc:
-        db.rollback()
-        if violates(exc, "uq_contract_document_types_name_lower"):
-            raise BusinessRuleError(MSG_DUPLICATE_NAME) from exc
-        raise
-
-
 def save_requirements(db: Session, form: Mapping[str, str], user_id: int) -> bool:
     """Guarda los niveles en una sola transaccion. True si hubo cambios; False si no habia nada que cambiar.
 
-    Orden de las verificaciones, como en HU-04: huella (409), niveles recibidos (400) y nivel fijo del Contrato (409).
-    El nivel fijo puede faltar en el formulario, que no tiene selector para el. Los campos de claves desconocidas o
-    de requisitos inactivos se ignoran."""
-    _lock(db)
+    Orden de las verificaciones, como en HU-04: huella (409) y niveles recibidos (400). Los campos de claves
+    desconocidas o de requisitos eliminados se ignoran."""
+    CATALOG.lock(db)
     types = catalog(db)
     if form.get("config_version") != config_version(types):
         raise BusinessRuleError(MSG_CHANGED)
     received: dict[ContractDocumentType, DocumentRequirement] = {}
     for document_type in (t for t in types if t.is_active):
-        value = form.get(f"{FIELD_PREFIX}{document_type.code}")
-        if value is None:
-            if fixed_requirement(document_type.code) is None:
-                raise InvalidInputError(INVALID_REQUIREMENT)
-            continue
         try:
-            received[document_type] = parse_requirement(value)
+            received[document_type] = parse_requirement(form.get(f"{FIELD_PREFIX}{document_type.code}"))
         except ValueError:
             raise InvalidInputError(INVALID_REQUIREMENT) from None
-    for document_type, level in received.items():
-        fixed = fixed_requirement(document_type.code)
-        if fixed is not None and level != fixed:
-            raise BusinessRuleError(f"{document_type.name} tiene un nivel fijo")
     changed = {document_type: level for document_type, level in received.items() if document_type.requirement != level}
     if not changed:
         return False
@@ -402,8 +350,8 @@ def create_type(
         )
     except ValidationError as exc:
         raise InvalidInputError(document_type_message(exc)) from None
-    _lock(db)
-    _ensure_unique_name(db, data.name)
+    CATALOG.lock(db)
+    CATALOG.ensure_unique_name(db, data.name)
     created = ContractDocumentType(
         code=f"REQ_CONTRATO_PENDIENTE_{uuid4().hex}",
         name=data.name,
@@ -414,7 +362,7 @@ def create_type(
         allows_multiple=data.allows_multiple,
     )
     db.add(created)
-    _flush(db)
+    CATALOG.flush(db)
     created.code = f"REQ_CONTRATO_{created.id}"
     audit(
         db,
@@ -433,73 +381,20 @@ def create_type(
 
 
 def update_type(db: Session, type_id: int, user_id: int, name: str, description: str | None) -> bool:
-    """Edita nombre y descripcion de un requisito del Administrador. True si hubo cambios."""
-    _lock(db)
-    document_type = _admin_type(db, type_id)
+    """Edita nombre y descripcion de cualquier requisito, del sistema o del Administrador. True si hubo cambios. Si
+    admite varios archivos no cambia."""
     try:
         data = ContractDocumentTypeUpdate(name=name, description=description)
     except ValidationError as exc:
         raise InvalidInputError(document_type_message(exc)) from None
-    _ensure_unique_name(db, data.name, exclude_id=document_type.id)
-    old, new = {}, {}
-    for attr in ("name", "description"):
-        before, after = getattr(document_type, attr), getattr(data, attr)
-        if before != after:
-            old[attr], new[attr] = before, after
-    if not new:
-        return False
-    for attr, value in new.items():
-        setattr(document_type, attr, value)
-    _flush(db)
-    audit(db, "CONTRACT_DOCUMENT_TYPE_UPDATED", ENTITY, document_type.id, user_id, old, new)
-    return True
+    return CATALOG.update(db, type_id, user_id, data.model_dump())
 
 
-def set_active(db: Session, type_id: int, user_id: int, active: bool) -> bool:
-    """Desactiva o reactiva un requisito del Administrador con un estado destino explicito. Conserva su nivel."""
-    _lock(db)
-    document_type = _admin_type(db, type_id)
-    if document_type.is_active == active:
-        return False
-    document_type.is_active = active
-    audit(
-        db,
-        "CONTRACT_DOCUMENT_TYPE_STATUS_CHANGED",
-        ENTITY,
-        document_type.id,
-        user_id,
-        {"is_active": not active},
-        {"is_active": active},
-    )
-    return True
+def delete_type(db: Session, type_id: int, user_id: int) -> bool:
+    """Baja logica de cualquier requisito, aunque tenga documentos: deja de pedirse y de exigirse al activar. Ningun
+    contrato cambia de estatus."""
+    return CATALOG.delete(db, type_id, user_id)
 
 
-def delete_type(db: Session, type_id: int, user_id: int) -> None:
-    """Elimina un requisito del Administrador sin documentos. La fila se bloquea FOR UPDATE: una carga concurrente la
-    tiene FOR KEY SHARE, asi que no queda un documento con la clave de un tipo eliminado. Con documentos (vigentes o
-    reemplazados) responde 409 y sugiere desactivarlo."""
-    _lock(db)
-    document_type = db.get(ContractDocumentType, type_id, with_for_update=True)
-    if document_type is None:
-        raise NotFoundError(MSG_NOT_FOUND)
-    if document_type.is_system:
-        raise BusinessRuleError(MSG_SYSTEM_DELETE)
-    if _in_use(db, document_type.code):
-        raise BusinessRuleError(MSG_IN_USE)
-    audit(
-        db,
-        "CONTRACT_DOCUMENT_TYPE_DELETED",
-        ENTITY,
-        document_type.id,
-        user_id,
-        old={
-            "code": document_type.code,
-            "name": document_type.name,
-            "description": document_type.description,
-            "is_active": document_type.is_active,
-            "requirement": document_type.requirement.value,
-            "allows_multiple": document_type.allows_multiple,
-        },
-    )
-    db.delete(document_type)
-    db.flush()
+def restore_type(db: Session, type_id: int, user_id: int) -> bool:
+    return CATALOG.restore(db, type_id, user_id)

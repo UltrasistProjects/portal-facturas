@@ -115,20 +115,35 @@ XML = (ROOT / "data" / "demo_documents" / "cfdi_demo_correcto.xml").read_bytes()
 INTERNATIONAL_EMAIL = "internacional@poc.local"
 
 
+# Campos de un tipo del sistema que el Administrador puede cambiar (ajustes-finales-configuracion).
+SYSTEM_FIELDS = (
+    "name",
+    "description",
+    "formats",
+    "national_requirement",
+    "international_requirement",
+    "is_active",
+    "deleted_at",
+    "deleted_by",
+)
+
+
 @pytest.fixture()
 def restore_catalog():
-    """La base de pruebas es compartida (D20): restaura los niveles de los tipos del sistema y borra los tipos
-    soporte creados. Los documentos de esos tipos se conservan: no hay FK de document_type al catalogo."""
+    """La base de pruebas es compartida (D20): restaura los tipos del sistema (nombre, formatos, niveles y baja logica)
+    y borra los tipos soporte creados. Los documentos de esos tipos se conservan: no hay FK de document_type al
+    catalogo."""
     with SessionLocal() as db:
         saved = {
-            t.code: (t.national_requirement, t.international_requirement)
+            t.code: {field: getattr(t, field) for field in SYSTEM_FIELDS}
             for t in db.scalars(select(InvoiceDocumentType).where(InvoiceDocumentType.is_system))
         }
     yield
     with SessionLocal() as db:
         db.execute(delete(InvoiceDocumentType).where(InvoiceDocumentType.is_system.is_(False)))
         for document_type in db.scalars(select(InvoiceDocumentType).where(InvoiceDocumentType.is_system)):
-            document_type.national_requirement, document_type.international_requirement = saved[document_type.code]
+            for field, value in saved[document_type.code].items():
+                setattr(document_type, field, value)
         db.commit()
 
 
@@ -475,46 +490,18 @@ def test_falta_el_nivel_de_un_tipo_editable(client, restore_catalog):
     assert config_snapshot() == before
 
 
-def test_niveles_fijos_en_la_pantalla(client):
+def test_niveles_de_los_tipos_del_sistema_editables(client, restore_catalog):
+    """Ya no hay niveles fijos (ajustes-finales-configuracion): el XML del CFDI y el complemento tienen selector."""
     login(client)
     page = client.get(URL).text
     row = re.search(r"<tr><td><strong>XML del CFDI</strong>.*?</tr>", page, re.S).group(0)
-    assert "<select" not in row
-    assert row.count("bi-lock-fill") == 2
-    assert re.search(r"bi-lock-fill[^<]*</i> Obligatorio</span><small[^>]*>El proveedor nacional factura con CFDI", row)
-    assert "</i> No aplica</span>" in row
-    assert "international__FOREIGN_INVOICE" not in page and "national__FOREIGN_INVOICE" not in page
-
-
-def test_peticion_manipulada_sobre_un_nivel_fijo(client, restore_catalog):
-    login(client)
-    before = config_snapshot()
-    response = save_matrix(client, {"national__INVOICE_XML": "OPTIONAL", "national__CONTRACT": "REQUIRED"})
-    assert response.status_code == 409
-    assert "XML del CFDI tiene un nivel fijo para proveedores nacionales" in response.text
-    assert config_snapshot() == before
-    # El mismo nivel fijo enviado sin cambio no es un intento de cambiarlo.
-    assert save_matrix(client, {"international__INVOICE_PDF": "NOT_APPLICABLE"}).status_code == 303
-
-
-@pytest.mark.parametrize("name", ["Complemento de pago (XML)", "Complemento de pago (PDF)"])
-def test_complemento_de_pago_con_nivel_fijo_en_la_pantalla(client, name):
-    # HU Complemento de Pagos: el complemento solo existe despues del pago, asi que es Opcional fijo para el nacional.
-    login(client)
-    page = client.get(URL).text
-    row = re.search(rf"<tr><td><strong>{re.escape(name)}</strong>.*?</tr>", page, re.S).group(0)
-    assert "<select" not in row and row.count("bi-lock-fill") == 2
-    assert re.search(r"bi-lock-fill[^<]*</i> Opcional</span><small[^>]*>Se carga después del pago de la factura", row)
-    assert "</i> No aplica</span>" in row
-
-
-def test_complemento_exigido_por_peticion_manipulada(client, restore_catalog):
-    login(client)
-    before = config_snapshot()
-    response = save_matrix(client, {"national__PAYMENT_COMPLEMENT_XML": "REQUIRED"})
-    assert response.status_code == 409
-    assert "Complemento de pago (XML) tiene un nivel fijo para proveedores nacionales" in response.text
-    assert config_snapshot() == before
+    assert row.count("<select") == 2 and "bi-lock-fill" not in page
+    assert 'name="national__PAYMENT_COMPLEMENT_XML"' in page
+    response = save_matrix(client, {"national__INVOICE_XML": "OPTIONAL"})
+    assert response.status_code == 303
+    invoice = national_invoice(client)
+    page = client.get(f"/invoices/{invoice.id}/documents").text
+    assert checklist_row(page, "XML del CFDI") == "Opcional · Pendiente"
 
 
 def test_dos_administradores_editan_a_la_vez(client, restore_catalog):
@@ -631,9 +618,9 @@ def edit_type(client, type_id: int, name: str, formats, description: str = ""):
     return client.post(f"{URL}/types/{type_id}", data=data, follow_redirects=False)
 
 
-def set_status(client, type_id: int, active: str):
-    data = {"csrf_token": csrf(client, URL), "active": active}
-    return client.post(f"{URL}/types/{type_id}/status", data=data, follow_redirects=False)
+def restore_type(client, type_id: int):
+    data = {"csrf_token": csrf(client, URL)}
+    return client.post(f"{URL}/types/{type_id}/restore", data=data, follow_redirects=False)
 
 
 def current_document(invoice_id: int, code: str) -> Document | None:
@@ -677,17 +664,31 @@ def test_edicion_sin_cambios_y_nombre_repetido(client, restore_catalog):
     assert config_snapshot() == before
 
 
-def test_desactivacion_y_reactivacion(client, international, restore_catalog):
+def delete_type(client, type_id: int, token: str | None = "auto"):
+    data = {"csrf_token": csrf(client, URL)} if token == "auto" else ({"csrf_token": token} if token else {})
+    return client.post(f"{URL}/types/{type_id}/delete", data=data, follow_redirects=False)
+
+
+def test_eliminacion_logica_y_restauracion(client, international, restore_catalog):
+    """Eliminar es una baja logica (ajustes-finales-configuracion): la fila y los documentos se conservan, el tipo deja
+    de ofrecerse y de exigirse, y Restaurar lo devuelve con sus niveles."""
     hours = hours_type(client)
     invoice = international_invoice(client, international)
     assert upload(client, invoice.id, hours.code, "horas.pdf", PDF).status_code == 303
     login(client)
-    assert set_status(client, hours.id, "false").status_code == 303
-    assert "Reporte de horas" in re.search(r"<h2>Tipos inactivos</h2>.*", client.get(URL).text, re.S).group(0)
-    entry = last_audit("INVOICE_DOCUMENT_TYPE_STATUS_CHANGED")
+    response = delete_type(client, hours.id)
+    assert (response.status_code, response.headers["location"]) == (303, f"{URL}?ok=deleted")
+    deleted = type_by(id=hours.id)
+    assert (deleted.is_active, deleted.deleted_at is not None, deleted.deleted_by) == (False, True, admin_id())
+    page = client.get(f"{URL}?ok=deleted").text
+    assert "Tipo eliminado" in page and "<strong>Reporte de horas</strong>" not in page
+    assert "Mostrar eliminados (1)" in page
+    assert "<strong>Reporte de horas</strong>" in client.get(f"{URL}?eliminados=1").text
+    entry = last_audit("INVOICE_DOCUMENT_TYPE_DELETED")
+    assert (entry.entity_id, entry.user_id) == (str(hours.id), admin_id())
     assert (entry.old_value, entry.new_value) == ({"is_active": True}, {"is_active": False})
     before = config_snapshot()
-    assert set_status(client, hours.id, "false").status_code == 303  # ya inactivo: sin cambios ni auditoria
+    assert delete_type(client, hours.id).headers["location"] == f"{URL}?ok=unchanged"  # ya eliminado: sin auditoria
     assert config_snapshot() == before
     login_international(client)
     assert hours.code not in offered(client.get(f"/invoices/{invoice.id}/documents").text)
@@ -699,30 +700,27 @@ def test_desactivacion_y_reactivacion(client, international, restore_catalog):
     link = re.search(rf'href="(/invoices/{invoice.id}/documents/\d+/download)"', detail).group(1)
     assert client.get(link).content == PDF
     login(client)
-    assert set_status(client, hours.id, "true").status_code == 303
-    assert type_by(id=hours.id).international_requirement == "REQUIRED"
+    assert restore_type(client, hours.id).headers["location"] == f"{URL}?ok=restored"
+    restored = type_by(id=hours.id)
+    assert (restored.is_active, restored.deleted_at, restored.international_requirement) == (True, None, "REQUIRED")
+    assert last_audit("INVOICE_DOCUMENT_TYPE_RESTORED").new_value == {"is_active": True}
     login_international(client)
     page = client.get(f"/invoices/{other.id}/documents").text
     assert checklist_row(page, "Reporte de horas") == "Obligatorio · Pendiente"
 
 
-def test_tipo_del_sistema_no_se_edita_ni_desactiva(client):
+def test_tipo_del_sistema_se_edita_y_se_elimina(client, restore_catalog):
     login(client)
     purchase_order = type_by(code="PURCHASE_ORDER")
-    before = config_snapshot()
-    for response in (
-        edit_type(client, purchase_order.id, "Orden de compra firmada", ("PDF",)),
-        set_status(client, purchase_order.id, "false"),
-    ):
-        assert response.status_code == 409
-        assert "Los tipos de documento del sistema no se pueden editar ni desactivar" in response.text
-    assert set_status(client, purchase_order.id, "quizas").status_code == 400
-    assert config_snapshot() == before
-
-
-def delete_type(client, type_id: int, token: str | None = "auto"):
-    data = {"csrf_token": csrf(client, URL)} if token == "auto" else ({"csrf_token": token} if token else {})
-    return client.post(f"{URL}/types/{type_id}/delete", data=data, follow_redirects=False)
+    response = edit_type(client, purchase_order.id, "Orden de compra firmada", ("PDF",))
+    assert response.status_code == 303
+    edited = type_by(id=purchase_order.id)
+    assert (edited.code, edited.name, edited.formats) == ("PURCHASE_ORDER", "Orden de compra firmada", ["PDF"])
+    assert last_audit("INVOICE_DOCUMENT_TYPE_UPDATED").new_value["name"] == "Orden de compra firmada"
+    assert delete_type(client, purchase_order.id).status_code == 303
+    assert type_by(id=purchase_order.id).is_active is False
+    invoice = national_invoice(client)
+    assert "PURCHASE_ORDER" not in offered(client.get(f"/invoices/{invoice.id}/documents").text)
 
 
 def actions_of(page: str, name: str) -> str:
@@ -732,80 +730,40 @@ def actions_of(page: str, name: str) -> str:
     return row
 
 
-def test_acciones_editar_y_eliminar_solo_en_tipos_soporte(client, restore_catalog):
+def test_acciones_editar_y_eliminar_en_todos_los_tipos(client, restore_catalog):
     hours = hours_type(client)
     page = client.get(URL).text
     row = actions_of(page, "Reporte de horas")
     assert f'href="?editar={hours.id}#editar-{hours.id}"' in row and 'form="eliminar-' in row
     assert "¿Eliminar «Reporte de horas»?" in row
     assert f'<form id="eliminar-{hours.id}" method="post" action="{URL}/types/{hours.id}/delete" hidden>' in page
+    purchase_order = type_by(code="PURCHASE_ORDER")
     system = actions_of(page, "Orden de compra")
-    assert "Editar" not in system and "Eliminar" not in system
+    assert f'href="?editar={purchase_order.id}#editar-{purchase_order.id}"' in system and "Eliminar" in system
+    xml = actions_of(page, "XML del CFDI")
+    assert "Las facturas nacionales dejarán de exigir el CFDI" in xml
     assert (
         f'id="editar-{hours.id}" class="admin-create border-bottom" open' in client.get(f"{URL}?editar={hours.id}").text
     )
 
 
-def test_edicion_de_un_tipo_inactivo(client, restore_catalog):
+def test_edicion_de_un_tipo_eliminado(client, restore_catalog):
     hours = hours_type(client)
-    assert set_status(client, hours.id, "false").status_code == 303
-    page = client.get(URL).text
-    inactive = re.search(r"<h2>Tipos inactivos</h2>.*", page, re.S).group(0)
-    assert f'href="?editar={hours.id}#editar-{hours.id}"' in inactive
-    assert f'id="editar-{hours.id}"' in page
+    assert delete_type(client, hours.id).status_code == 303
+    page = client.get(f"{URL}?eliminados=1").text
+    deleted = re.search(r"<h2>Tipos eliminados</h2>.*", page, re.S).group(0)
+    assert f'href="?editar={hours.id}&amp;eliminados=1#editar-{hours.id}"' in deleted
+    assert f'action="{URL}/types/{hours.id}/restore"' in deleted
     assert edit_type(client, hours.id, "Reporte de horas mensual", ("PDF",)).status_code == 303
-    assert type_by(id=hours.id).name == "Reporte de horas mensual"
+    assert (type_by(id=hours.id).name, type_by(id=hours.id).is_active) == ("Reporte de horas mensual", False)
 
 
-@pytest.mark.parametrize("inactive", [False, True])
-def test_eliminacion_de_un_tipo_sin_documentos(client, restore_catalog, inactive):
-    hours = hours_type(client)
-    if inactive:
-        assert set_status(client, hours.id, "false").status_code == 303
-    response = delete_type(client, hours.id)
-    assert response.status_code == 303
-    assert response.headers["location"] == f"{URL}?ok=deleted"
-    assert type_by(id=hours.id) is None
-    page = client.get(f"{URL}?ok=deleted").text
-    assert "Tipo eliminado" in page and "Reporte de horas" not in page
-    entry = last_audit("INVOICE_DOCUMENT_TYPE_DELETED")
-    assert (entry.entity_id, entry.user_id, entry.new_value) == (str(hours.id), admin_id(), None)
-    assert entry.old_value == {
-        "code": hours.code,
-        "name": "Reporte de horas",
-        "description": "Horas dedicadas en el periodo",
-        "formats": ["PDF"],
-        "is_active": not inactive,
-        "national": "NOT_APPLICABLE",
-        "international": "REQUIRED",
-    }
-
-
-@pytest.mark.parametrize("replaced", [False, True])
-def test_eliminacion_de_un_tipo_con_documentos(client, international, restore_catalog, replaced):
-    hours = hours_type(client)
-    invoice = international_invoice(client, international)
-    assert upload(client, invoice.id, hours.code, "horas.pdf", PDF).status_code == 303
-    if replaced:
-        # Solo queda un documento reemplazado (no vigente) con la clave: tambien cuenta.
-        with SessionLocal() as db:
-            db.get(Document, current_document(invoice.id, hours.code).id).is_current = False
-            db.commit()
+def test_eliminacion_de_un_tipo_inexistente(client, restore_catalog):
     login(client)
     before = config_snapshot()
-    response = delete_type(client, hours.id)
-    assert response.status_code == 409
-    assert "El tipo ya tiene documentos cargados; desactívelo en su lugar" in response.text
-    assert config_snapshot() == before
-
-
-def test_eliminacion_de_un_tipo_del_sistema_o_inexistente(client, restore_catalog):
-    login(client)
-    before = config_snapshot()
-    response = delete_type(client, type_by(code="PURCHASE_ORDER").id)
-    assert response.status_code == 409
-    assert "Los elementos del sistema no se pueden eliminar" in response.text
     assert delete_type(client, 999_999).status_code == 404
+    assert restore_type(client, 999_999).status_code == 404
+    assert client.post(f"{URL}/types/1/status", data={"csrf_token": csrf(client, URL)}).status_code == 404
     assert config_snapshot() == before
 
 
@@ -815,6 +773,13 @@ def test_eliminacion_sin_token_csrf(client, restore_catalog, token):
     before = config_snapshot()
     assert delete_type(client, hours.id, token).status_code == 403
     assert config_snapshot() == before
+
+
+def test_eliminacion_por_otro_rol(client, restore_catalog):
+    hours = hours_type(client)
+    login(client, "pmo@poc.local")
+    assert client.post(f"{URL}/types/{hours.id}/delete", data={"csrf_token": csrf(client, "/")}).status_code == 403
+    assert type_by(id=hours.id).is_active
 
 
 # --- Motor de validacion con la configuracion vigente ---------------------------------------------------------------
@@ -937,8 +902,9 @@ def test_la_base_de_datos_decide_el_nombre_repetido(monkeypatch, restore_catalog
     # Carrera: otro Administrador guardo el mismo nombre despues de la verificacion del servicio.
     from app.core.errors import BusinessRuleError
     from app.services import document_requirements_service as service
+    from app.services.type_catalog import TypeCatalog
 
-    monkeypatch.setattr(service, "_ensure_unique_name", lambda *args, **kwargs: None)
+    monkeypatch.setattr(TypeCatalog, "ensure_unique_name", lambda *args, **kwargs: None)
     with SessionLocal() as db:
         with pytest.raises(BusinessRuleError, match="Ya existe un tipo de documento con ese nombre"):
             service.create_type(db, admin_id(), "Orden de Compra", None, ["PDF"], "OPTIONAL", "OPTIONAL")

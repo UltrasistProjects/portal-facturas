@@ -25,10 +25,11 @@ export async function idDesdeUrl(page: Page): Promise<number> {
   return Number(coincidencia[1]);
 }
 
-/** Paso 1 del alta (HU-12/HU-15): llena el formulario y deja la pagina en la carga documental. */
+/** Paso 1 del alta (HU-12/HU-15): llena el formulario y deja la pagina en la carga documental. El total del Invoice
+ * no se captura: la pagina lo calcula (subtotal + impuestos) y el servidor lo vuelve a calcular. */
 export async function llenarAltaFactura(
   page: Page,
-  datos: { numero: string; periodo?: string; ordenCompra?: string; invoice?: { fecha: string; moneda: string; subtotal: string; impuestos: string; total: string } },
+  datos: { numero: string; periodo?: string; ordenCompra?: string; invoice?: { fecha: string; moneda: string; subtotal: string; impuestos: string } },
 ): Promise<void> {
   await page.locator('input[name=invoice_number]').fill(datos.numero);
   await page.locator('input[name=service_period]').fill(datos.periodo ?? '08/2026');
@@ -38,7 +39,6 @@ export async function llenarAltaFactura(
     await page.locator('#currency').selectOption(datos.invoice.moneda);
     await page.locator('#subtotal').fill(datos.invoice.subtotal);
     await page.locator('#tax').fill(datos.invoice.impuestos);
-    await page.locator('#total').fill(datos.invoice.total);
   }
 }
 

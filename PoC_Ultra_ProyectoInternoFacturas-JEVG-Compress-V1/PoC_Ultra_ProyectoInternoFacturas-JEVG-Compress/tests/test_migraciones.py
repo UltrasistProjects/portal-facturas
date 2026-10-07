@@ -27,7 +27,7 @@ DOMAIN_TABLES = {
     "notification_mailboxes",
     "notification_copies",
     "email_deliveries",
-    "validation_settings",
+    "validation_rules",
     "catalog_entries",
 }
 NOTIFICATION_TABLES = {"notification_mailboxes", "notification_copies", "email_deliveries"}
@@ -37,6 +37,7 @@ BASELINE_TABLES = (
     - {"invoice_document_types", "supplier_document_types", "contract_document_types", "notification_templates"}
     - NOTIFICATION_TABLES
     - VALIDATION_TABLES
+    - {"validation_rules"}
 ) | {"login_attempts"}
 
 
@@ -399,14 +400,24 @@ VALIDATION_RULES = "0007_validation_rules_catalogs"
 
 def test_instalacion_nueva_con_reglas_y_catalogos(empty_db):
     command.upgrade(alembic_config(empty_db), "head")
-    settings = query(
+    rules = query(
         empty_db,
-        "SELECT receiver_rfc, receiver_name, receiver_address, receiver_postal_code, receiver_tax_regime,"
-        " payment_method, payment_form, allowed_cfdi_uses, check_receiver_rfc AND check_receiver_name"
-        " AND check_receiver_postal_code AND check_payment_method AND check_payment_form AND check_cfdi_use,"
-        " version, updated_by FROM validation_settings",
+        "SELECT origin, rule_code, parameter, is_active, version, updated_by FROM validation_rules"
+        " ORDER BY origin DESC, rule_code",
     )
-    assert settings == [("ULT940623AG0", "ULTRASIST", "", "03930", "601", "PPD", "99", ["G03", "I04"], True, 1, None)]
+    assert rules == [
+        ("NATIONAL", "XML-002", "ULT940623AG0", True, 1, None),
+        ("NATIONAL", "XML-003", "PPD", True, 1, None),
+        ("NATIONAL", "XML-004", "99", True, 1, None),
+        ("NATIONAL", "XML-005", ["G03", "I04"], True, 1, None),
+        ("NATIONAL", "XML-009", "ULTRASIST", True, 1, None),
+        ("NATIONAL", "XML-010", "03930", True, 1, None),
+        ("NATIONAL", "XML-011", "601", False, 1, None),
+        ("INTERNATIONAL", "INT-001", None, True, 1, None),
+        ("INTERNATIONAL", "INT-002", "ULTRASIST", True, 1, None),
+        ("INTERNATIONAL", "INT-003", "03930", True, 1, None),
+        ("INTERNATIONAL", "INT-004", "", False, 1, None),
+    ]
     counts = dict(query(empty_db, "SELECT catalog, count(*) FROM catalog_entries WHERE is_active GROUP BY catalog"))
     assert counts == {
         "CURRENCY": 3,
@@ -1169,3 +1180,117 @@ def test_downgrade_del_pago(empty_db):
         execute(empty_db, "UPDATE invoices SET status = 'PAID'")
     command.upgrade(config, "head")
     command.check(config)
+
+
+# --- Ajustes finales: baja logica, reglas por origen y monedas del catalogo ---------------------------------------
+
+SOFT_DELETE = "0019_types_soft_delete"
+RULES_BY_ORIGIN = "0020_validation_rules"
+CURRENCY_MAPPING = "0021_currency_catalog_mapping"
+
+
+def test_tipos_inactivos_quedan_eliminados(empty_db):
+    config = alembic_config(empty_db)
+    command.upgrade(config, INVOICE_PAYMENT)
+    execute(
+        empty_db,
+        "INSERT INTO invoice_document_types (code, name, formats, is_system, is_active, national_requirement,"
+        " international_requirement, created_at, updated_at) VALUES ('SOPORTE_99', 'Soporte inactivo', '{PDF}',"
+        " false, false, 'OPTIONAL', 'OPTIONAL', now(), '2026-09-01T10:00:00Z')",
+    )
+    command.upgrade(config, SOFT_DELETE)
+    rows = query(
+        empty_db, "SELECT is_active, deleted_at, deleted_by FROM invoice_document_types WHERE code = 'SOPORTE_99'"
+    )
+    [(active, deleted_at, deleted_by)] = rows
+    assert (active, deleted_at.isoformat(), deleted_by) == (False, "2026-09-01T10:00:00+00:00", None)
+    # Ya no hay niveles fijos ni tipos del sistema siempre activos.
+    execute(empty_db, "UPDATE invoice_document_types SET national_requirement = 'OPTIONAL' WHERE code = 'INVOICE_XML'")
+    execute(empty_db, "UPDATE contract_document_types SET is_active = false, deleted_at = now() WHERE is_system")
+
+
+def test_downgrade_de_la_baja_logica(empty_db):
+    config = alembic_config(empty_db)
+    command.upgrade(config, SOFT_DELETE)
+    execute(
+        empty_db, "UPDATE supplier_document_types SET is_active = false, deleted_at = now() WHERE code = 'LOCATION'"
+    )
+    with pytest.raises(NotImplementedError, match="Restaure un respaldo"):
+        command.downgrade(config, INVOICE_PAYMENT)
+    execute(empty_db, "UPDATE supplier_document_types SET is_active = true, deleted_at = NULL WHERE code = 'LOCATION'")
+    command.downgrade(config, INVOICE_PAYMENT)
+    with pytest.raises(IntegrityError, match="ck_supplier_document_types_system_active"):
+        execute(empty_db, "UPDATE supplier_document_types SET is_active = false WHERE code = 'LOCATION'")
+    command.upgrade(config, "head")
+    command.check(config)
+
+
+def test_reglas_desde_una_configuracion_modificada(empty_db):
+    config = alembic_config(empty_db)
+    command.upgrade(config, SOFT_DELETE)
+    execute(
+        empty_db,
+        "UPDATE validation_settings SET receiver_name = 'ULTRASIST SA DE CV', check_receiver_postal_code = false,"
+        " receiver_address = 'Av. Insurgentes Sur 1'",
+    )
+    command.upgrade(config, RULES_BY_ORIGIN)
+    rules = {
+        (origin, code): (parameter, active)
+        for origin, code, parameter, active in query(
+            empty_db, "SELECT origin, rule_code, parameter, is_active FROM validation_rules"
+        )
+    }
+    assert rules["NATIONAL", "XML-009"] == rules["INTERNATIONAL", "INT-002"] == ("ULTRASIST SA DE CV", True)
+    assert rules["NATIONAL", "XML-010"] == rules["INTERNATIONAL", "INT-003"] == ("03930", False)
+    assert rules["INTERNATIONAL", "INT-004"] == ("Av. Insurgentes Sur 1", True)
+    assert "validation_settings" not in tables(empty_db)
+    # La fila unica puede representar estas reglas: el downgrade la reconstruye.
+    command.downgrade(config, SOFT_DELETE)
+    assert query(
+        empty_db, "SELECT receiver_name, receiver_address, check_receiver_postal_code FROM validation_settings"
+    ) == [("ULTRASIST SA DE CV", "Av. Insurgentes Sur 1", False)]
+    command.upgrade(config, "head")
+    command.check(config)
+
+
+@pytest.mark.parametrize(
+    "sql",
+    [
+        "UPDATE validation_rules SET parameter = '\"OTRA RAZON\"' WHERE rule_code = 'INT-002'",
+        "UPDATE validation_rules SET is_active = true, deleted_at = NULL WHERE rule_code = 'XML-011'",
+    ],
+)
+def test_downgrade_de_reglas_que_no_caben_en_la_fila_unica(empty_db, sql):
+    config = alembic_config(empty_db)
+    command.upgrade(config, RULES_BY_ORIGIN)
+    execute(empty_db, sql)
+    with pytest.raises(NotImplementedError, match="Restaure un respaldo"):
+        command.downgrade(config, SOFT_DELETE)
+    assert "validation_rules" in tables(empty_db)
+
+
+def test_monedas_normalizadas_y_reportadas(empty_db):
+    config = alembic_config(empty_db)
+    command.upgrade(config, RULES_BY_ORIGIN)
+    insert_supplier_documents(empty_db)
+    insert_contract(empty_db)
+    execute(empty_db, "UPDATE contracts SET currency = 'usd'")
+    add_invoice(empty_db, "PESOS", "DRAFT")
+    add_invoice(empty_db, "SIN-CLAVE", "DRAFT")
+    execute(empty_db, "UPDATE invoices SET currency = 'MN' WHERE invoice_number = 'PESOS'")
+    execute(empty_db, "UPDATE invoices SET currency = 'PES' WHERE invoice_number = 'SIN-CLAVE'")
+    command.upgrade(config, CURRENCY_MAPPING)
+    assert query(empty_db, "SELECT currency FROM contracts") == [("USD",)]
+    assert dict(query(empty_db, "SELECT invoice_number, currency FROM invoices")) == {
+        "PESOS": "MXN",
+        "SIN-CLAVE": "PES",
+    }
+    audits = query(
+        empty_db,
+        "SELECT entity, old_value, new_value, user_id FROM audit_logs WHERE action = 'CURRENCY_NORMALIZED'"
+        " ORDER BY entity",
+    )
+    assert audits == [
+        ("Contract", {"currency": "usd"}, {"currency": "USD"}, None),
+        ("Invoice", {"currency": "MN"}, {"currency": "MXN"}, None),
+    ]

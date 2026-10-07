@@ -24,7 +24,7 @@ from app.core.constants import (
     SupplierOrigin,
     SupplierStatus,
 )
-from app.core.database import get_db
+from app.core.database import get_db, violates
 from app.core.errors import BusinessRuleError, DuplicateInvoiceError, InvalidInputError
 from app.core.security import get_current_user, require_roles, validate_csrf
 from app.models import Contract, Document, Invoice, ValidationResult
@@ -48,11 +48,10 @@ from app.services.invoice_service import (
     provisional_folio,
     sync_upload_status,
     validation_summary,
-    violates,
 )
 from app.services.pdf_service import analyze_pdf
 from app.services.reconciliation_service import reconcile_amount
-from app.services.submission_service import MSG_MISSING_REQUIRED, SubmissionOutcome, submit_invoice
+from app.services.submission_service import SubmissionOutcome, submit_invoice
 from app.services.validation_engine import run_validation
 from app.services.xml_service import XMLParseError, parse_cfdi
 
@@ -167,7 +166,6 @@ async def create_invoice(
     invoice_date: str = Form(""),
     subtotal: str = Form(""),
     tax: str = Form(""),
-    total: str = Form(""),
     currency: str = Form(""),
     db: Session = Depends(get_db),
     user=Depends(provider_only),
@@ -184,7 +182,6 @@ async def create_invoice(
         "invoice_date": invoice_date,
         "subtotal": subtotal,
         "tax": tax,
-        "total": total,
         "currency": currency,
     }
     try:
@@ -223,6 +220,8 @@ async def create_invoice(
         subtotal=Decimal("0"),
         tax=Decimal("0"),
         total=Decimal("0"),
+        # El nacional nace con la moneda de su contrato; el XML la reemplaza solo con una clave activa del catalogo.
+        currency=contract.currency,
     )
     if foreign_data:
         foreign.apply_data(invoice, foreign_data)
@@ -540,19 +539,18 @@ async def update_amounts(
     invoice_date: str = Form(""),
     subtotal: str = Form(""),
     tax: str = Form(""),
-    total: str = Form(""),
     currency: str = Form(""),
     db: Session = Depends(get_db),
     user=Depends(provider_only),
 ):
-    """Edicion de los datos del Invoice mientras la factura es editable (HU-15)."""
+    """Edicion de los datos del Invoice mientras la factura es editable (HU-15). El total lo calcula el servidor."""
     await validate_csrf(request)
     invoice = _invoice_or_404(db, invoice_id, user)
     lock_invoice(db, invoice)
     ensure_editable(invoice)
     if not foreign.is_international(invoice):
         raise InvalidInputError(foreign.MSG_NOT_INTERNATIONAL)
-    values = {"invoice_date": invoice_date, "subtotal": subtotal, "tax": tax, "total": total, "currency": currency}
+    values = {"invoice_date": invoice_date, "subtotal": subtotal, "tax": tax, "currency": currency}
     data, errors = foreign.parse_data(db, values)
     if errors:
         return _documents_page(request, db, invoice, user, status_code=400, amounts=values, amount_errors=errors)
@@ -686,7 +684,7 @@ async def submit(invoice_id: int, request: Request, db: Session = Depends(get_db
     if result.outcome == SubmissionOutcome.SUBMITTED:
         return RedirectResponse(f"/invoices/{invoice.id}?notice=submitted", status_code=303)
     if result.outcome == SubmissionOutcome.MISSING_REQUIRED:
-        raise BusinessRuleError(MSG_MISSING_REQUIRED)
+        raise BusinessRuleError(result.missing_message)
     return _detail_page(request, db, invoice, user, submit_blocked=True, status_code=409)
 
 

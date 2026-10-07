@@ -18,7 +18,7 @@ from app.core.constants import CatalogType, DocumentType, InvoiceStatus, Supplie
 from app.core.errors import BusinessRuleError
 from app.core.types import to_money
 from app.models import Document, Invoice
-from app.schemas import FIELD_LABELS, ForeignInvoiceData, validation_messages
+from app.schemas import ForeignInvoiceData, validation_messages
 from app.services import catalog_service
 from app.services.file_service import LocalFileStorage
 from app.services.pdf_service import analyze_pdf
@@ -26,8 +26,8 @@ from app.services.pdf_service import analyze_pdf
 # Bloqueo consultivo de dos enteros (clave, proveedor): serializa las cargas de Invoice de un mismo proveedor, de modo
 # que dos cargas concurrentes con el mismo nombre de archivo no pasen ambas el control de duplicados.
 FOREIGN_INVOICE_LOCK_KEY = 15_1500_0001
-FIELDS = ("invoice_date", "subtotal", "tax", "total", "currency")
-MSG_INACTIVE_CURRENCY = f"{FIELD_LABELS['currency']}: la clave no está activa en el catálogo"
+# El total no se recibe: lo calcula ForeignInvoiceData (subtotal + impuestos).
+FIELDS = ("invoice_date", "subtotal", "tax", "currency")
 MSG_NOT_INTERNATIONAL = "La factura no es de un proveedor internacional"
 CURRENCY_CODE = re.compile(r"[A-Z]{3}")
 
@@ -59,7 +59,7 @@ def parse_data(db: Session, values: Mapping[str, str]) -> tuple[ForeignInvoiceDa
         errors = validation_messages(exc)
     currency = str(values.get("currency") or "").strip().upper()
     if CURRENCY_CODE.fullmatch(currency) and currency not in catalog_service.active_codes(db, CatalogType.CURRENCY):
-        errors.append(MSG_INACTIVE_CURRENCY)
+        errors.append(catalog_service.MSG_INACTIVE_CURRENCY)
     return (None if errors else data), errors
 
 
@@ -77,7 +77,7 @@ def apply_data(invoice: Invoice, data: ForeignInvoiceData) -> tuple[dict, dict]:
         "invoice_date": data.invoice_date,
         "subtotal": to_money(data.subtotal),
         "tax": to_money(data.tax),
-        "total": to_money(data.total),
+        "total": data.total,
         "currency": data.currency,
     }
     old, new = {}, {}

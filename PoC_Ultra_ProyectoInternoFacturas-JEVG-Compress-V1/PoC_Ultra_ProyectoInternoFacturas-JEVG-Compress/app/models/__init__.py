@@ -64,6 +64,11 @@ def enum_column(enum: type[StrEnum], name: str | None = None) -> SAEnum:
     )
 
 
+# Baja logica de un registro de configuracion: inactivo si y solo si tiene fecha de eliminacion. Nunca se borra la fila:
+# los documentos ya cargados y el historial siguen haciendo referencia a su clave.
+SOFT_DELETE_CHECK = "is_active = (deleted_at IS NULL)"
+
+
 def restrict(target: str) -> ForeignKey:
     """FK que impide borrar la fila referenciada (evidencia fiscal)."""
     return ForeignKey(target, ondelete="RESTRICT")
@@ -120,7 +125,7 @@ class Supplier(Base):
     supplier_type: Mapped[SupplierType] = mapped_column(enum_column(SupplierType))
     email: Mapped[str] = mapped_column(String(255))
     phone: Mapped[str | None] = mapped_column(String(30))
-    status: Mapped[SupplierStatus] = mapped_column(enum_column(SupplierStatus), default=SupplierStatus.ACTIVE)
+    status: Mapped[SupplierStatus] = mapped_column(enum_column(SupplierStatus), default=SupplierStatus.REGISTERED)
     confidentiality_agreement: Mapped[bool] = mapped_column(Boolean, default=False)
     economic_proposal: Mapped[bool] = mapped_column(Boolean, default=False)
     bank_information: Mapped[str | None] = mapped_column(String(255))
@@ -335,20 +340,7 @@ class InvoiceDocumentType(Base):
             "cardinality(formats) >= 1 AND formats <@ ARRAY['PDF', 'PNG', 'JPEG', 'XML', 'TXT']::varchar[]",
             name="ck_invoice_document_types_formats",
         ),
-        CheckConstraint("is_active OR NOT is_system", name="ck_invoice_document_types_system_active"),
-        # Niveles fijos (RD-04): el nacional factura con CFDI y el internacional con Invoice; el acuse de
-        # cancelacion solo se carga al cancelar (HU-14); el Complemento de Pago es Opcional para el nacional.
-        CheckConstraint(
-            "(code NOT IN ('INVOICE_XML', 'INVOICE_PDF')"
-            " OR (national_requirement = 'REQUIRED' AND international_requirement = 'NOT_APPLICABLE'))"
-            " AND (code <> 'FOREIGN_INVOICE'"
-            " OR (national_requirement = 'NOT_APPLICABLE' AND international_requirement = 'REQUIRED'))"
-            " AND (code <> 'CANCELLATION_ACK'"
-            " OR (national_requirement = 'NOT_APPLICABLE' AND international_requirement = 'NOT_APPLICABLE'))"
-            " AND (code NOT IN ('PAYMENT_COMPLEMENT_XML', 'PAYMENT_COMPLEMENT_PDF')"
-            " OR (national_requirement = 'OPTIONAL' AND international_requirement = 'NOT_APPLICABLE'))",
-            name="ck_invoice_document_types_fixed_levels",
-        ),
+        CheckConstraint(SOFT_DELETE_CHECK, name="ck_invoice_document_types_soft_delete"),
     )
     id: Mapped[int] = mapped_column(primary_key=True)
     code: Mapped[str] = mapped_column(String(60))
@@ -357,6 +349,8 @@ class InvoiceDocumentType(Base):
     formats: Mapped[list[str]] = mapped_column(ARRAY(String(4)))
     is_system: Mapped[bool] = mapped_column(Boolean, default=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    deleted_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
+    deleted_by: Mapped[int | None] = mapped_column(restrict("users.id"))
     national_requirement: Mapped[DocumentRequirement] = mapped_column(
         enum_column(DocumentRequirement, "ck_invoice_document_types_national_requirement"),
         default=DocumentRequirement.NOT_APPLICABLE,
@@ -381,13 +375,7 @@ class SupplierDocumentType(Base):
     __tablename__ = "supplier_document_types"
     __table_args__ = (
         UniqueConstraint("code", name="uq_supplier_document_types_code"),
-        CheckConstraint("is_active OR NOT is_system", name="ck_supplier_document_types_system_active"),
-        # El contrato firmado se carga en cada contrato (HU-22): en el expediente queda "No aplica" fijo.
-        CheckConstraint(
-            "code <> 'SUPPLIER_CONTRACT' OR (persona_moral_requirement = 'NOT_APPLICABLE'"
-            " AND persona_fisica_requirement = 'NOT_APPLICABLE' AND international_requirement = 'NOT_APPLICABLE')",
-            name="ck_supplier_document_types_fixed_levels",
-        ),
+        CheckConstraint(SOFT_DELETE_CHECK, name="ck_supplier_document_types_soft_delete"),
     )
     id: Mapped[int] = mapped_column(primary_key=True)
     code: Mapped[str] = mapped_column(String(60))
@@ -395,6 +383,8 @@ class SupplierDocumentType(Base):
     description: Mapped[str | None] = mapped_column(String(300))
     is_system: Mapped[bool] = mapped_column(Boolean, default=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    deleted_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
+    deleted_by: Mapped[int | None] = mapped_column(restrict("users.id"))
     persona_moral_requirement: Mapped[DocumentRequirement] = mapped_column(
         enum_column(DocumentRequirement, "ck_supplier_document_types_persona_moral_requirement"),
         default=DocumentRequirement.NOT_APPLICABLE,
@@ -422,11 +412,7 @@ class ContractDocumentType(Base):
     __tablename__ = "contract_document_types"
     __table_args__ = (
         UniqueConstraint("code", name="uq_contract_document_types_code"),
-        CheckConstraint("is_active OR NOT is_system", name="ck_contract_document_types_system_active"),
-        # Todo contrato activo tiene su contrato firmado (RD-03): Obligatorio fijo.
-        CheckConstraint(
-            "code <> 'SIGNED_CONTRACT' OR requirement = 'REQUIRED'", name="ck_contract_document_types_fixed_levels"
-        ),
+        CheckConstraint(SOFT_DELETE_CHECK, name="ck_contract_document_types_soft_delete"),
     )
     id: Mapped[int] = mapped_column(primary_key=True)
     code: Mapped[str] = mapped_column(String(60))
@@ -434,6 +420,8 @@ class ContractDocumentType(Base):
     description: Mapped[str | None] = mapped_column(String(300))
     is_system: Mapped[bool] = mapped_column(Boolean, default=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    deleted_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
+    deleted_by: Mapped[int | None] = mapped_column(restrict("users.id"))
     requirement: Mapped[DocumentRequirement] = mapped_column(
         enum_column(DocumentRequirement, "ck_contract_document_types_requirement"),
         default=DocumentRequirement.NOT_APPLICABLE,
@@ -591,34 +579,29 @@ class EmailDelivery(Base):
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=now_utc, index=True)
 
 
-class ValidationSettings(Base):
-    """Reglas de Validacion (HU-06): datos de ULTRASIST y parametros del CFDI que compara el motor. Una sola fila
-    (id = 1), creada por la migracion; `version` es el bloqueo optimista y `updated_by` es NULL si nunca se modifico.
-    Las claves de regimen, metodo, forma y usos pertenecen a catalog_entries (el servicio exige que esten activas)."""
+class ValidationRule(Base):
+    """Regla de Validacion configurable de un origen de proveedor (ajustes-finales-configuracion): su nombre, su valor
+    esperado y su baja logica. La definicion (lo que compara, severidad y tipo del valor) vive en
+    app/rules/definitions.py. `version` es el bloqueo optimista; `updated_by` es NULL si nunca se modifico."""
 
-    __tablename__ = "validation_settings"
+    __tablename__ = "validation_rules"
     __table_args__ = (
-        CheckConstraint("id = 1", name="ck_validation_settings_single_row"),
-        CheckConstraint("receiver_postal_code ~ '^[0-9]{5}$'", name="ck_validation_settings_postal_code"),
-        CheckConstraint("cardinality(allowed_cfdi_uses) >= 1", name="ck_validation_settings_cfdi_uses"),
-        CheckConstraint("version >= 1", name="ck_validation_settings_version_positive"),
+        UniqueConstraint("origin", "rule_code", name="uq_validation_rules_origin_code"),
+        CheckConstraint(SOFT_DELETE_CHECK, name="ck_validation_rules_soft_delete"),
+        CheckConstraint("version >= 1", name="ck_validation_rules_version_positive"),
+        CheckConstraint("char_length(name) BETWEEN 3 AND 80", name="ck_validation_rules_name_length"),
     )
-    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=False)
-    receiver_rfc: Mapped[str] = mapped_column(String(13))
-    receiver_name: Mapped[str] = mapped_column(String(254))
-    receiver_address: Mapped[str] = mapped_column(String(300), default="")
-    receiver_postal_code: Mapped[str] = mapped_column(String(5))
-    receiver_tax_regime: Mapped[str] = mapped_column(String(10))
-    payment_method: Mapped[str] = mapped_column(String(10))
-    payment_form: Mapped[str] = mapped_column(String(10))
-    allowed_cfdi_uses: Mapped[list[str]] = mapped_column(ARRAY(String(10)))
-    check_receiver_rfc: Mapped[bool] = mapped_column(Boolean, default=True)
-    check_receiver_name: Mapped[bool] = mapped_column(Boolean, default=True)
-    check_receiver_postal_code: Mapped[bool] = mapped_column(Boolean, default=True)
-    check_payment_method: Mapped[bool] = mapped_column(Boolean, default=True)
-    check_payment_form: Mapped[bool] = mapped_column(Boolean, default=True)
-    check_cfdi_use: Mapped[bool] = mapped_column(Boolean, default=True)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    origin: Mapped[SupplierOrigin] = mapped_column(enum_column(SupplierOrigin))
+    rule_code: Mapped[str] = mapped_column(String(10))
+    name: Mapped[str] = mapped_column(String(80))
+    # Texto, o lista de claves en XML-005; NULL en INT-001, que no tiene valor esperado.
+    parameter: Mapped[Any] = mapped_column(JSONB, nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    deleted_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
+    deleted_by: Mapped[int | None] = mapped_column(restrict("users.id"))
     version: Mapped[int] = mapped_column(default=1)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=now_utc)
     updated_at: Mapped[datetime] = mapped_column(UTCDateTime, default=now_utc)
     updated_by: Mapped[int | None] = mapped_column(restrict("users.id"))
 
@@ -661,6 +644,6 @@ __all__ = [
     "NotificationMailbox",
     "NotificationCopy",
     "EmailDelivery",
-    "ValidationSettings",
+    "ValidationRule",
     "CatalogEntry",
 ]

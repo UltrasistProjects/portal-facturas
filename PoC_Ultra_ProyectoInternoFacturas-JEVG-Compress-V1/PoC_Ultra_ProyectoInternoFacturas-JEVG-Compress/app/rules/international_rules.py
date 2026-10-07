@@ -9,14 +9,13 @@ import re
 import unicodedata
 
 from app.rules.base import not_applicable, outcome
+from app.rules.definitions import RuleSet
 from app.rules.xml_rules import DISABLED
 from app.schemas import ValidationOutcome
-from app.services.validation_settings_service import RuleParameters
 
 SOURCE = "Invoice.pdf"
 INT_CODES = ("INT-001", "INT-002", "INT-003", "INT-004")
 UNREADABLE = "No se pudo leer el texto del Invoice"
-NO_ADDRESS = "Dirección no configurada en Reglas de Validación"
 NO_VALUE = "Sin dato que buscar"
 FOUND, NOT_FOUND = "Encontrado en el Invoice", "No encontrado"
 
@@ -47,65 +46,60 @@ def _search(code: str, value: str, haystack: str, message_pass: str, message_fai
     )
 
 
-def international_rules(text: str, readable: bool, supplier, params: RuleParameters) -> list[ValidationOutcome]:
-    """INT-001 a INT-004 sobre el texto del Invoice. Sin texto legible (o sin Invoice), NOT_EVALUATED."""
-    if not readable:
-        return [
-            outcome(code, "INT", None, "WARNING", UNREADABLE, UNREADABLE, source_document=SOURCE) for code in INT_CODES
-        ]
+def _postal_code(postal_code: str, text: str) -> ValidationOutcome:
+    # Numero aislado: 03930 no debe coincidir dentro de 1039300 (en compact() los digitos quedarian juntos).
+    found = re.search(rf"(?<!\d){re.escape(postal_code)}(?!\d)", text) is not None
+    return outcome(
+        "INT-003",
+        "INT",
+        found,
+        "WARNING",
+        "Código postal de ULTRASIST presente en el Invoice",
+        "No se encontró el código postal de ULTRASIST en el Invoice",
+        postal_code,
+        FOUND if found else NOT_FOUND,
+        SOURCE,
+        warning=True,
+    )
+
+
+def international_rules(text: str, readable: bool, supplier, rules: RuleSet) -> list[ValidationOutcome]:
+    """INT-001 a INT-004 sobre el texto del Invoice, con las reglas internacionales vigentes de Reglas de Validacion.
+    Una regla eliminada resulta NOT_APPLICABLE; sin texto legible (o sin Invoice), las activas resultan
+    NOT_EVALUATED."""
     haystack = compact(text)
-    results = [
-        _search(
+    checks = {
+        "INT-001": lambda: _search(
             "INT-001",
             supplier.foreign_tax_id,
             haystack,
             "Identificador fiscal del proveedor presente en el Invoice",
             "No se encontró el identificador fiscal del proveedor en el Invoice",
-        )
-    ]
-    if params.check_receiver_name:
-        results.append(
-            _search(
-                "INT-002",
-                params.receiver_name,
-                haystack,
-                "Razón social de ULTRASIST presente en el Invoice",
-                "No se encontró la razón social de ULTRASIST en el Invoice",
-            )
-        )
-    else:
-        results.append(not_applicable("INT-002", "INT", "WARNING", DISABLED, params.receiver_name, SOURCE))
-    if params.check_receiver_postal_code:
-        # Numero aislado: 03930 no debe coincidir dentro de 1039300 (en compact() los digitos quedarian juntos).
-        found = re.search(rf"(?<!\d){re.escape(params.receiver_postal_code)}(?!\d)", text) is not None
-        results.append(
-            outcome(
-                "INT-003",
-                "INT",
-                found,
-                "WARNING",
-                "Código postal de ULTRASIST presente en el Invoice",
-                "No se encontró el código postal de ULTRASIST en el Invoice",
-                params.receiver_postal_code,
-                FOUND if found else NOT_FOUND,
-                SOURCE,
-                warning=True,
-            )
-        )
-    else:
-        results.append(not_applicable("INT-003", "INT", "WARNING", DISABLED, params.receiver_postal_code, SOURCE))
-    if compact(params.receiver_address):
-        results.append(
-            _search(
-                "INT-004",
-                params.receiver_address,
-                haystack,
-                "Dirección de ULTRASIST presente en el Invoice",
-                "No se encontró la dirección de ULTRASIST en el Invoice",
-            )
-        )
-    else:
-        results.append(not_applicable("INT-004", "INT", "WARNING", NO_ADDRESS, source_document=SOURCE))
+        ),
+        "INT-002": lambda: _search(
+            "INT-002",
+            rules.parameter("INT-002"),
+            haystack,
+            "Razón social de ULTRASIST presente en el Invoice",
+            "No se encontró la razón social de ULTRASIST en el Invoice",
+        ),
+        "INT-003": lambda: _postal_code(rules.parameter("INT-003"), text),
+        "INT-004": lambda: _search(
+            "INT-004",
+            rules.parameter("INT-004"),
+            haystack,
+            "Dirección de ULTRASIST presente en el Invoice",
+            "No se encontró la dirección de ULTRASIST en el Invoice",
+        ),
+    }
+    results = []
+    for code, check in checks.items():
+        if not rules.active(code):
+            results.append(not_applicable(code, "INT", "WARNING", DISABLED, rules.parameter(code), SOURCE))
+        elif not readable:
+            results.append(outcome(code, "INT", None, "WARNING", UNREADABLE, UNREADABLE, source_document=SOURCE))
+        else:
+            results.append(check())
     return results
 
 

@@ -21,13 +21,13 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.constants import DeliveryStatus, NotificationEvent, Role, SupplierStatus
+from app.core.database import violates
 from app.core.errors import BusinessRuleError, InvalidInputError, NotFoundError
 from app.models import AuditLog, EmailDelivery, Supplier, User
 from app.services import identity_service as identity
 from app.services import notification_service
 from app.services import supplier_requirements_service as requirements
 from app.services.audit_service import audit
-from app.services.invoice_service import violates
 from app.services.keycloak_admin import IdentityAdmin, IdentityProviderError, get_identity_admin
 
 logger = logging.getLogger(__name__)

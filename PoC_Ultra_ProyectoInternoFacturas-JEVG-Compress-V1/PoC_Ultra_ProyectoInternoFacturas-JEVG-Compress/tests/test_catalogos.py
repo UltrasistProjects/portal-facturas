@@ -8,12 +8,12 @@ import pytest
 from openpyxl import Workbook, load_workbook
 from sqlalchemy import func, select
 
-from app.core.constants import CatalogType
+from app.core.constants import CatalogType, SupplierOrigin
 from app.core.database import SessionLocal
 from app.models import AuditLog, CatalogEntry
 from app.rules.xml_rules import xml_rules
 from app.services import catalog_service as cs
-from app.services.validation_settings_service import rule_parameters
+from app.services.validation_rules_service import rule_set
 from tests.conftest import csrf, login
 
 pytestmark = pytest.mark.usefixtures("restore_validation_rules")
@@ -53,7 +53,7 @@ def set_status(client, catalog: str, code: str, active: bool):
 
 def currency_accepted(code: str) -> bool:
     with SessionLocal() as db:
-        results = {r.rule_code: r for r in xml_rules({"currency": code}, None, rule_parameters(db))}
+        results = {r.rule_code: r for r in xml_rules({"currency": code}, None, rule_set(db, SupplierOrigin.NATIONAL))}
     return results["XML-007"].status == "PASS"
 
 

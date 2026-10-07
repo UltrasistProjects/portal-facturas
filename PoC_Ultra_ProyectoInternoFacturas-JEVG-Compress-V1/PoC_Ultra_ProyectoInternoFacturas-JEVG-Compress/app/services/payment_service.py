@@ -26,7 +26,7 @@ from app.core.constants import (
     SupplierOrigin,
 )
 from app.core.errors import BusinessRuleError, InvalidInputError
-from app.models import Document, EmailDelivery, Invoice
+from app.models import Document, EmailDelivery, Invoice, InvoiceDocumentType
 from app.services import notification_service
 from app.services import notification_templates as nt
 from app.services.audit_service import audit
@@ -66,6 +66,13 @@ def invoice_uuid(invoice: Invoice) -> str | None:
     return (xml.metadata_json or {}).get("uuid") if xml else None
 
 
+def complement_type_active(db: Session) -> bool:
+    """El tipo "Complemento de pago (XML)" sigue en Archivos minimos: es la unica forma de adjuntar el complemento.
+    Si el Administrador lo elimino, ninguna factura lo requiere al pagarse y los vencidos no bloquean el envio."""
+    stmt = select(InvoiceDocumentType.is_active).where(InvoiceDocumentType.code == DocumentType.PAYMENT_COMPLEMENT_XML)
+    return bool(db.scalar(stmt))
+
+
 def requires_complement(invoice: Invoice) -> bool:
     """Proveedor nacional y MetodoPago PPD en el XML del CFDI vigente, leido de los datos que extrajo el motor. Sin
     XML o sin metodo de pago, no lo requiere."""
@@ -100,7 +107,7 @@ def mark_paid(db: Session, invoice: Invoice, user_id: int) -> None:
     if invoice.status != InvoiceStatus.ACCEPTED:
         raise BusinessRuleError(MSG_NOT_ACCEPTED)
     transition_invoice(db, invoice, InvoiceStatus.PAID, user_id)
-    required = requires_complement(invoice)
+    required = requires_complement(invoice) and complement_type_active(db)
     if required:
         invoice.payment_complement_due_at = invoice.paid_at + PAYMENT_COMPLEMENT_WINDOW
         # Un complemento cargado antes del pago ya paso la verificacion del CFDI de pago: cuenta como adjuntado.
@@ -226,7 +233,9 @@ def overdue_complements(db: Session, supplier_id: int, now: datetime | None = No
 
 
 def ensure_no_overdue_complements(db: Session, supplier_id: int) -> None:
-    """Bloqueo del envio a validacion (409) mientras el proveedor tenga complementos vencidos."""
+    """Bloqueo del envio a validacion (409) mientras el proveedor tenga complementos vencidos y se puedan adjuntar."""
+    if not complement_type_active(db):
+        return
     overdue = overdue_complements(db, supplier_id)
     if overdue:
         raise BusinessRuleError(MSG_OVERDUE.format(numbers=", ".join(i.invoice_number for i in overdue)))

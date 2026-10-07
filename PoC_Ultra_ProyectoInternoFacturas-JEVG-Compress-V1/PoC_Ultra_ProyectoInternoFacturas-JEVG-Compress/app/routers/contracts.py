@@ -4,7 +4,7 @@ from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.orm import Session, contains_eager, selectinload
 
-from app.core.constants import CONTRACT_STATUS_LABELS, ContractStatus, Role
+from app.core.constants import CONTRACT_STATUS_LABELS, CatalogType, ContractStatus, Role
 from app.core.database import get_db
 from app.core.errors import BusinessRuleError, InvalidInputError
 from app.core.security import require_roles, validate_csrf
@@ -12,8 +12,8 @@ from app.models import Contract, ContractAmendment, Document, Supplier
 from app.repositories.pagination import back_to, list_query, paginate, search
 from app.routers.common import templates
 from app.schemas import ContractAmendmentCreate, ContractCreate, validation_message
+from app.services import catalog_service, contract_service
 from app.services import contract_requirements_service as requirements
-from app.services.audit_service import audit
 from app.services.contract_service import amend_authorized_amount
 from app.services.file_service import LocalFileStorage, log_upload, safe_download_name
 
@@ -75,6 +75,7 @@ def _contracts_page(
         "base_query": list_query(q=q),
         "notice": notice,
         "suppliers": list(db.scalars(select(Supplier).order_by(Supplier.business_name))),
+        "currencies": catalog_service.active_entries(db, CatalogType.CURRENCY),
         "error": error,
     }
     return templates.TemplateResponse(request, "contracts/list.html", context, status_code=status_code)
@@ -108,13 +109,11 @@ async def create_contract(
         )
     except ValidationError as exc:
         return _contracts_page(request, db, user, validation_message(exc), 400)
-    if db.get(Supplier, data.supplier_id) is None:
-        return _contracts_page(request, db, user, "Proveedor inexistente.", 400)
-    # Nace Registrado: no se factura contra el hasta activarlo con sus requisitos completos (HU-22).
-    contract = Contract(**data.model_dump(), status=ContractStatus.REGISTERED, created_by=user.id, updated_by=user.id)
-    db.add(contract)
-    db.flush()
-    audit(db, "CONTRACT_CREATED", "Contract", contract.id, user.id)
+    try:
+        contract = contract_service.create_contract(db, data, user.id)
+    except InvalidInputError as exc:
+        db.rollback()
+        return _contracts_page(request, db, user, exc.message, exc.status_code)
     db.commit()
     # El alta lleva al expediente del contrato, que pide sus requisitos (listados-paginados, HU-22).
     return RedirectResponse(f"{CONTRACTS_URL}/{contract.id}?ok=created", status_code=303)
