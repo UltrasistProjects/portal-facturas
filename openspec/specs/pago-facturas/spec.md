@@ -39,7 +39,7 @@ Después SHALL redirigir (303) al detalle con el resultado del correo "Pagada".
 - **THEN** la respuesta es HTTP 403 y la factura no cambia
 
 ### Requirement: Factura que requiere Complemento de Pago
-Una factura SHALL requerir Complemento de Pago si y sólo si su proveedor es nacional (`NATIONAL`) y el método de pago (`MetodoPago`) de su XML del CFDI vigente es `PPD`. El método de pago SHALL leerse de los datos que el motor de validación extrajo del XML (`payment_method`). Si no hay XML vigente o no tiene método de pago, la factura no lo requiere. El requisito SHALL determinarse una sola vez, al marcar la factura como pagada, y SHALL quedar fijo en `payment_complement_due_at`. Un cambio posterior en el catálogo o en las Reglas de Validación MUST NOT cambiarlo.
+Una factura SHALL requerir Complemento de Pago si y sólo si su proveedor es nacional (`NATIONAL`), el método de pago (`MetodoPago`) de su XML del CFDI vigente es `PPD` y el tipo "Complemento de pago (XML)" (`PAYMENT_COMPLEMENT_XML`) está activo en Archivos mínimos. El método de pago SHALL leerse de los datos que el motor de validación extrajo del XML (`payment_method`). Si no hay XML vigente o no tiene método de pago, la factura no lo requiere. El requisito SHALL determinarse una sola vez, al marcar la factura como pagada, y SHALL quedar fijo en `payment_complement_due_at`. Un cambio posterior en el catálogo o en las Reglas de Validación MUST NOT cambiarlo.
 
 Si al marcar la factura como pagada ya tiene un XML del Complemento de Pago vigente y válido, el sistema SHALL registrar también `payment_complement_received_at` con la fecha de esa carga, y el complemento no queda pendiente.
 
@@ -54,6 +54,10 @@ Si al marcar la factura como pagada ya tiene un XML del Complemento de Pago vige
 #### Scenario: Internacional
 - **WHEN** el PMO marca como pagada una factura de un proveedor internacional
 - **THEN** la factura no requiere Complemento de Pago
+
+#### Scenario: Tipo del complemento eliminado
+- **WHEN** el Administrador eliminó "Complemento de pago (XML)" y el PMO marca como pagada una factura nacional PPD
+- **THEN** la factura no requiere Complemento de Pago y `payment_complement_due_at` es nulo
 
 ### Requirement: Correo "Pagada" al proveedor
 Después de confirmar el pago, el sistema SHALL enviar con el servicio de notificaciones el correo `INVOICE_PAID` al correo del proveedor en el catálogo y a las copias del evento. El envío SHALL registrarse en la bitácora con la entidad `Invoice` y el id de la factura. Las variables SHALL ser `numero_factura`, `folio_interno`, `proveedor`, `monto` (total con su moneda), `fecha_estatus` (`paid_at`) y `aviso_complemento`.
@@ -144,7 +148,7 @@ El tablero y el listado de facturas del rol `Proveedor` SHALL mostrar, si tiene 
 - **THEN** el aviso ya no lista esa factura y su detalle muestra "Adjuntado el <fecha>"
 
 ### Requirement: Bloqueo del envío por complementos vencidos
-`POST /invoices/{invoice_id}/submit` SHALL verificar, después de comprobar que la factura está en un estatus que se puede enviar y antes de recalcular "Borrador"/"Cargada" y ejecutar el motor, si el proveedor de la factura tiene complementos vencidos. Si los tiene, la respuesta SHALL ser HTTP 409 con "No puede enviar facturas a validación: tiene complementos de pago vencidos de las facturas <números>. Adjúntelos para continuar.", con los números de factura en orden de fecha límite. El estatus de la factura MUST NOT cambiar y no se registran resultados de validación. Un complemento pendiente pero no vencido MUST NOT bloquear el envío. El bloqueo SHALL levantarse en cuanto el proveedor adjunta todos sus complementos vencidos. El bloqueo MUST NOT impedir el alta de facturas, la carga de documentos ni "Verificar".
+`POST /invoices/{invoice_id}/submit` SHALL verificar, después de comprobar que la factura está en un estatus que se puede enviar y antes de recalcular "Borrador"/"Cargada" y ejecutar el motor, si el proveedor de la factura tiene complementos vencidos. Si los tiene, la respuesta SHALL ser HTTP 409 con "No puede enviar facturas a validación: tiene complementos de pago vencidos de las facturas <números>. Adjúntelos para continuar.", con los números de factura en orden de fecha límite. El estatus de la factura MUST NOT cambiar y no se registran resultados de validación. Un complemento pendiente pero no vencido MUST NOT bloquear el envío. El bloqueo SHALL levantarse en cuanto el proveedor adjunta todos sus complementos vencidos. El bloqueo MUST NOT impedir el alta de facturas, la carga de documentos ni "Verificar". Mientras el tipo "Complemento de pago (XML)" esté eliminado, los complementos vencidos MUST NOT bloquear el envío, porque no hay forma de adjuntarlos.
 
 #### Scenario: Envío bloqueado
 - **WHEN** el proveedor tiene la factura "A-1024" pagada hace 73 horas sin complemento y envía a validación su factura "Cargada" "A-1030"
@@ -170,6 +174,10 @@ El tablero y el listado de facturas del rol `Proveedor` SHALL mostrar, si tiene 
 - **WHEN** el proveedor con un complemento vencido da de alta una factura y carga sus documentos
 - **THEN** la factura se crea y sus documentos se guardan
 
+#### Scenario: Tipo del complemento eliminado
+- **WHEN** el proveedor tiene "A-1024" con el complemento vencido, el Administrador elimina "Complemento de pago (XML)" y el proveedor envía "A-1030"
+- **THEN** el envío se procesa con normalidad
+
 ### Requirement: Factura pagada es final
 "Pagada" SHALL ser final. La factura MUST NOT admitir verificación, envío, decisión del PMO, cancelación ni más cargas que las del Complemento de Pago. MUST NOT aparecer en la bandeja del PMO. El detalle de una factura "Pagada" SHALL mostrar a todos los roles "Pagada el <fecha>" en la zona de negocio. MUST NOT mostrar el panel "Decisión", el panel "Pago", la sección "Cancelar factura" ni las acciones "Verificar" y "Enviar a validación".
 
@@ -180,3 +188,4 @@ El tablero y el listado de facturas del rol `Proveedor` SHALL mostrar, si tiene 
 #### Scenario: Detalle de una factura pagada
 - **WHEN** el proveedor abre el detalle de su factura pagada el 01/10/2026 a las 10:00
 - **THEN** ve "Pagada el 01/10/2026 10:00", el bloque "Complemento de pago" y no ve "Cancelar factura"
+

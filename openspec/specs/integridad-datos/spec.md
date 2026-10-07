@@ -210,16 +210,18 @@ El engine de la aplicación SHALL conectarse con el driver `psycopg` (v3), verif
 La base de datos SHALL imponer sobre `invoice_document_types`:
 - unicidad de `code` y de `lower(name)`;
 - `formats` con al menos un elemento, todos dentro de (`PDF`, `PNG`, `JPEG`, `XML`, `TXT`);
-- que un tipo del sistema (`is_system`) esté siempre activo;
-- los niveles fijos: `INVOICE_XML` e `INVOICE_PDF` con `national_requirement = 'REQUIRED'` e `international_requirement = 'NOT_APPLICABLE'`; `FOREIGN_INVOICE` con `national_requirement = 'NOT_APPLICABLE'` e `international_requirement = 'REQUIRED'`; `CANCELLATION_ACK` con ambos niveles en `NOT_APPLICABLE`; `PAYMENT_COMPLEMENT_XML` y `PAYMENT_COMPLEMENT_PDF` con `national_requirement = 'OPTIONAL'` e `international_requirement = 'NOT_APPLICABLE'`.
+- la baja lógica coherente: `is_active` es verdadero si y sólo si `deleted_at` es nulo;
+- `deleted_by` referencia a `users` con `ON DELETE RESTRICT` y admite `NULL`.
 
-#### Scenario: Nivel fijo cambiado por SQL
-- **WHEN** se ejecuta `UPDATE invoice_document_types SET national_requirement = 'OPTIONAL' WHERE code = 'INVOICE_XML'`
+Un tipo del sistema MAY eliminarse y sus niveles MAY cambiar: la base de datos no impone niveles fijos.
+
+#### Scenario: Baja lógica incoherente por SQL
+- **WHEN** se ejecuta `UPDATE invoice_document_types SET is_active = false WHERE code = 'PURCHASE_ORDER'` sin asignar `deleted_at`
 - **THEN** la base de datos rechaza la operación
 
-#### Scenario: Tipo del sistema desactivado por SQL
-- **WHEN** se ejecuta `UPDATE invoice_document_types SET is_active = false WHERE code = 'PURCHASE_ORDER'`
-- **THEN** la base de datos rechaza la operación
+#### Scenario: Tipo del sistema eliminado por SQL
+- **WHEN** se ejecuta `UPDATE invoice_document_types SET is_active = false, deleted_at = now() WHERE code = 'INVOICE_XML'`
+- **THEN** la base de datos acepta la operación
 
 #### Scenario: Nombre repetido con otra capitalización
 - **WHEN** se inserta un tipo con `name = 'ORDEN DE COMPRA'`
@@ -229,17 +231,9 @@ La base de datos SHALL imponer sobre `invoice_document_types`:
 - **WHEN** se inserta un tipo con `formats` vacío o con `formats = '{DOCX}'`
 - **THEN** la base de datos rechaza la operación
 
-#### Scenario: Acuse exigido por SQL
-- **WHEN** se ejecuta `UPDATE invoice_document_types SET national_requirement = 'REQUIRED' WHERE code = 'CANCELLATION_ACK'`
-- **THEN** la base de datos rechaza la operación
-
-#### Scenario: Complemento exigido por SQL
-- **WHEN** se ejecuta `UPDATE invoice_document_types SET national_requirement = 'REQUIRED' WHERE code = 'PAYMENT_COMPLEMENT_XML'`
-- **THEN** la base de datos rechaza la operación
-
-#### Scenario: Migración con el complemento modificado
-- **WHEN** se aplica `0018_invoice_payment` sobre una base donde el Administrador dejó `PAYMENT_COMPLEMENT_PDF` en No aplica para Nacional
-- **THEN** la migración lo deja en Opcional para Nacional y No aplica para Internacional, y registra el cambio en `audit_logs` como `INVOICE_DOCUMENT_REQUIREMENTS_UPDATED` sin usuario
+#### Scenario: Migración de tipos inactivos
+- **WHEN** se aplica `0019_types_soft_delete` sobre una base con un tipo soporte inactivo
+- **THEN** el tipo queda con `deleted_at` igual a su `updated_at` y `deleted_by` nulo
 
 ### Requirement: Una plantilla por evento de notificación
 La base de datos SHALL imponer unicidad sobre `notification_templates.event`. Restricciones `CHECK` SHALL exigir que `subject` tenga de 1 a 200 caracteres, que `body` tenga de 1 a 5000 caracteres y que `version` sea mayor o igual que 1. `notification_templates.updated_by` SHALL referenciar a `users` con `ON DELETE RESTRICT` y admitir `NULL` para las plantillas que nunca se han modificado.
@@ -274,17 +268,17 @@ La base de datos SHALL imponer:
 
 ### Requirement: Integridad de las Reglas de Validación y de los catálogos
 La base de datos SHALL imponer:
-- en `validation_settings`: una sola fila (`id = 1`), `receiver_postal_code` de 5 dígitos, al menos un uso de CFDI en `allowed_cfdi_uses` y `version >= 1`;
+- en `validation_rules`: unicidad de `(origin, rule_code)`, `origin` en (`NATIONAL`, `INTERNATIONAL`), `version >= 1` y la baja lógica coherente (`is_active` si y sólo si `deleted_at` es nulo);
 - en `catalog_entries`: unicidad de `(catalog, code)`, clave de 1 a 10 caracteres `[A-Z0-9]` y descripción de 1 a 150 caracteres.
 
-`validation_settings.updated_by` y `catalog_entries.updated_by` SHALL referenciar a `users` con `ON DELETE RESTRICT` y admitir `NULL`.
+`validation_rules.updated_by`, `validation_rules.deleted_by` y `catalog_entries.updated_by` SHALL referenciar a `users` con `ON DELETE RESTRICT` y admitir `NULL`. La tabla `validation_settings` MUST NOT existir.
 
-#### Scenario: Segunda configuración por SQL directo
-- **WHEN** se inserta una fila en `validation_settings` con `id = 2`
+#### Scenario: Regla repetida por SQL directo
+- **WHEN** se inserta en `validation_rules` una segunda regla `XML-002` de origen `NATIONAL`
 - **THEN** la base de datos rechaza la operación
 
-#### Scenario: Código postal inválido por SQL directo
-- **WHEN** se ejecuta `UPDATE validation_settings SET receiver_postal_code = '3930'`
+#### Scenario: Origen inválido por SQL directo
+- **WHEN** se inserta una regla con `origin = 'FOREIGN'`
 - **THEN** la base de datos rechaza la operación
 
 #### Scenario: Clave repetida en un catálogo
@@ -324,33 +318,37 @@ La migración `0014_business_role_names` SHALL renombrar `ADMIN` a `Administrado
 ### Requirement: Integridad del catálogo de requisitos de alta
 La base de datos SHALL imponer sobre `supplier_document_types`:
 - unicidad de `code` y de `lower(name)`;
-- que un requisito del sistema (`is_system`) esté siempre activo;
-- que `SUPPLIER_CONTRACT` tenga No aplica en sus tres niveles.
+- la baja lógica coherente: `is_active` es verdadero si y sólo si `deleted_at` es nulo;
+- `deleted_by` referencia a `users` con `ON DELETE RESTRICT` y admite `NULL`.
 
-#### Scenario: Requisito del sistema desactivado por SQL
-- **WHEN** se ejecuta `UPDATE supplier_document_types SET is_active = false WHERE code = 'TAX_STATUS'`
+Un requisito del sistema MAY eliminarse y sus niveles MAY cambiar.
+
+#### Scenario: Baja lógica incoherente por SQL
+- **WHEN** se ejecuta `UPDATE supplier_document_types SET is_active = false WHERE code = 'TAX_STATUS'` sin asignar `deleted_at`
 - **THEN** la base de datos rechaza la operación
 
 #### Scenario: Nombre repetido con otra capitalización
 - **WHEN** se inserta un requisito con `name = 'PODERES'`
 - **THEN** la base de datos rechaza la operación
 
-#### Scenario: Contrato devuelto al alta del proveedor por SQL
+#### Scenario: Contrato con nivel editable por SQL
 - **WHEN** se ejecuta `UPDATE supplier_document_types SET persona_moral_requirement = 'OPTIONAL' WHERE code = 'SUPPLIER_CONTRACT'`
-- **THEN** la base de datos rechaza la operación
+- **THEN** la base de datos acepta la operación
 
 ### Requirement: Integridad del catálogo de requisitos del contrato
 La base de datos SHALL imponer sobre `contract_document_types`:
 - unicidad de `code` y de `lower(name)`;
-- que un requisito del sistema (`is_system`) esté siempre activo;
-- que `SIGNED_CONTRACT` sea siempre `REQUIRED`.
+- la baja lógica coherente: `is_active` es verdadero si y sólo si `deleted_at` es nulo;
+- `deleted_by` referencia a `users` con `ON DELETE RESTRICT` y admite `NULL`.
+
+Un requisito del sistema MAY eliminarse y su nivel MAY cambiar.
 
 #### Scenario: Contrato opcional por SQL
 - **WHEN** se ejecuta `UPDATE contract_document_types SET requirement = 'OPTIONAL' WHERE code = 'SIGNED_CONTRACT'`
-- **THEN** la base de datos rechaza la operación
+- **THEN** la base de datos acepta la operación
 
-#### Scenario: Requisito del sistema desactivado por SQL
-- **WHEN** se ejecuta `UPDATE contract_document_types SET is_active = false WHERE code = 'CONTRACT_ANNEXES'`
+#### Scenario: Baja lógica incoherente por SQL
+- **WHEN** se ejecuta `UPDATE contract_document_types SET is_active = false WHERE code = 'CONTRACT_ANNEXES'` sin asignar `deleted_at`
 - **THEN** la base de datos rechaza la operación
 
 #### Scenario: Nombre repetido con otra capitalización
@@ -367,3 +365,4 @@ La base de datos SHALL imponer sobre `contract_document_types`:
 #### Scenario: Borrado de un contrato con documentos
 - **WHEN** se ejecuta `DELETE FROM contracts WHERE id = X` y el contrato X tiene documentos
 - **THEN** la base de datos rechaza la operación
+
