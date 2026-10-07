@@ -1,38 +1,77 @@
-from app.rules.base import outcome
+from collections.abc import Iterable
+from typing import Protocol
+
+from app.core.constants import DocumentType, SupplierOrigin
+from app.rules.base import not_applicable, outcome
 
 
-def document_rules(types: set[str], processable: bool, contract_available: bool):
-    specs = [
-        ("DOC-001", "INVOICE_XML", "XML CFDI"),
-        ("DOC-002", "INVOICE_PDF", "PDF de factura"),
-        ("DOC-003", "PURCHASE_ORDER", "orden de compra"),
-        ("DOC-004", "APPROVAL", "Vo.Bo."),
-    ]
-    results = [
-        outcome(
-            code,
-            "DOC",
-            doc_type in types,
-            "CRITICAL" if code == "DOC-001" else "ERROR",
-            f"{label} presente",
-            f"Falta {label}",
-            doc_type,
-            doc_type if doc_type in types else "Ausente",
-        )
-        for code, doc_type, label in specs
-    ]
-    results.append(
-        outcome(
-            "DOC-005",
-            "DOC",
-            contract_available,
-            "ERROR",
-            "Contrato/anexo disponible",
-            "Falta contrato/anexo",
-            "Contrato activo",
-            contract_available,
-        )
+class RequiredDocument(Protocol):
+    """Tipo de documento exigido para el origen del proveedor (clave y nombre del catalogo)."""
+
+    code: str
+    name: str
+
+
+# Tipos con regla propia -> (codigo, severidad). Resultan PASS/FAIL cuando el tipo es Obligatorio para el origen y
+# NOT_APPLICABLE en otro caso. Cada otro tipo Obligatorio genera un resultado DOC-009.
+DEDICATED_RULES = {
+    DocumentType.INVOICE_XML: ("DOC-001", "CRITICAL"),
+    DocumentType.INVOICE_PDF: ("DOC-002", "ERROR"),
+    DocumentType.PURCHASE_ORDER: ("DOC-003", "ERROR"),
+    DocumentType.APPROVAL: ("DOC-004", "ERROR"),
+    DocumentType.FOREIGN_INVOICE: ("DOC-008", "CRITICAL"),
+}
+CONTRACT_COMPLETE = "Requisitos del contrato completos"
+NOT_REQUIRED = {
+    SupplierOrigin.NATIONAL: "No requerido para proveedores nacionales",
+    SupplierOrigin.INTERNATIONAL: "No requerido para proveedores internacionales",
+}
+
+
+def _presence(code: str, severity: str, document: RequiredDocument, present: set[str], source_document=None):
+    return outcome(
+        code,
+        "DOC",
+        document.code in present,
+        severity,
+        f"{document.name} presente",
+        f"Falta {document.name}",
+        document.code,
+        document.code if document.code in present else "Ausente",
+        source_document=source_document,
     )
+
+
+def document_rules(
+    present: set[str],
+    required: Iterable[RequiredDocument],
+    origin: SupplierOrigin,
+    processable: bool,
+    contract_pending: list[str] | None,
+):
+    """Reglas documentales segun los archivos minimos configurados para el origen del proveedor (HU-04). `present`
+    son las claves de los documentos vigentes; `required`, los tipos activos Obligatorios en el orden del catalogo;
+    `contract_pending`, los requisitos obligatorios del contrato sin documento (HU-22), o None sin contrato."""
+    required = list(required)
+    by_code = {document.code: document for document in required}
+
+    def dedicated(document_type: DocumentType):
+        code, severity = DEDICATED_RULES[document_type]
+        document = by_code.get(document_type)
+        if document is None:
+            return not_applicable(code, "DOC", severity, NOT_REQUIRED[origin], document_type.value)
+        return _presence(code, severity, document, present)
+
+    results = [
+        dedicated(t)
+        for t in (
+            DocumentType.INVOICE_XML,
+            DocumentType.INVOICE_PDF,
+            DocumentType.PURCHASE_ORDER,
+            DocumentType.APPROVAL,
+        )
+    ]
+    results.append(contract_rule(contract_pending))
     results.append(
         outcome(
             "DOC-006",
@@ -48,4 +87,29 @@ def document_rules(types: set[str], processable: bool, contract_available: bool)
     results.append(
         outcome("DOC-007", "DOC", processable, "CRITICAL", "Archivos procesables", "Hay archivos no procesables")
     )
+    results.append(dedicated(DocumentType.FOREIGN_INVOICE))
+    results += [
+        _presence("DOC-009", "ERROR", document, present, source_document=document.code)
+        for document in required
+        if document.code not in DEDICATED_RULES
+    ]
     return results
+
+
+def contract_rule(pending: list[str] | None):
+    """DOC-005: los requisitos obligatorios del contrato de la factura, con la configuracion vigente (HU-22). Solo
+    cuentan los documentos del contrato, no los de la factura."""
+    if pending is None:
+        return outcome(
+            "DOC-005", "DOC", False, "ERROR", "Contrato/anexo disponible", "Falta contrato/anexo", CONTRACT_COMPLETE
+        )
+    return outcome(
+        "DOC-005",
+        "DOC",
+        not pending,
+        "ERROR",
+        "Contrato/anexo disponible",
+        f"Faltan documentos del contrato: {', '.join(pending)}",
+        CONTRACT_COMPLETE,
+        ", ".join(pending) or "Completos",
+    )

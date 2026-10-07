@@ -8,21 +8,27 @@ from decimal import Decimal
 from sqlalchemy import and_, delete, select
 from sqlalchemy.orm import Session
 
-from app.core.constants import DocumentType, InvoiceStatus, ProcessingStatus
+from app.core.constants import DocumentType, ProcessingStatus, SupplierOrigin
 from app.core.types import to_money
-from app.models import Document, Invoice, ValidationResult
+from app.models import Invoice, ValidationResult
 from app.rules.contract_rules import contract_rules
 from app.rules.date_rules import date_rules
 from app.rules.document_rules import document_rules
 from app.rules.financial_rules import financial_rules
-from app.rules.semantic_rules import semantic_outcomes
+from app.rules.international_rules import international_rules, invoice_duplicate_rule
+from app.rules.semantic_rules import semantic_not_evaluated, semantic_outcomes
 from app.rules.supplier_rules import supplier_rules
 from app.rules.xml_rules import xml_rules
+from app.services import (
+    contract_requirements_service,
+    foreign_invoice_service,
+    supplier_requirements_service,
+    validation_rules_service,
+)
 from app.services.ai import get_document_analyzer
 from app.services.audit_service import audit
+from app.services.document_requirements_service import required_types
 from app.services.file_service import LocalFileStorage
-from app.services.invoice_service import transition_invoice
-from app.services.supplier_service import supplier_requirement_status
 from app.services.validation_score_service import calculate_score
 from app.services.xml_service import XMLParseError, parse_cfdi
 
@@ -47,18 +53,25 @@ def uuid_owner(db: Session, uuid: str | None, invoice_id: int) -> int | None:
 
 
 def run_validation(db: Session, invoice: Invoice, user_id: int | None = None) -> dict:
-    """Ejecuta las reglas y deja la factura en PREVALIDATED o REQUIRES_CORRECTION. No hace commit: el llamador
-    confirma la transaccion (y traduce una carrera sobre uq_invoices_uuid a 409)."""
-    if invoice.status in {InvoiceStatus.DRAFT, InvoiceStatus.REQUIRES_CORRECTION}:
-        transition_invoice(db, invoice, InvoiceStatus.UPLOADED, user_id)
-    transition_invoice(db, invoice, InvoiceStatus.VALIDATING, user_id)
+    """Ejecuta las reglas y guarda sus resultados sin cambiar el estatus: decidir si la factura pasa a "Enviada" le
+    corresponde al envio (submission_service). No hace commit: el llamador confirma la transaccion (y traduce una
+    carrera sobre uq_invoices_uuid a 409)."""
     audit(db, "VALIDATION_STARTED", "Invoice", invoice.id, user_id)
     started = time.perf_counter()
     logger.info("validation.started", extra={"event": "validation.started", "invoice_id": invoice.id})
     documents = [d for d in invoice.documents if d.is_current]
     types = {d.document_type for d in documents}
-    xml_document = next((d for d in documents if d.document_type == DocumentType.INVOICE_XML.value), None)
+    origin = invoice.supplier.origin
+    # El Invoice del proveedor internacional no es un CFDI (HU-16): no se busca XML.
+    international = origin == SupplierOrigin.INTERNATIONAL
+    xml_document = (
+        None
+        if international
+        else next((d for d in documents if d.document_type == DocumentType.INVOICE_XML.value), None)
+    )
     xml_data, xml_error, duplicate_uuid = None, None, False
+    # Reglas de Validacion del origen del proveedor (sin cache): las nacionales o las internacionales, nunca ambas.
+    rules = validation_rules_service.rule_set(db, origin)
     if xml_document:
         try:
             xml_data = parse_cfdi(LocalFileStorage().resolve(xml_document.path))
@@ -76,7 +89,9 @@ def run_validation(db: Session, invoice: Invoice, user_id: int | None = None) ->
             invoice.subtotal = to_money(xml_data.get("subtotal") or invoice.subtotal)
             invoice.tax = to_money(xml_data.get("tax") or invoice.tax)
             invoice.total = to_money(xml_data.get("total") or invoice.total)
-            invoice.currency = xml_data.get("currency") or invoice.currency
+            # Solo una moneda activa del catalogo llega a la factura; otra la reporta XML-007.
+            if xml_data.get("currency") in rules.currencies:
+                invoice.currency = xml_data["currency"]
         except (XMLParseError, ValueError) as exc:
             logger.warning(
                 "xml.parse_failed",
@@ -91,9 +106,8 @@ def run_validation(db: Session, invoice: Invoice, user_id: int | None = None) ->
             xml_document.processing_status = ProcessingStatus.FAILED
     processable = all(d.processing_status != ProcessingStatus.FAILED for d in documents)
     contract = invoice.contract
-    requirements = supplier_requirement_status(
-        invoice.supplier, [d for d in db.scalars(select(Document).where(Document.supplier_id == invoice.supplier_id))]
-    )
+    # Requisitos de alta con la configuracion vigente (HU-21): solo los documentos del expediente, sin los de facturas.
+    requirements = supplier_requirements_service.checklist(db, invoice.supplier)
     descriptions = [c.get("description") or "" for c in (xml_data or {}).get("concepts", [])]
     duplicate_number = bool(
         db.scalar(
@@ -107,15 +121,31 @@ def run_validation(db: Session, invoice: Invoice, user_id: int | None = None) ->
         )
     )
     results = []
-    results += document_rules(types, processable, bool(contract))
-    results += xml_rules(xml_data, xml_error)
+    # Configuracion vigente de archivos minimos, sin cache: la leida en esta prevalidacion queda en sus resultados.
+    # Requisitos del contrato con la configuracion vigente (HU-22): solo los documentos del contrato.
+    contract_pending = contract_requirements_service.pending_names(db, contract)
+    required = required_types(db, origin)
+    results += document_rules(types, required, origin, processable, contract_pending)
+    xml_required = any(t.code == DocumentType.INVOICE_XML for t in required)
+    results += xml_rules(xml_data, xml_error, rules, international=international, required=xml_required)
     results += supplier_rules(invoice.supplier, contract, requirements)
     results += contract_rules(invoice, contract, descriptions)
     results += date_rules(invoice)
-    results += financial_rules(invoice, contract, xml_data, duplicate_uuid, duplicate_number)
-    detected = " | ".join(descriptions)
-    semantic = get_document_analyzer().semantic_compare(contract.authorized_technology if contract else "", detected)
-    results += semantic_outcomes(semantic)
+    results += financial_rules(
+        invoice, contract, xml_data, duplicate_uuid, duplicate_number, international=international
+    )
+    if international:
+        # Texto del Invoice leido de nuevo (HU-16) y duplicado por nombre de archivo (FIN-007, HU-15).
+        text = foreign_invoice_service.invoice_text(invoice)
+        results += international_rules(text.text, text.readable, invoice.supplier, rules)
+        filename = text.document.original_filename if text.document else None
+        folios = foreign_invoice_service.duplicate_folios(db, invoice, filename) if filename else []
+        results.append(invoice_duplicate_rule(filename, folios))
+        results += semantic_not_evaluated()
+    else:
+        detected = " | ".join(descriptions)
+        technology = contract.authorized_technology if contract else ""
+        results += semantic_outcomes(get_document_analyzer().semantic_compare(technology, detected))
     db.execute(delete(ValidationResult).where(ValidationResult.invoice_id == invoice.id))
     for result in results:
         db.add(
@@ -136,10 +166,6 @@ def run_validation(db: Session, invoice: Invoice, user_id: int | None = None) ->
         )
     summary = calculate_score(results)
     invoice.validation_score = summary["score"]
-    target = (
-        InvoiceStatus.REQUIRES_CORRECTION if summary["blockers"] or summary["errors"] else InvoiceStatus.PREVALIDATED
-    )
-    transition_invoice(db, invoice, target, user_id)
     audit(db, "VALIDATION_COMPLETED", "Invoice", invoice.id, user_id, new=summary)
     logger.info(
         "validation.completed",
@@ -149,7 +175,7 @@ def run_validation(db: Session, invoice: Invoice, user_id: int | None = None) ->
             "duration_ms": round((time.perf_counter() - started) * 1000, 1),
             "score": summary["score"],
             "blockers": summary["blockers"],
-            "status": target.value,
+            "failures": summary["errors"],
         },
     )
     return {**summary, "results": results, "xml": xml_data}

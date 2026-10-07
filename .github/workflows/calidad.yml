@@ -15,4 +15,8 @@ jobs:
       project_key: portal-facturas
       runner: self-hosted
       setup_python: false
+      # Las pruebas necesitan PostgreSQL: el script levanta uno desechable con compose.yaml y lo elimina al terminar.
+      # DOCKER_CONTEXT=default: Docker Engine del sistema (el contexto activo del usuario es Docker Desktop, que suele
+      # estar detenido).
+      test_command: DOCKER_CONTEXT=default python scripts/ci_tests.py --cov=app --cov-report=xml:coverage.xml
     secrets: inherit

@@ -29,8 +29,8 @@ def _attr(node: etree._Element | None, *names: str) -> str | None:
     return None
 
 
-def parse_cfdi(source: bytes | str | Path) -> dict[str, Any]:
-    """Extrae CFDI sin resolver entidades ni depender de prefijos de namespace."""
+def _comprobante(source: bytes | str | Path) -> etree._Element:
+    """Nodo Comprobante del CFDI, sin resolver entidades ni salir a la red."""
     try:
         raw = source if isinstance(source, bytes) else Path(source).read_bytes()
         parser = etree.XMLParser(resolve_entities=False, no_network=True, recover=False, huge_tree=False)
@@ -39,6 +39,12 @@ def parse_cfdi(source: bytes | str | Path) -> dict[str, Any]:
         raise XMLParseError(f"XML no parseable: {exc}") from exc
     if etree.QName(root).localname != "Comprobante":
         raise XMLParseError("El nodo raiz no es Comprobante")
+    return root
+
+
+def parse_cfdi(source: bytes | str | Path) -> dict[str, Any]:
+    """Extrae CFDI sin resolver entidades ni depender de prefijos de namespace."""
+    root = _comprobante(source)
     issuer = next(iter(root.xpath("./*[local-name()='Emisor']")), None)
     receiver = next(iter(root.xpath("./*[local-name()='Receptor']")), None)
     stamp = next(iter(root.xpath(".//*[local-name()='TimbreFiscalDigital']")), None)
@@ -81,4 +87,22 @@ def parse_cfdi(source: bytes | str | Path) -> dict[str, Any]:
         "cfdi_use": _attr(receiver, "UsoCFDI"),
         "voucher_type": _attr(root, "TipoDeComprobante"),
         "concepts": concepts,
+    }
+
+
+def parse_payment_complement(source: bytes | str | Path) -> dict[str, Any]:
+    """CFDI de pago (Complemento de Pago, TipoDeComprobante "P"): su UUID y los UUID de las facturas que liquida
+    (IdDocumento de cada DoctoRelacionado, Pagos 2.0 o 1.0). No valida el tipo de comprobante: lo decide quien
+    llama."""
+    root = _comprobante(source)
+    stamp = next(iter(root.xpath(".//*[local-name()='TimbreFiscalDigital']")), None)
+    related = [
+        value.strip().upper()
+        for value in root.xpath(".//*[local-name()='Pago']/*[local-name()='DoctoRelacionado']/@IdDocumento")
+        if value.strip()
+    ]
+    return {
+        "voucher_type": _attr(root, "TipoDeComprobante"),
+        "uuid": _attr(stamp, "UUID"),
+        "related_uuids": list(dict.fromkeys(related)),
     }

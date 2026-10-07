@@ -88,6 +88,9 @@ class LocalFileStorage:
     async def save_supplier_file(self, supplier_id: int, upload: UploadFile) -> StoredFile:
         return await self._save("suppliers", supplier_id, upload)
 
+    async def save_contract_file(self, contract_id: int, upload: UploadFile) -> StoredFile:
+        return await self._save("contracts", contract_id, upload)
+
     async def _save(self, scope: str, entity_id: int, upload: UploadFile) -> StoredFile:
         original = Path(upload.filename or "archivo").name
         extension = Path(original).suffix.lower()

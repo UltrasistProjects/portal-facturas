@@ -10,11 +10,16 @@ from alembic import command
 from alembic.config import Config
 from sqlalchemy import select
 
-from app.core.database import SessionLocal
+from app.core.database import SessionLocal, engine
 from app.models import User
+from scripts import pgtools
 
 
 def main() -> None:
+    try:
+        pgtools.check_database(engine.url)
+    except RuntimeError as exc:
+        raise SystemExit(str(exc)) from exc
     config = Config(str(ROOT / "alembic.ini"))
     config.set_main_option("script_location", str(ROOT / "alembic"))
     command.upgrade(config, "head")

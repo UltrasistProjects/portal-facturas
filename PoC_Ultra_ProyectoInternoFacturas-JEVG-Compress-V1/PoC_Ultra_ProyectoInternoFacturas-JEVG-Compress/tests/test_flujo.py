@@ -1,3 +1,4 @@
+import re
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from types import SimpleNamespace
@@ -119,8 +120,12 @@ def test_resumen_del_detalle_usa_calculate_score(client):
 
 def test_busqueda_por_razon_social(client):
     login(client, "pmo@poc.local")
-    page = client.get("/invoices", params={"q": "tecnologia INTEGRAL"}).text
-    assert invoice_by_number("A-CORRECTA").internal_folio in page
+    # status vacio = "Todos los estados": sin el, el PMO abre su bandeja de Enviadas (HU-18).
+    page = client.get("/invoices", params={"q": "tecnologia INTEGRAL", "status": ""}).text
+    # Cada fila es de ese proveedor (la primera celda del PMO es la razon social); otras pruebas agregan facturas
+    # suyas, asi que una factura concreta del seed puede no estar en la primera pagina.
+    suppliers = re.findall(r"<tr><td><strong>([^<]+)</strong>", page)
+    assert suppliers and set(suppliers) == {"Tecnologia Integral del Centro SA de CV"}
 
 
 def test_comodines_literales(client):
@@ -138,14 +143,14 @@ def test_paginacion(client, provider2_invoices):
     login(client, "proveedor2@poc.local")
     first = client.get("/invoices").text
     second = client.get("/invoices", params={"page": 2}).text
-    assert "Pagina 2 de 2" in second and "30 registros" in second
+    assert "Página 2 de 2" in second and "30 registros" in second
     oldest = provider2_invoices[:5]
     for number in oldest:
         assert f"<small>{number}</small>" in second
         assert f"<small>{number}</small>" not in first
     assert second.count('class="icon-action"') == 5
     assert first.count('class="icon-action"') == 25
-    assert "Pagina 2 de 2" in client.get("/invoices", params={"page": 99}).text
+    assert "Página 2 de 2" in client.get("/invoices", params={"page": 99}).text
 
 
 def test_sin_n_mas_uno(client, provider2_invoices):
@@ -164,8 +169,7 @@ def test_alcance_del_proveedor(client, provider2_invoices):
 def test_kpis_del_proveedor(client, provider2_invoices):
     login(client, "proveedor2@poc.local")
     page = client.get("/").text
-    assert "<strong>30</strong><small>Expedientes visibles</small>" in page.replace("\n", "")
-    assert "$3.00 acumulado" in page  # 30 x 0.10 exacto
+    assert "<span>Total facturas</span><strong>30</strong><small>$3.00 acumulado</small>" in page  # 30 x 0.10 exacto
 
 
 # --- Transacciones y auditoria ---------------------------------------------------------------------------
@@ -217,5 +221,5 @@ def test_registro_de_auditoria_paginado(client):
     login(client)
     first = client.get("/admin/audit").text
     last = client.get("/admin/audit", params={"page": last_page}).text
-    assert f"Pagina 1 de {last_page}" in first
+    assert f"Página 1 de {last_page}" in first
     assert "#P0000" in last and "#P0000" not in first

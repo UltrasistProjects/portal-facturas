@@ -1,0 +1,37 @@
+{% extends "base.html" %}{% block title %}Archivos mínimos{% endblock %}{% block content %}
+{% from "admin/_type_actions.html" import type_actions, delete_forms, restore_action, deleted_toggle, type_origin, edit_open with context %}
+{% set base_url = "/admin/required-documents" %}
+{% macro level_cell(t, key) %}<select name="{{ key }}__{{ t.code }}" class="form-select form-select-sm" aria-label="{{ t.name }} · {{ 'Nacional' if key == 'national' else 'Internacional' }}">{% for level, label in levels.items() %}<option value="{{ level.value }}"{% if t[key ~ '_requirement'] == level %} selected{% endif %}>{{ label }}</option>{% endfor %}</select>{% endmacro %}
+{% macro format_checkboxes(prefix, selected) %}<div class="format-options">{% for f in formats %}<label class="form-check-label"><input class="form-check-input me-1" type="checkbox" name="formats" value="{{ f }}"{% if f in selected %} checked{% endif %} id="{{ prefix }}-{{ f }}">{{ f }}</label>{% endfor %}</div>{% endmacro %}
+<div class="page-heading"><div><span class="eyebrow">ADMINISTRACION</span><h1>Archivos mínimos</h1><p>Archivos que el proveedor debe cargar con cada factura, según su origen.</p></div></div>
+{% if error %}<div class="alert alert-danger">{{ error }}</div>{% endif %}{% if notice %}<div class="alert alert-success">{{ notice }}</div>{% endif %}
+<section class="panel"><div class="panel-header"><div><h2>Configuración por origen</h2><p>Obligatorio: la factura no se puede enviar a revisión sin el archivo. Opcional: se ofrece pero no se exige. No aplica: no se ofrece.</p></div><div>{{ deleted_toggle(base_url) }}</div></div>
+<form method="post" action="{{ base_url }}"><input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}"><input type="hidden" name="config_version" value="{{ config_version }}">
+<div class="table-responsive"><table class="table enterprise-table requirements-table"><thead><tr><th>Tipo de documento</th><th>Formatos</th>{% for origin, key, label in origins %}<th>{{ label }}</th>{% endfor %}<th>Acciones</th></tr></thead><tbody>
+{% for t in active_types %}<tr><td><strong>{{ t.name }}</strong><small>{{ type_origin(t, "Tipo del sistema", "Tipo soporte") }}{% if t.description %} · {{ t.description }}{% endif %}</small></td><td>{{ formats_label(t) }}</td>{% for origin, key, label in origins %}<td>{{ level_cell(t, key) }}</td>{% endfor %}<td>{{ type_actions(t, warnings.get(t.code)) }}</td></tr>{% endfor %}
+</tbody></table></div>
+<div class="form-actions m-0 px-4 pb-4"><button class="btn btn-primary">Guardar configuración</button></div></form></section>
+
+<section class="panel"><details class="admin-create"><summary>Nuevo tipo de documento soporte</summary>
+<form method="post" action="{{ base_url }}/types" class="form-grid"><input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+<div class="field"><label for="new-name">Nombre</label><input id="new-name" name="name" class="form-control" minlength="3" maxlength="80" required></div>
+<div class="field"><label for="new-description">Descripción (opcional)</label><input id="new-description" name="description" class="form-control" maxlength="300"></div>
+<div class="field span-2"><label>Formatos admitidos</label>{{ format_checkboxes('new', []) }}</div>
+{% for origin, key, label in origins %}<div class="field"><label for="new-{{ key }}">{{ label }}</label><select id="new-{{ key }}" name="{{ key }}_requirement" class="form-select">{% for level, level_label in levels.items() %}<option value="{{ level.value }}"{% if level.value == 'NOT_APPLICABLE' %} selected{% endif %}>{{ level_label }}</option>{% endfor %}</select></div>{% endfor %}
+<div class="form-actions span-2"><button class="btn btn-primary">Crear tipo de documento</button></div></form></details></section>
+
+<section class="panel"><div class="panel-header"><div><h2>Editar tipos</h2><p>Nombre, descripción y formatos de cualquier tipo. La clave no cambia y los documentos ya cargados se conservan.</p></div></div>
+{% for t in active_types + deleted_types %}<details id="editar-{{ t.id }}" class="admin-create border-bottom"{{ edit_open(t) }}><summary>{{ t.name }} <small class="text-muted">· {{ t.code }} · {{ formats_label(t) }}{% if not t.is_active %} · Eliminado{% endif %}</small></summary>
+<form method="post" action="{{ base_url }}/types/{{ t.id }}" class="form-grid"><input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+<div class="field"><label for="name-{{ t.id }}">Nombre</label><input id="name-{{ t.id }}" name="name" class="form-control" value="{{ t.name }}" minlength="3" maxlength="80" required></div>
+<div class="field"><label for="description-{{ t.id }}">Descripción (opcional)</label><input id="description-{{ t.id }}" name="description" class="form-control" value="{{ t.description or '' }}" maxlength="300"></div>
+<div class="field span-2"><label>Formatos admitidos</label>{{ format_checkboxes('edit-' ~ t.id, t.formats) }}</div>
+<div class="form-actions span-2"><button class="btn btn-primary">Guardar cambios</button></div></form></details>
+{% else %}<p class="empty-state">No hay tipos.</p>{% endfor %}</section>
+
+{% if show_deleted %}<section class="panel inactive-types" id="eliminados"><div class="panel-header"><div><h2>Tipos eliminados</h2><p>No se ofrecen ni se exigen. Sus documentos ya cargados se conservan. Al restaurarlos recuperan sus niveles.</p></div></div>
+{% if deleted_types %}<div class="table-responsive"><table class="table enterprise-table"><thead><tr><th>Tipo de documento</th><th>Formatos</th>{% for origin, key, label in origins %}<th>{{ label }}</th>{% endfor %}<th>Eliminado</th><th>Acciones</th></tr></thead><tbody>
+{% for t in deleted_types %}<tr><td><strong>{{ t.name }}</strong><small>{{ t.code }}</small></td><td>{{ formats_label(t) }}</td>{% for origin, key, label in origins %}<td>{{ levels[t[key ~ '_requirement']] }}</td>{% endfor %}<td>{{ t.deleted_at|business_datetime }}</td><td>{{ restore_action(t, base_url) }}</td></tr>{% endfor %}
+</tbody></table></div>{% else %}<p class="empty-state">No hay tipos eliminados.</p>{% endif %}</section>{% endif %}
+{{ delete_forms(active_types, base_url) }}
+{% endblock %}

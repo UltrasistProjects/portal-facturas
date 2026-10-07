@@ -1,0 +1,36 @@
+{% extends "base.html" %}{% block title %}Carga masiva de proveedores{% endblock %}{% block content %}
+<div class="breadcrumb"><a href="/suppliers">Proveedores</a><i class="bi bi-chevron-right"></i>Carga masiva</div>
+<div class="page-heading"><div><span class="eyebrow">CATALOGO</span><h1>Carga masiva de proveedores</h1><p>Registre varios proveedores a partir de la plantilla de Excel.</p></div><div class="heading-actions"><a class="btn btn-outline-primary" href="/suppliers/import/template"><i class="bi bi-download"></i> Descargar plantilla</a></div></div>
+<noscript><div class="alert alert-warning">La carga masiva requiere JavaScript habilitado en el navegador.</div></noscript>
+<section class="panel"><div class="import-panel">
+  <ol class="import-steps">
+    <li>Descargue la plantilla y capture los proveedores en la hoja <strong>Proveedores</strong>, a partir de la fila 2. No cambie los encabezados, su orden ni el nombre de la hoja.</li>
+    <li>Máximo {{ max_rows }} proveedores y {{ max_file_mb }} MB por archivo. Los proveedores que ya existen en el catálogo se omiten sin modificarse.</li>
+    <li>Los proveedores cargados quedan en estatus <strong>Registrado</strong>, sin acceso al portal hasta que se autoricen.</li>
+  </ol>
+  <form id="supplier-import-form" action="/suppliers/import" method="post" enctype="multipart/form-data" class="upload-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+    <label for="supplier-import-file">Archivo de Excel (.xlsx)</label>
+    <input id="supplier-import-file" type="file" name="upload" accept=".xlsx" class="form-control" required>
+    <button class="btn btn-primary" id="supplier-import-submit">Cargar proveedores</button>
+  </form>
+</div></section>
+<div id="supplier-import-message" class="alert" role="alert" hidden></div>
+<section class="panel" id="supplier-import-summary" hidden>
+  <div class="panel-header"><div><h2>Resultado de la carga</h2><p id="supplier-import-summary-text"></p></div><a href="/suppliers" class="btn btn-outline-primary btn-sm">Ver catálogo</a></div>
+  <div id="supplier-import-skipped" hidden><h3 class="import-subtitle">Omitidos: ya existen en el catálogo</h3><div class="table-responsive"><table class="table enterprise-table"><thead><tr><th>Fila</th><th>RFC / ID fiscal</th><th>Razón social</th></tr></thead><tbody></tbody></table></div></div>
+</section>
+<section class="panel" id="supplier-import-errors" hidden>
+  <div class="panel-header"><div><h2 id="supplier-import-errors-title">Filas con errores</h2><p>Corrija el archivo y vuelva a cargarlo.</p></div></div>
+  <ul class="import-errors"></ul>
+  <p id="supplier-import-hidden" class="import-note" hidden></p>
+</section>
+<div class="modal fade" id="supplier-import-confirm" tabindex="-1" aria-labelledby="supplier-import-confirm-title" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered"><div class="modal-content">
+    <div class="modal-header"><h2 class="modal-title fs-5" id="supplier-import-confirm-title">Filas con errores</h2><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button></div>
+    <div class="modal-body"><p>Algunas filas contienen errores o no se han podido leer correctamente. ¿Desea agregar las filas válidas?</p></div>
+    <div class="modal-footer d-grid gap-2"><button type="button" class="btn btn-primary" id="supplier-import-fix" data-bs-dismiss="modal">No, corregir primero (Recomendado)</button><button type="button" class="btn btn-outline-secondary" id="supplier-import-partial">Agrega las filas válidas y omite el resto</button></div>
+  </div></div>
+</div>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', path='/js/supplier_import.js') }}"></script>{% endblock %}

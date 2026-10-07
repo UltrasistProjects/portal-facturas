@@ -1,24 +1,25 @@
-"""Tipos de columna con semantica explicita que SQLite no ofrece de forma nativa."""
+"""Tipos de columna con semantica explicita sobre PostgreSQL."""
 
 from datetime import datetime, timezone
 from decimal import ROUND_HALF_UP, Decimal
 
-from sqlalchemy import DateTime, Integer
+from sqlalchemy import DateTime, Numeric
 from sqlalchemy.types import TypeDecorator
 
 
-class ScaledDecimal(TypeDecorator):
-    """Decimal exacto almacenado como entero escalado (p. ej. centavos): SQLite no tiene tipo decimal y guarda
-    Numeric como REAL (AUDITORIA BD-02). La aplicacion sigue leyendo y escribiendo Decimal.
+class ExactNumeric(TypeDecorator):
+    """NUMERIC(precision, scale) leido y escrito como Decimal (AUDITORIA BD-02).
 
-    Un valor con mas decimales que la escala se rechaza: la persistencia nunca redondea en silencio.
+    PostgreSQL redondea al guardar un valor con mas decimales que la escala (10.005 -> 10.01). Aqui ese valor se
+    rechaza antes de enviarlo: la persistencia nunca redondea en silencio.
     """
 
-    impl = Integer
+    impl = Numeric
     cache_ok = True
 
-    def __init__(self, scale: int):
-        super().__init__()
+    def __init__(self, precision: int, scale: int):
+        super().__init__(precision=precision, scale=scale, asdecimal=True)
+        self.precision = precision
         self.scale = scale
 
     def process_bind_param(self, value, dialect):
@@ -30,12 +31,7 @@ class ScaledDecimal(TypeDecorator):
         scaled = amount.scaleb(self.scale)
         if scaled != scaled.to_integral_value():
             raise ValueError(f"{amount} tiene mas de {self.scale} decimales; redondee explicitamente antes de guardar")
-        return int(scaled)
-
-    def process_result_value(self, value, dialect):
-        if value is None:
-            return None
-        return Decimal(int(value)).scaleb(-self.scale)
+        return amount
 
 
 def to_money(value: Decimal) -> Decimal:
@@ -43,26 +39,27 @@ def to_money(value: Decimal) -> Decimal:
     return value.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
 
-def Money() -> ScaledDecimal:  # noqa: N802 - se usa como un tipo de columna
-    """Importe monetario en centavos."""
-    return ScaledDecimal(2)
+def Money() -> ExactNumeric:  # noqa: N802 - se usa como un tipo de columna
+    """Importe monetario: NUMERIC(16, 2)."""
+    return ExactNumeric(16, 2)
 
 
 class UTCDateTime(TypeDecorator):
-    """Fecha-hora normalizada a UTC al escribir y devuelta con tzinfo=UTC al leer.
+    """TIMESTAMPTZ normalizado a UTC.
 
-    SQLite no guarda el offset: sin esto, DateTime(timezone=True) devuelve valores naive.
+    Al escribir, un valor naive se interpreta como UTC y uno con otra zona se convierte; al leer siempre se devuelve
+    con tzinfo=UTC.
     """
 
-    impl = DateTime
+    impl = DateTime(timezone=True)
     cache_ok = True
 
     def process_bind_param(self, value: datetime | None, dialect):
         if value is None:
             return None
         if value.tzinfo is None:
-            return value
-        return value.astimezone(timezone.utc).replace(tzinfo=None)
+            return value.replace(tzinfo=timezone.utc)
+        return value.astimezone(timezone.utc)
 
     def process_result_value(self, value: datetime | None, dialect):
         if value is None:

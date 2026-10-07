@@ -11,10 +11,12 @@ data/*.sqlite*
 storage/invoices/*
 storage/suppliers/*
 storage/temp/*
+storage/contracts/*
 !storage/**/.gitkeep
 logs/*
 !logs/.gitkeep
 backups/
+outbox/
 dist/
 Microsoft/
 *.log
@@ -25,3 +27,7 @@ Microsoft/
 
 coverage.xml
 .coverage
+
+# Artefactos regenerables de la suite Playwright de HUs
+playwright-report/
+test-results/

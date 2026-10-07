@@ -4,12 +4,13 @@ from datetime import datetime, timezone
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
-from app.core.constants import BUSINESS_RULES
+from app.core.constants import BUSINESS_RULES, SupplierOrigin
 from app.core.database import SessionLocal
 from app.core.timeutils import to_business
-from app.models import Contract
+from app.models import Contract, ValidationRule
 from app.rules.xml_rules import xml_rules
 from app.services.invoice_service import internal_folio
+from app.services.validation_rules_service import rule_set
 from tests.conftest import csrf, invoice_by_number, login, supplier_by_email
 
 
@@ -58,16 +59,23 @@ def test_altas_concurrentes_con_folios_distintos():
 
 def test_vista_de_reglas_muestra_los_pesos_del_score(client):
     login(client)
-    page = client.get("/admin/rules").text
+    page = client.get("/admin/rules/national").text
     for severity, weight in BUSINESS_RULES["score_weights"].items():
         assert f"<dt>{severity.value}</dt><dd>{weight}</dd>" in page
-    assert BUSINESS_RULES["receiver"]["rfc"] in page
+    with SessionLocal() as db:
+        assert f"<td>{rule_set(db, SupplierOrigin.NATIONAL).parameter('XML-002')}</td>" in page
+    assert set(BUSINESS_RULES) == {"score_weights"}  # los demas parametros viven en Reglas de Validacion
 
 
-def test_un_cambio_de_parametro_se_refleja_en_motor_y_vista(client, monkeypatch):
-    monkeypatch.setitem(BUSINESS_RULES, "payment_form", "03")
+def test_un_cambio_de_parametro_se_refleja_en_motor_y_vista(client, restore_validation_rules):
     login(client)
-    assert "<dt>Forma de pago</dt><dd>03</dd>" in client.get("/admin/rules").text
-    results = {r.rule_code: r for r in xml_rules({"payment_form": "03", "receiver_rfc": "X"})}
+    with SessionLocal() as db:
+        rule = db.scalar(select(ValidationRule).where(ValidationRule.rule_code == "XML-004"))
+    data = {"name": rule.name, "parameter": "03", "version": rule.version, "csrf_token": csrf(client, "/")}
+    assert client.post(f"/admin/rules/national/{rule.id}", data=data, follow_redirects=False).status_code == 303
+    assert "<td>03</td>" in client.get("/admin/rules/national").text
+    with SessionLocal() as db:
+        rules = rule_set(db, SupplierOrigin.NATIONAL)
+        results = {r.rule_code: r for r in xml_rules({"payment_form": "03", "receiver_rfc": "X"}, None, rules)}
     assert results["XML-004"].status == "PASS"
     assert results["XML-004"].expected_value == "03"

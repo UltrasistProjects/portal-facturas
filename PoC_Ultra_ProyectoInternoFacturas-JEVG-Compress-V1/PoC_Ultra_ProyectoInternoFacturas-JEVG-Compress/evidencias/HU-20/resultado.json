@@ -1,0 +1,218 @@
+{
+  "id": "HU-20",
+  "run": "RMUY9TNYO",
+  "inicio": "2026-10-07T15:39:02.306Z",
+  "fin": "2026-10-07T15:39:13.149Z",
+  "estado": "PASS",
+  "bloqueo": null,
+  "notas": [],
+  "prueba": {
+    "titulo": "HU-20 · Cambio de estatus de factura",
+    "archivo": "17-HU-20-cambio-estatus-pmo.spec.ts"
+  },
+  "escenarios": [
+    {
+      "nombre": "Precondición: el proveedor envía dos facturas más para decidir",
+      "estado": "PASS",
+      "pasos": [
+        {
+          "paso": "El proveedor registra y envía QA-RMUY9TNYO-N4 y QA-RMUY9TNYO-N5 (XML correctos, UUID nuevos)",
+          "esperado": "Ambas facturas quedan \"Enviada\".",
+          "obtenido": "QA-RMUY9TNYO-N4 (#98) y QA-RMUY9TNYO-N5 (#99) en \"Enviada\".",
+          "estado": "PASS",
+          "evidencias": [
+            {
+              "archivo": "HU-20/01-precondicion-enviadas.png",
+              "descripcion": "Precondición: facturas de la corrida en \"Enviada\" (vista del proveedor).",
+              "tipo": "aplicacion"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "nombre": "Panel de decisión con tres botones: Autorizar, Observaciones y Rechazar",
+      "estado": "PASS",
+      "pasos": [
+        {
+          "paso": "Abrir QA-RMUY9TNYO-N1 (\"Enviada\") y pulsar \"Decidir\"",
+          "esperado": "El panel \"Decisión\" ofrece los tres botones; el campo \"Observaciones\" aún no se despliega.",
+          "obtenido": "Botones: Autorizar, Observaciones, Rechazar; campo Observaciones oculto.",
+          "estado": "PASS",
+          "evidencias": [
+            {
+              "archivo": "HU-20/02-panel-tres-botones.png",
+              "descripcion": "Panel de decisión: botones Autorizar, Observaciones y Rechazar.",
+              "tipo": "aplicacion"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "nombre": "Rechazar: se despliega el campo \"Observaciones\" y es obligatorio (RN-HU20-01)",
+      "estado": "PASS",
+      "pasos": [
+        {
+          "paso": "En QA-RMUY9TNYO-N4, pulsar \"Rechazar\"",
+          "esperado": "Se despliega el campo \"Observaciones\" para capturar la causa, sin enviar todavía.",
+          "obtenido": "Campo \"Observaciones\" visible y con el foco; la factura sigue \"Enviada\".",
+          "estado": "PASS",
+          "evidencias": [
+            {
+              "archivo": "HU-20/03-rechazar-despliega-observaciones.png",
+              "descripcion": "Al pulsar Rechazar se despliega el campo \"Observaciones\".",
+              "tipo": "aplicacion"
+            }
+          ]
+        },
+        {
+          "paso": "Pulsar \"Rechazar\" otra vez con el campo vacío",
+          "esperado": "No se envía: se indica \"Capture las observaciones.\" y la factura sigue \"Enviada\".",
+          "obtenido": "Mensaje \"Capture las observaciones.\"; tras recargar, la factura sigue \"Enviada\".",
+          "estado": "PASS",
+          "evidencias": [
+            {
+              "archivo": "HU-20/04-observaciones-obligatorias.png",
+              "descripcion": "Rechazar sin observaciones: \"Capture las observaciones.\"",
+              "tipo": "aplicacion"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "nombre": "Rechazar con observaciones: estatus \"Rechazada\" y correo al proveedor con la causa (RN-HU20-03)",
+      "estado": "PASS",
+      "pasos": [
+        {
+          "paso": "Capturar la causa y pulsar \"Rechazar\" en QA-RMUY9TNYO-N4",
+          "esperado": "La factura pasa a \"Rechazada\" y se informa \"Correo enviado a proveedor1@poc.local\".",
+          "obtenido": "Estatus \"Rechazada\"; \"Rechazada. Correo enviado a proveedor1@poc.local\".",
+          "estado": "PASS",
+          "evidencias": [
+            {
+              "archivo": "HU-20/05-factura-rechazada.png",
+              "descripcion": "QA-RMUY9TNYO-N4 \"Rechazada\": correo enviado al proveedor.",
+              "tipo": "aplicacion"
+            }
+          ]
+        },
+        {
+          "paso": "Abrir el correo \"Rechazada\" generado",
+          "esperado": "El correo va al correo del proveedor (catálogo) e indica la causa capturada en \"Observaciones\".",
+          "obtenido": "Para proveedor1@poc.local; asunto \"Factura QA-RMUY9TNYO-N4 rechazada\"; incluye la causa \"QA RMUY9TNYO: el subtotal del XML no coincide con la orden de compra OC-QA-RMUY9TNYO.\".",
+          "estado": "PASS",
+          "evidencias": [
+            {
+              "archivo": "HU-20/06-correo-rechazada.png",
+              "descripcion": "Correo \"Rechazada\" al proveedor con la causa de QA-RMUY9TNYO-N4.",
+              "tipo": "correo"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "nombre": "Observaciones: estatus \"Observaciones\" y correo al proveedor con la causa (RN-HU20-01, RN-HU20-03)",
+      "estado": "PASS",
+      "pasos": [
+        {
+          "paso": "En QA-RMUY9TNYO-N5, pulsar \"Observaciones\", capturar la causa y confirmar",
+          "esperado": "La factura pasa a \"Observaciones\" y se informa \"Correo enviado a proveedor1@poc.local\".",
+          "obtenido": "Estatus \"Observaciones\"; \"Observaciones. Correo enviado a proveedor1@poc.local\".",
+          "estado": "PASS",
+          "evidencias": [
+            {
+              "archivo": "HU-20/07-observaciones-capturadas.png",
+              "descripcion": "Campo \"Observaciones\" capturado antes de confirmar.",
+              "tipo": "aplicacion"
+            },
+            {
+              "archivo": "HU-20/08-factura-observaciones.png",
+              "descripcion": "QA-RMUY9TNYO-N5 en \"Observaciones\": correo enviado al proveedor.",
+              "tipo": "aplicacion"
+            }
+          ]
+        },
+        {
+          "paso": "Abrir el correo \"Observaciones\" generado",
+          "esperado": "El correo va al proveedor e indica la causa capturada.",
+          "obtenido": "Para proveedor1@poc.local; asunto \"Factura QA-RMUY9TNYO-N5 con observaciones\"; incluye la causa \"QA RMUY9TNYO: falta el Vo.Bo. firmado por el líder de proyecto; corrija y reenvíe.\".",
+          "estado": "PASS",
+          "evidencias": [
+            {
+              "archivo": "HU-20/09-correo-observaciones.png",
+              "descripcion": "Correo \"Observaciones\" al proveedor con la causa de QA-RMUY9TNYO-N5.",
+              "tipo": "correo"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "nombre": "Autorizar: confirmación y correo a \"Recepción de Facturas\" (RN-HU20-02)",
+      "estado": "PASS",
+      "pasos": [
+        {
+          "paso": "En QA-RMUY9TNYO-N1, pulsar \"Autorizar\"",
+          "esperado": "Un modal pide confirmar la autorización avisando que se notificará a Recepción de Facturas.",
+          "obtenido": "Modal: \"¿Autorizar la factura QA-RMUY9TNYO-N1 para su pago? Se notificará a Recepción de Facturas.\".",
+          "estado": "PASS",
+          "evidencias": [
+            {
+              "archivo": "HU-20/10-modal-autorizar.png",
+              "descripcion": "Modal de confirmación de la autorización.",
+              "tipo": "aplicacion"
+            }
+          ]
+        },
+        {
+          "paso": "Confirmar con \"Autorizar\"",
+          "esperado": "La factura pasa a \"Autorizada\" y el correo se envía a Recepción de Facturas (recepcionfacturas@ultrasist.com.mx, recepcion.qa.rmuy9tnyo@ultrasist-qa.example).",
+          "obtenido": "Estatus \"Autorizada\"; \"Autorizada. Correo enviado a recepcionfacturas@ultrasist.com.mx, recepcion.qa.rmuy9tnyo@ultrasist-qa.example\".",
+          "estado": "PASS",
+          "evidencias": [
+            {
+              "archivo": "HU-20/11-factura-autorizada.png",
+              "descripcion": "QA-RMUY9TNYO-N1 \"Autorizada\": correo enviado a Recepción de Facturas.",
+              "tipo": "aplicacion"
+            }
+          ]
+        },
+        {
+          "paso": "Abrir el correo \"Autorizada\" generado",
+          "esperado": "Indica que la factura número X del proveedor Y por el monto Z ha sido autorizada para su pago.",
+          "obtenido": "Para recepcion.qa.rmuy9tnyo@ultrasist-qa.example, recepcionfacturas@ultrasist.com.mx; \"La factura número QA-RMUY9TNYO-N1 del proveedor Tecnologia Integral del Centro SA de CV por el monto $116,000.00 MXN ha sido Autorizada para su pago.\"",
+          "estado": "PASS",
+          "evidencias": [
+            {
+              "archivo": "HU-20/12-correo-autorizada.png",
+              "descripcion": "Correo \"Autorizada\" a Recepción de Facturas para QA-RMUY9TNYO-N1.",
+              "tipo": "correo"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "nombre": "Una decisión por envío y registro en el historial",
+      "estado": "PASS",
+      "pasos": [
+        {
+          "paso": "Volver a abrir QA-RMUY9TNYO-N1 (\"Autorizada\")",
+          "esperado": "Ya no se ofrece el panel \"Decisión\" ni el botón \"Decidir\"; el historial registra la decisión con el revisor.",
+          "obtenido": "Sin panel de decisión; historial: 07/10/2026 09:38 Enviada a validación Proveedor Moral Demo 07/10/2026 09:39 Autorizada PMO Demo.",
+          "estado": "PASS",
+          "evidencias": [
+            {
+              "archivo": "HU-20/13-historial-decision.png",
+              "descripcion": "Historial de la factura autorizada, sin panel de decisión.",
+              "tipo": "aplicacion"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

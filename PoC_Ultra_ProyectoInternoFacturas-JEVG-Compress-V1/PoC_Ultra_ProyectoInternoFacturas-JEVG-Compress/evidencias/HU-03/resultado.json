@@ -1,0 +1,79 @@
+{
+  "id": "HU-03",
+  "run": "RMUY9TNYO",
+  "inicio": "2026-10-07T15:37:23.780Z",
+  "fin": "2026-10-07T15:37:26.567Z",
+  "estado": "PASS",
+  "bloqueo": null,
+  "notas": [],
+  "prueba": {
+    "titulo": "HU-03 · Envío de credenciales al proveedor",
+    "archivo": "03-HU-03-envio-credenciales.spec.ts"
+  },
+  "escenarios": [
+    {
+      "nombre": "Envío automático del correo con usuario y contraseña temporal al autorizar",
+      "estado": "PASS",
+      "pasos": [
+        {
+          "paso": "Abrir Administración › Notificaciones y revisar la bitácora de envíos",
+          "esperado": "La bitácora registra un envío \"Credenciales de acceso\" con resultado \"Enviado\" para cada proveedor autorizado en HU-02.",
+          "obtenido": "Bitácora con 3 envíos \"Credenciales de acceso\" en estado \"Enviado\" para: alfa.rmuy9tnyo@proveedores-qa.example, bravo.rmuy9tnyo@proveedores-qa.example, charlie.rmuy9tnyo@proveedores-qa.example.",
+          "estado": "PASS",
+          "evidencias": [
+            {
+              "archivo": "HU-03/01-bitacora-credenciales.png",
+              "descripcion": "Bitácora de envíos: \"Credenciales de acceso\" enviado a cada proveedor autorizado.",
+              "tipo": "aplicacion"
+            }
+          ]
+        },
+        {
+          "paso": "Abrir el correo generado para alfa.rmuy9tnyo@proveedores-qa.example",
+          "esperado": "El correo va al correo del proveedor e incluye el usuario, la contraseña temporal y la dirección de inicio de sesión del portal.",
+          "obtenido": "Correo \"Acceso al Portal de Proveedores ULTRASIST\" para alfa.rmuy9tnyo@proveedores-qa.example: incluye \"Usuario: alfa.rmuy9tnyo@proveedores-qa.example\", una contraseña temporal de 20 caracteres y \"Portal: http://127.0.0.1:8000/login\".",
+          "estado": "PASS",
+          "evidencias": [
+            {
+              "archivo": "HU-03/02-correo-credenciales.png",
+              "descripcion": "Correo \"Credenciales de acceso\" generado por el portal para alfa.rmuy9tnyo@proveedores-qa.example.",
+              "tipo": "correo"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "nombre": "Expediente del proveedor: acceso al portal con contraseña temporal",
+      "estado": "PASS",
+      "pasos": [
+        {
+          "paso": "Abrir el expediente de QA Alfa Servicios RMUY9TNYO SA de CV",
+          "esperado": "La sección \"Acceso al portal\" muestra el usuario, la contraseña \"Temporal, pendiente de cambio\" (leída de Keycloak) y \"Credenciales enviadas el …\".",
+          "obtenido": "Acceso al portal: Usuario del portal alfa.rmuy9tnyo@proveedores-qa.example Último acceso Nunca Contraseña Temporal, pendiente de cambio Credenciales Credenciales enviadas el 07/10/2026 09:37",
+          "estado": "PASS",
+          "evidencias": [
+            {
+              "archivo": "HU-03/03-expediente-acceso-portal.png",
+              "descripcion": "Expediente: \"Acceso al portal\" con usuario, contraseña temporal pendiente de cambio y envío de credenciales.",
+              "tipo": "aplicacion"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "nombre": "RN-HU03-01: el portal no almacena la contraseña (sólo Keycloak)",
+      "estado": "PASS",
+      "pasos": [
+        {
+          "paso": "Consultar en la base del portal el usuario alfa.rmuy9tnyo@proveedores-qa.example (sólo lectura)",
+          "esperado": "El usuario existe con rol Proveedor, enlazado a Keycloak por su \"sub\", sin contraseña ni hash guardados (password_hash vacío).",
+          "obtenido": "Usuario alfa.rmuy9tnyo@proveedores-qa.example: rol Proveedor, keycloak_sub registrado = true, password_hash vacío = true.",
+          "estado": "PASS",
+          "evidencias": []
+        }
+      ]
+    }
+  ]
+}

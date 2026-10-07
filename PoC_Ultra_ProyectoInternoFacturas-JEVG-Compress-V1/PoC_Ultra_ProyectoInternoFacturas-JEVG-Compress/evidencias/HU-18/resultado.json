@@ -1,0 +1,21 @@
+{
+  "id": "HU-18",
+  "run": "RMUY9TNYO",
+  "inicio": "2026-10-07T15:39:02.270Z",
+  "fin": "2026-10-07T15:39:02.272Z",
+  "estado": "BLOCKED",
+  "bloqueo": "Depende de HU-16, que no dejó el dato «hu16.enviada» (resultado de HU-16: BLOCKED).",
+  "notas": [],
+  "prueba": {
+    "titulo": "HU-18 · Consulta de facturas por PMO",
+    "archivo": "15-HU-18-consulta-facturas-pmo.spec.ts"
+  },
+  "escenarios": [
+    {
+      "nombre": "Precondiciones",
+      "estado": "BLOCKED",
+      "motivo": "Depende de HU-16, que no dejó el dato «hu16.enviada» (resultado de HU-16: BLOCKED).",
+      "pasos": []
+    }
+  ]
+}

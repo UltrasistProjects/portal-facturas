@@ -1,0 +1,229 @@
+{
+  "id": "HU-06",
+  "run": "RMUY9TNYO",
+  "inicio": "2026-10-07T15:38:08.313Z",
+  "fin": "2026-10-07T15:38:19.830Z",
+  "estado": "PASS",
+  "bloqueo": null,
+  "notas": [],
+  "prueba": {
+    "titulo": "HU-06 · Configuración de reglas de validación",
+    "archivo": "07-HU-06-reglas-validacion.spec.ts"
+  },
+  "escenarios": [
+    {
+      "nombre": "Reglas separadas por origen: Nacionales e Internacionales",
+      "estado": "PASS",
+      "pasos": [
+        {
+          "paso": "Abrir Reglas de validación › Nacionales",
+          "esperado": "Se listan las reglas del CFDI (XML-002 a XML-010) con su valor esperado, severidad y las acciones Editar y Eliminar; XML-007 se administra en el catálogo de monedas.",
+          "obtenido": "Reglas nacionales: XML-002, XML-003, XML-004, XML-005, XML-009, XML-010, XML-007.",
+          "estado": "PASS",
+          "evidencias": [
+            {
+              "archivo": "HU-06/01-reglas-nacionales.png",
+              "descripcion": "Reglas de validación — Nacionales: valores esperados, severidad y acciones.",
+              "tipo": "aplicacion"
+            }
+          ]
+        },
+        {
+          "paso": "Abrir Reglas de validación › Internacionales",
+          "esperado": "Se listan sólo las reglas del Invoice (INT-001 a INT-003); ninguna regla del CFDI.",
+          "obtenido": "Reglas internacionales: INT-001, INT-002, INT-003, INT-004.",
+          "estado": "PASS",
+          "evidencias": [
+            {
+              "archivo": "HU-06/02-reglas-internacionales.png",
+              "descripcion": "Reglas de validación — Internacionales.",
+              "tipo": "aplicacion"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "nombre": "Validación de los valores de referencia",
+      "estado": "PASS",
+      "pasos": [
+        {
+          "paso": "Editar XML-002 con un RFC de formato inválido (\"XYZ123\") y guardar",
+          "esperado": "El guardado se rechaza con el error del RFC y el valor vigente no cambia.",
+          "obtenido": "Errores: RFC: no es un RFC de persona moral válido. Al recargar, XML-002 sigue esperando ULT940623AG0.",
+          "estado": "PASS",
+          "evidencias": [
+            {
+              "archivo": "HU-06/03-errores-reglas.png",
+              "descripcion": "Error de validación del RFC en XML-002.",
+              "tipo": "aplicacion"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "nombre": "Alta de un valor de referencia internacional (INT-004 / Dirección)",
+      "estado": "PASS",
+      "pasos": [
+        {
+          "paso": "Capturar la Dirección de ULTRASIST en INT-004 (nace eliminada) y restaurarla",
+          "esperado": "La regla guarda la dirección (\"Regla actualizada\") y al restaurarla queda activa (\"Regla restaurada\").",
+          "obtenido": "Edición: \"Regla actualizada\"; restauración: \"ya estaba activa\"; INT-004 espera \"Av. Insurgentes Sur 1000, Col. Del Valle, Benito Juárez, CDMX (QA RMUY9TNYO)\".",
+          "estado": "PASS",
+          "evidencias": [
+            {
+              "archivo": "HU-06/04-direccion-guardada.png",
+              "descripcion": "INT-004 activa con la Dirección de ULTRASIST.",
+              "tipo": "aplicacion"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "nombre": "La validación de facturas internacionales usa las reglas internacionales (INT-004 / Dirección)",
+      "estado": "PASS",
+      "pasos": [
+        {
+          "paso": "El proveedor internacional pulsa \"Verificar\" en su factura INV-2026-0042",
+          "esperado": "INT-004 compara el texto del Invoice con la Dirección configurada en la regla internacional.",
+          "obtenido": "INT-004: WARNING — \"No se encontró la dirección de ULTRASIST en el Invoice\" (esperado \"Av. Insurgentes Sur 1000, Col. Del Valle, Benito Juárez, CDMX (QA RMUY9TNYO)\").",
+          "estado": "PASS",
+          "evidencias": [
+            {
+              "archivo": "HU-06/05-int-004-direccion.png",
+              "descripcion": "INT-004 en el Invoice internacional con la Dirección configurada como valor esperado.",
+              "tipo": "aplicacion"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "nombre": "La validación de facturas consume la configuración vigente (XML-010 / Código postal)",
+      "estado": "PASS",
+      "pasos": [
+        {
+          "paso": "Cambiar el Código postal esperado de XML-010 a 06600",
+          "esperado": "La regla se guarda con el C.P. 06600 (\"Regla actualizada\").",
+          "obtenido": "Aviso \"Regla actualizada\"; XML-010 espera 06600.",
+          "estado": "PASS",
+          "evidencias": []
+        },
+        {
+          "paso": "El proveedor pulsa \"Verificar\" en su factura A-CORRECTA (XML con C.P. del receptor 03930)",
+          "esperado": "XML-010 resulta FAIL con esperado 06600 y detectado 03930: el motor usa el valor recién configurado.",
+          "obtenido": "XML-010: FAIL — \"Código postal del receptor incorrecto\" (esperado 06600, detectado 03930).",
+          "estado": "PASS",
+          "evidencias": [
+            {
+              "archivo": "HU-06/06-xml-010-fail.png",
+              "descripcion": "Tras cambiar el C.P. a 06600, \"Verificar\" marca XML-010 en FAIL (esperado 06600, detectado 03930).",
+              "tipo": "aplicacion"
+            }
+          ]
+        },
+        {
+          "paso": "Restaurar el Código postal 03930 en XML-010",
+          "esperado": "La regla vuelve a esperar 03930.",
+          "obtenido": "Aviso \"Regla actualizada\"; C.P. 03930 restaurado.",
+          "estado": "PASS",
+          "evidencias": []
+        },
+        {
+          "paso": "El proveedor vuelve a pulsar \"Verificar\"",
+          "esperado": "XML-010 resulta PASS (03930 = 03930).",
+          "obtenido": "XML-010: PASS — \"Código postal del receptor correcto\".",
+          "estado": "PASS",
+          "evidencias": [
+            {
+              "archivo": "HU-06/07-xml-010-pass.png",
+              "descripcion": "Con el C.P. restaurado, XML-010 vuelve a PASS.",
+              "tipo": "aplicacion"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "nombre": "Una factura nacional sólo usa las reglas nacionales",
+      "estado": "PASS",
+      "pasos": [
+        {
+          "paso": "Cambiar la Razón social de la regla internacional INT-002 a \"OTRA RAZON QA\"",
+          "esperado": "Sólo cambia la regla internacional; XML-009 sigue esperando \"ULTRASIST\".",
+          "obtenido": "Aviso \"Regla actualizada\"; XML-009 (nacional) sigue en ULTRASIST.",
+          "estado": "PASS",
+          "evidencias": []
+        },
+        {
+          "paso": "El proveedor pulsa \"Verificar\" en A-CORRECTA",
+          "esperado": "XML-009 resulta PASS con el valor esperado nacional \"ULTRASIST\".",
+          "obtenido": "XML-009: PASS (esperado \"ULTRASIST\").",
+          "estado": "PASS",
+          "evidencias": []
+        },
+        {
+          "paso": "Restaurar \"ULTRASIST\" en INT-002",
+          "esperado": "La regla internacional vuelve a su valor inicial.",
+          "obtenido": "Aviso \"Regla actualizada\".",
+          "estado": "PASS",
+          "evidencias": []
+        }
+      ]
+    },
+    {
+      "nombre": "Eliminación lógica y restauración de una regla (XML-010)",
+      "estado": "PASS",
+      "pasos": [
+        {
+          "paso": "Eliminar XML-010 y confirmar",
+          "esperado": "El portal responde \"Regla eliminada\" y la regla deja de listarse entre las activas.",
+          "obtenido": "Aviso \"Regla eliminada\".",
+          "estado": "PASS",
+          "evidencias": [
+            {
+              "archivo": "HU-06/08-regla-eliminada.png",
+              "descripcion": "XML-010 eliminada: ya no aparece entre las reglas activas.",
+              "tipo": "aplicacion"
+            }
+          ]
+        },
+        {
+          "paso": "El proveedor pulsa \"Verificar\" en A-CORRECTA",
+          "esperado": "XML-010 resulta NOT_APPLICABLE con el mensaje \"Regla inactiva en Reglas de Validación\".",
+          "obtenido": "XML-010: NOT_APPLICABLE — \"Regla inactiva en Reglas de Validación\".",
+          "estado": "PASS",
+          "evidencias": [
+            {
+              "archivo": "HU-06/09-xml-010-no-aplica.png",
+              "descripcion": "XML-010 \"NOT_APPLICABLE\": regla eliminada en las Reglas de Validación.",
+              "tipo": "aplicacion"
+            }
+          ]
+        },
+        {
+          "paso": "Mostrar eliminados y restaurar XML-010",
+          "esperado": "La regla aparece entre las eliminadas y al restaurarla vuelve a las activas (\"Regla restaurada\").",
+          "obtenido": "Aviso \"Regla restaurada\"; XML-010 activa de nuevo.",
+          "estado": "PASS",
+          "evidencias": [
+            {
+              "archivo": "HU-06/10-regla-en-eliminados.png",
+              "descripcion": "XML-010 en \"Reglas eliminadas\" con \"Restaurar\".",
+              "tipo": "aplicacion"
+            }
+          ]
+        },
+        {
+          "paso": "El proveedor verifica de nuevo A-CORRECTA",
+          "esperado": "XML-010 vuelve a PASS.",
+          "obtenido": "XML-010: PASS.",
+          "estado": "PASS",
+          "evidencias": []
+        }
+      ]
+    }
+  ]
+}

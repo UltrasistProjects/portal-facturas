@@ -1,11 +1,11 @@
 """Restaura un respaldo creado por scripts/backup.py (AUDITORIA BD-08).
 
-Detenga la aplicacion antes de restaurar. Uso: python scripts/restore_backup.py backups/<AAAAMMDD-HHMMSS> --yes
+Detenga la aplicacion antes de restaurar: pg_restore --clean necesita bloquear las tablas.
+Uso: python scripts/restore_backup.py backups/<AAAAMMDD-HHMMSS> --yes
 """
 
 import argparse
 import json
-import shutil
 import sys
 import zipfile
 from pathlib import Path
@@ -13,16 +13,30 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+from sqlalchemy.engine import URL, make_url
+
 from app.core.config import settings
-from scripts.backup import MANIFEST, create_backup, sha256, sqlite_files
+from scripts import pgtools
+from scripts.backup import MANIFEST, create_backup, sha256
 
 
-def verify_backup(backup_dir: Path) -> dict:
+def _check_archive(archive_path: Path, storage: Path) -> None:
+    """Rechaza entradas que se extraerian fuera de storage/ (zip slip)."""
+    root = storage.resolve()
+    with zipfile.ZipFile(archive_path) as archive:
+        for member in archive.namelist():
+            if root not in (root / member).resolve().parents:
+                raise RuntimeError(f"Entrada fuera de storage en el respaldo: {member}")
+
+
+def verify_backup(backup_dir: Path, storage: Path) -> dict:
+    """Comprueba el respaldo completo antes de modificar nada: SHA-256, volcado legible y archivo de storage."""
     manifest = json.loads((backup_dir / MANIFEST).read_text(encoding="utf-8"))
     for artifact in (manifest["database"], manifest["storage"]):
         path = backup_dir / artifact["file"]
         if not path.is_file() or sha256(path) != artifact["sha256"]:
             raise RuntimeError(f"{artifact['file']} no coincide con el SHA-256 del manifiesto; restauracion abortada.")
+    _check_archive(backup_dir / manifest["storage"]["file"], storage)
     return manifest
 
 
@@ -41,26 +55,20 @@ def _clear_storage(storage: Path) -> None:
 
 
 def _extract_storage(archive_path: Path, storage: Path) -> None:
-    root = storage.resolve()
+    _check_archive(archive_path, storage)
     with zipfile.ZipFile(archive_path) as archive:
-        for member in archive.namelist():
-            target = (root / member).resolve()
-            if root not in target.parents:  # evita zip slip
-                raise RuntimeError(f"Entrada fuera de storage en el respaldo: {member}")
-        archive.extractall(root)
+        archive.extractall(storage.resolve())
 
 
-def restore_backup(backup_dir: Path, db_path: Path, storage: Path, backups: Path, confirm: bool) -> Path | None:
-    """Verifica, respalda el estado actual y restaura. Devuelve el respaldo de seguridad (None si no habia BD)."""
+def restore_backup(backup_dir: Path, database: URL, storage: Path, backups: Path, confirm: bool) -> Path:
+    """Verifica, respalda el estado actual y restaura. Devuelve el respaldo de seguridad."""
     if not confirm:
         raise RuntimeError("La restauracion reemplaza la BD y storage/: confirme con --yes.")
-    manifest = verify_backup(backup_dir)
+    manifest = verify_backup(backup_dir, storage)
     # Sin poda: la retencion podria eliminar justo el respaldo que se esta restaurando.
-    safety = create_backup(db_path, storage, backups, retention=None) if db_path.exists() else None
-    for path in sqlite_files(db_path):
-        path.unlink(missing_ok=True)
-    db_path.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copyfile(backup_dir / manifest["database"]["file"], db_path)
+    safety = create_backup(database, storage, backups, retention=None)
+    # Una sola transaccion: si pg_restore falla, la BD queda como estaba y storage/ no se toca.
+    pgtools.restore(database, backup_dir / manifest["database"]["file"])
     _clear_storage(storage)
     storage.mkdir(parents=True, exist_ok=True)
     _extract_storage(backup_dir / manifest["storage"]["file"], storage)
@@ -72,16 +80,13 @@ def main() -> None:
     parser.add_argument("backup_dir", type=Path)
     parser.add_argument("--yes", action="store_true", help="confirma el reemplazo de la BD y de storage/")
     args = parser.parse_args()
-    if settings.sqlite_path is None:
-        raise SystemExit("La restauracion solo admite SQLite en disco.")
+    database = make_url(settings.database_url)
     try:
-        safety = restore_backup(
-            args.backup_dir, settings.sqlite_path, settings.storage_path, settings.backup_dir, args.yes
-        )
+        pgtools.check_database(database)
+        safety = restore_backup(args.backup_dir, database, settings.storage_path, settings.backup_dir, args.yes)
     except RuntimeError as exc:
         raise SystemExit(str(exc)) from exc
-    if safety:
-        print(f"Estado previo respaldado en {safety}")
+    print(f"Estado previo respaldado en {safety}")
     print(f"Respaldo {args.backup_dir} restaurado.")
 
 
