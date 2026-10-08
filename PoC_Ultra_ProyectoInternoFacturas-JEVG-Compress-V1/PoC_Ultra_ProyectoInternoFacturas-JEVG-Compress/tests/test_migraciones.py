@@ -29,6 +29,7 @@ DOMAIN_TABLES = {
     "email_deliveries",
     "validation_rules",
     "catalog_entries",
+    "stored_files",
 }
 NOTIFICATION_TABLES = {"notification_mailboxes", "notification_copies", "email_deliveries"}
 VALIDATION_TABLES = {"validation_settings", "catalog_entries"}
@@ -37,7 +38,7 @@ BASELINE_TABLES = (
     - {"invoice_document_types", "supplier_document_types", "contract_document_types", "notification_templates"}
     - NOTIFICATION_TABLES
     - VALIDATION_TABLES
-    - {"validation_rules"}
+    - {"validation_rules", "stored_files"}
 ) | {"login_attempts"}
 
 
@@ -1187,6 +1188,7 @@ def test_downgrade_del_pago(empty_db):
 SOFT_DELETE = "0019_types_soft_delete"
 RULES_BY_ORIGIN = "0020_validation_rules"
 CURRENCY_MAPPING = "0021_currency_catalog_mapping"
+STORED_FILES = "0022_stored_files"
 
 
 def test_tipos_inactivos_quedan_eliminados(empty_db):
@@ -1294,3 +1296,35 @@ def test_monedas_normalizadas_y_reportadas(empty_db):
         ("Contract", {"currency": "usd"}, {"currency": "USD"}, None),
         ("Invoice", {"currency": "MN"}, {"currency": "MXN"}, None),
     ]
+
+
+def test_downgrade_de_archivos_en_base_sin_archivos(empty_db):
+    config = alembic_config(empty_db)
+    command.upgrade(config, STORED_FILES)
+    command.downgrade(config, CURRENCY_MAPPING)
+    assert "stored_files" not in tables(empty_db)
+    command.upgrade(config, "head")
+    command.check(config)
+
+
+def test_downgrade_de_archivos_en_base_con_archivos(empty_db):
+    config = alembic_config(empty_db)
+    command.upgrade(config, STORED_FILES)
+    execute(
+        empty_db,
+        "INSERT INTO stored_files (path, content, size, sha256, created_at)"
+        " VALUES ('invoices/1/a.pdf', '\\x2550', 2, repeat('0', 64), now())",
+    )
+    with pytest.raises(NotImplementedError, match="Restaure un respaldo"):
+        command.downgrade(config, CURRENCY_MAPPING)
+    assert "stored_files" in tables(empty_db)
+
+
+def test_tamano_de_archivo_en_base_coincide_con_su_contenido(empty_db):
+    command.upgrade(alembic_config(empty_db), STORED_FILES)
+    with pytest.raises(IntegrityError, match="ck_stored_files_size"):
+        execute(
+            empty_db,
+            "INSERT INTO stored_files (path, content, size, sha256, created_at)"
+            " VALUES ('invoices/1/a.pdf', '\\x2550', 3, repeat('0', 64), now())",
+        )

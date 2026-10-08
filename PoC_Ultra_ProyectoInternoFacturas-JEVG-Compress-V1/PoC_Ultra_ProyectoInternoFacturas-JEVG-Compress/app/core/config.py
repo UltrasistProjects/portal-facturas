@@ -29,6 +29,9 @@ class Settings(BaseSettings):
     secret_key: str = Field(default="", validate_default=True)
     database_url: str = Field(default="", validate_default=True)
     storage_path: Path = Path("storage")
+    # local: los documentos viven solo en storage_path. database: su contenido se guarda en la tabla stored_files y
+    # storage_path es una copia local que se rehace al leer (servidores sin disco persistente, como Vercel).
+    storage_backend: Literal["local", "database"] = "local"
     log_dir: Path = Path("logs")
     backup_dir: Path = Path("backups")
     max_upload_mb: int = 20
@@ -118,6 +121,11 @@ class Settings(BaseSettings):
             value = value.strip().lower()
             return value or None
         return value
+
+    @field_validator("storage_backend", mode="before")
+    @classmethod
+    def normalized_storage_backend(cls, value):
+        return (value.strip().lower() or "local") if isinstance(value, str) else value
 
     @field_validator("mail_from", "smtp_host", "smtp_username")
     @classmethod

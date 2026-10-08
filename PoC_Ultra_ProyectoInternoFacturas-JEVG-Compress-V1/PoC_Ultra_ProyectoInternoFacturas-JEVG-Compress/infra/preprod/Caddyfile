@@ -1,0 +1,5 @@
+# HTTPS automatico (Let's Encrypt) para Keycloak. Caddy agrega X-Forwarded-For, -Proto y -Host, que Keycloak acepta
+# con KC_PROXY_HEADERS=xforwarded.
+{$KEYCLOAK_HOSTNAME} {
+	reverse_proxy keycloak:8080
+}

@@ -150,7 +150,7 @@ El portal no recibe ni guarda contraseñas (RN-HU03-01). La autenticación la ha
 
 **Despliegue en QA y producción.**
 
-- Instancia de Keycloak **dedicada**, por HTTPS (`KEYCLOAK_SERVER_URL` con `https://` es obligatoria en `production`), con el realm importado y las URIs de redirección (`/auth/callback`) y de cierre (`/`) del dominio real del portal.
+- Instancia de Keycloak **dedicada**, por HTTPS (`KEYCLOAK_SERVER_URL` con `https://` es obligatoria en `production`), con el realm importado y las URIs de redirección (`/auth/callback`) y de cierre (`/`) del dominio real del portal (`PORTAL_URL` de `configure-realm.sh` las deja configuradas).
 - Secretos de los clientes: generados en el servidor de Keycloak y copiados sólo a las variables de entorno del portal.
 - La lista `infra/keycloak/common_passwords.txt` debe instalarse en `data/password-blacklists/` del servidor (la exige la política `passwordBlacklist`).
 - *Rate limiting* por IP en el proxy inverso frente a Keycloak: Keycloak bloquea por cuenta, no por IP.
@@ -158,6 +158,52 @@ El portal no recibe ni guarda contraseñas (RN-HU03-01). La autenticación la ha
 - Tema de login: copie `infra/keycloak/themes/ultrasist` a `/opt/keycloak/themes/` de la instancia (o empaquételo como JAR en `providers/` y ejecute `kc.sh build`) y reiníciela: en modo `start` Keycloak guarda los temas en caché. Después ejecute en el servidor `infra/keycloak/configure-realm.sh` con `KCADM_USER` y `KCADM_PASSWORD` de una cuenta administradora (`KCADM_REALM` si no es de `master`, `KEYCLOAK_SERVER` si no es `http://localhost:8080`) y, para el correo, `KEYCLOAK_SMTP_HOST`, `KEYCLOAK_SMTP_PORT`, `KEYCLOAK_SMTP_FROM`, `KEYCLOAK_SMTP_SECURITY`, `KEYCLOAK_SMTP_USER` y `KEYCLOAK_SMTP_PASSWORD`; o asigne el tema en la consola ("Realm settings › Themes › Login theme"). Para volver al tema por defecto: `kcadm.sh update realms/ultrasist-portal -s loginTheme=keycloak.v2` (un valor vacío no lo cambia).
 
 **Lista de contraseñas comunes.** Se mantiene a mano en `infra/keycloak/common_words.txt`. `python scripts/build_password_blacklist.py` genera `common_passwords.txt` con esas entradas y sus variantes decoradas (`password1!`, `portal2026!`): como la política exige dígito y carácter especial, sin variantes la lista no bloquearía ninguna contraseña. Una prueba verifica que el archivo generado esté al día.
+
+## Despliegue en Vercel (preproducción)
+
+El portal corre en Vercel como una Vercel Function (Python 3.12, `app/main.py`). Keycloak y PostgreSQL viven fuera:
+
+| Pieza | Dónde |
+| --- | --- |
+| Portal | Vercel. `vercel.json`: framework `fastapi` (sin él, un proyecto creado con `vercel project add` sólo busca funciones en `api/`), región `iad1` y 60 s por petición |
+| PostgreSQL del portal | Neon (Marketplace de Vercel), región `us-east-1`, junto a `iad1` |
+| Documentos cargados | La misma PostgreSQL: `STORAGE_BACKEND=database` (tabla `stored_files`) |
+| Keycloak | Un servidor con Docker: `infra/preprod/` (Keycloak en modo `start`, su propia PostgreSQL y Caddy con HTTPS) |
+| Correo | El SMTP del portal, también para el restablecimiento de contraseña de Keycloak |
+
+**Lo que Vercel impone.**
+
+- Disco efímero y no compartido: sólo se escribe en `/tmp`, y cada instancia tiene el suyo. Con `STORAGE_BACKEND=database` cada archivo se guarda también en `stored_files` y `STORAGE_PATH` (en `/tmp`) es una copia que se rehace al leer; los lectores siguen recibiendo una ruta local. `LOG_DIR` va a `/tmp`: los logs se consultan en el panel de Vercel.
+- 4.5 MB por petición: `MAX_UPLOAD_MB=4`. Un envío cuyos archivos sumen más recibe un 413 de Vercel antes de llegar al portal.
+- `.vercelignore` es una lista de permitidos: sólo se suben `app/`, `requirements.txt`, `vercel.json` y `.python-version`. `pyproject.toml` queda fuera a propósito: si existe, Vercel lo toma como manifiesto e ignora `requirements.txt`.
+- Keycloak no puede correr en Vercel: es un servidor Java con estado.
+
+**Keycloak (`infra/preprod/`).**
+
+1. Un servidor con Docker (Compose v2), los puertos 80 y 443 abiertos y un nombre DNS. Sin dominio propio sirve `kc.<IP con guiones>.sslip.io`. Caddy obtiene el certificado de Let's Encrypt al arrancar.
+2. Copie `infra/keycloak/` e `infra/preprod/` al servidor, con la misma estructura, y cree `infra/preprod/.env` a partir de `.env.example`. Los secretos de los clientes son los mismos que se configuran en Vercel.
+3. En `infra/preprod/`: `docker compose --env-file .env up -d --wait`. La primera vez importa el realm versionado.
+4. `docker compose --env-file .env exec -T keycloak bash /opt/keycloak/scripts/configure-realm.sh`: aplica el tema, el correo y, con `PORTAL_URL`, deja en el cliente `portal-facturas-web` sólo el callback y el cierre de sesión del portal desplegado. Repítalo si cambia la URL del portal.
+
+**Variables de entorno en Vercel** (Production):
+
+| Variable | Valor |
+| --- | --- |
+| `APP_ENV` | `test`: cookie `Secure` y demo con contraseñas temporales |
+| `SECRET_KEY` | Nueva, de 64 caracteres; nunca la de desarrollo |
+| `DATABASE_URL` | La URL **directa** (sin `-pooler`) de Neon con el esquema `postgresql+psycopg://` y `?sslmode=require` |
+| `STORAGE_BACKEND`, `STORAGE_PATH`, `LOG_DIR`, `MAIL_OUTBOX_DIR`, `BACKUP_DIR` | `database` y rutas bajo `/tmp/portal/` |
+| `MAX_UPLOAD_MB` | `4` |
+| `KEYCLOAK_SERVER_URL`, `KEYCLOAK_REALM` | `https://<KEYCLOAK_HOSTNAME>` y `ultrasist-portal` |
+| `KEYCLOAK_CLIENT_SECRET`, `KEYCLOAK_ADMIN_CLIENT_SECRET` | Los del `.env` del servidor de Keycloak |
+| `MAIL_BACKEND`, `SMTP_*`, `MAIL_FROM` | `smtp` y el servidor del portal (ver "Conectar el servidor SMTP") |
+
+**Base de datos y demo.** Las migraciones y el seed se ejecutan desde un equipo con el proyecto, con `DATABASE_URL`, `KEYCLOAK_*`, `APP_ENV=test` y `STORAGE_BACKEND=database` de preproducción en el entorno: `python scripts/init_db.py`. Las contraseñas temporales de las cuentas demo se muestran una sola vez, y Keycloak pide cambiarlas en el primer acceso. `reset_demo.py` se niega a correr contra un servidor que no sea local, y `backup.py` usa el contenedor `db` local: en Neon, la restauración es la del propio servicio.
+
+**Publicar.**
+
+- Manual: `npx vercel deploy --prod` desde el directorio del proyecto, con el proyecto enlazado (`vercel link`; `.vercel/` no se versiona).
+- Automático al hacer merge a `main`: el proyecto de Vercel conectado al repositorio (app de Vercel instalada en la organización de GitHub), con *Root Directory* en este directorio y `main` como rama de producción. `git.deploymentEnabled` de `vercel.json` sólo despliega `main`: las demás ramas no tienen variables de Preview y fallarían al arrancar.
 
 ## Respaldo y restauración
 

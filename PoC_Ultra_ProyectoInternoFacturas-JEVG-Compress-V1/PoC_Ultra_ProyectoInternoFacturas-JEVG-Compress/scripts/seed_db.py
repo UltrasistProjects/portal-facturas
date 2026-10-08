@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import hashlib
 import re
-import shutil
 import sys
 import tempfile
 from datetime import date, datetime, timedelta, timezone
@@ -233,7 +232,7 @@ def add_document(
     destination = (
         folder / f"demo_{hashlib.sha256((str(invoice_id) + doc_type).encode()).hexdigest()[:10]}{source.suffix}"
     )
-    shutil.copyfile(source, destination)
+    storage.store(destination, content)
     doc = Document(
         invoice_id=invoice_id,
         supplier_id=supplier_id,

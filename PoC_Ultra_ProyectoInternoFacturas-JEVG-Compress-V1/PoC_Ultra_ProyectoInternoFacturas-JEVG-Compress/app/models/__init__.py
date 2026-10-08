@@ -11,6 +11,7 @@ from sqlalchemy import (
     Date,
     ForeignKey,
     Index,
+    LargeBinary,
     String,
     Text,
     UniqueConstraint,
@@ -328,6 +329,19 @@ class Document(Base):
     invoice: Mapped[Invoice | None] = relationship(back_populates="documents", foreign_keys=[invoice_id])
 
 
+class FileContent(Base):
+    """Contenido de un archivo con STORAGE_BACKEND=database, por su ruta relativa a la raiz de almacenamiento (la de
+    documents.path). Sin llave foranea: el archivo se guarda antes de que exista su documento, como en disco."""
+
+    __tablename__ = "stored_files"
+    __table_args__ = (CheckConstraint("size = octet_length(content)", name="ck_stored_files_size"),)
+    path: Mapped[str] = mapped_column(String(500), primary_key=True)
+    content: Mapped[bytes] = mapped_column(LargeBinary)
+    size: Mapped[int]
+    sha256: Mapped[str] = mapped_column(String(64))
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=now_utc)
+
+
 class InvoiceDocumentType(Base):
     """Tipo de documento de factura y su nivel de exigencia por origen del proveedor (HU-04). `code` es el valor de
     documents.document_type; no hay FK porque esa columna tambien guarda claves del expediente del proveedor
@@ -633,6 +647,7 @@ __all__ = [
     "ContractAmendment",
     "Invoice",
     "Document",
+    "FileContent",
     "InvoiceDocumentType",
     "SupplierDocumentType",
     "ContractDocumentType",
