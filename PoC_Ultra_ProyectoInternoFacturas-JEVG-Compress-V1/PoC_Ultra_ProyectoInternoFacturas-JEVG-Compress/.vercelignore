@@ -1,8 +1,38 @@
-# Vercel solo recibe lo que la aplicacion usa en ejecucion (lista de permitidos). Fuera quedan .env, storage/, las
-# pruebas, las evidencias y pyproject.toml: con un pyproject.toml Vercel ignora requirements.txt.
-/*
-!/app
-!/requirements.txt
-!/vercel.json
-!/.python-version
+# En ejecucion Vercel solo necesita app/, requirements.txt, vercel.json y .python-version. Las reglas no van ancladas
+# (sin "/" inicial): en los despliegues desde Git, Vercel las aplica desde la raiz del repositorio y no desde esta
+# carpeta (Root Directory); con el CLI, desde esta carpeta. pyproject.toml queda fuera a proposito: si existe, Vercel
+# lo toma como manifiesto e ignora requirements.txt.
+.env
+.env.*
+.venv/
 __pycache__/
+*.py[cod]
+pyproject.toml
+requirements-dev.txt
+requirements.lock
+tests/
+evidencias/
+EVIDENCIA-PRUEBAS-HUs.pdf
+playwright-report/
+test-results/
+storage/
+backups/
+outbox/
+logs/
+data/
+infra/
+scripts/
+alembic/
+alembic.ini
+compose.yaml
+run_local.*
+sonar-project.properties
+ejecucion.txt
+coverage.xml
+.coverage
+.pytest_cache/
+.ruff_cache/
+*.md
+.agents/
+.claude/
+skills-lock.json
