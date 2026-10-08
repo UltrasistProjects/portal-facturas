@@ -1,0 +1,102 @@
+# PostgreSQL, Keycloak y Mailpit (correo de pruebas de Keycloak) corren en contenedores; la aplicacion sigue en el host.
+# Compose lee las variables de .env (el mismo archivo que usa la aplicacion): python scripts/create_env.py lo genera.
+#   docker compose up -d --wait db keycloak mailpit
+#       arranca los servicios y espera a que esten "healthy"
+#   docker compose exec -T keycloak bash /opt/keycloak/scripts/configure-realm.sh
+#       aplica el tema de login y el correo de Keycloak al realm ya importado
+#   docker compose down
+#       los detiene conservando los datos (con -v tambien borra los volumenes)
+name: portal-facturas
+
+services:
+  db:
+    # Version menor fija; se actualiza por PR.
+    image: postgres:18.6-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-portal}
+      POSTGRES_DB: ${POSTGRES_DB:-portal}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Defina POSTGRES_PASSWORD en .env (python scripts/create_env.py)}
+    # Solo en localhost: el 5432 y el 5433 suelen estar ocupados por otras instancias.
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-55432}:5432"
+    # Desde la 18, PGDATA vive en /var/lib/postgresql/18/docker: se monta el directorio padre.
+    volumes:
+      - pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      retries: 10
+    restart: unless-stopped
+
+  keycloak:
+    # Proveedor de identidad (IdP) del portal. Version exacta fija; se actualiza por PR.
+    image: quay.io/keycloak/keycloak:26.7.4
+    # El contenedor se niega a arrancar sin sus variables. La verificacion vive aqui y no en la interpolacion (:?) para
+    # que un .env sin ellas no impida usar el servicio db (respaldos con docker compose exec).
+    # start-dev: sin TLS ni cache distribuida, solo para desarrollo. Importa el realm versionado si aun no existe.
+    entrypoint:
+      - bash
+      - -c
+      - |
+        for name in KC_BOOTSTRAP_ADMIN_USERNAME KC_BOOTSTRAP_ADMIN_PASSWORD KEYCLOAK_CLIENT_SECRET KEYCLOAK_ADMIN_CLIENT_SECRET; do
+          if [ -z "$${!name}" ]; then echo "Defina $$name en .env (python scripts/create_env.py)" >&2; exit 1; fi
+        done
+        exec /opt/keycloak/bin/kc.sh start-dev --import-realm
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KC_BOOTSTRAP_ADMIN_USERNAME:-}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KC_BOOTSTRAP_ADMIN_PASSWORD:-}
+      # El realm los lee como ${KEYCLOAK_CLIENT_SECRET} y ${KEYCLOAK_ADMIN_CLIENT_SECRET} al importarse.
+      KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET:-}
+      KEYCLOAK_ADMIN_CLIENT_SECRET: ${KEYCLOAK_ADMIN_CLIENT_SECRET:-}
+      KC_HEALTH_ENABLED: "true"
+      # Correo de Keycloak (restablecimiento de contrasena) que aplica infra/keycloak/configure-realm.sh. En local va
+      # a Mailpit, nunca al SMTP real del portal (SMTP_*); en QA y produccion se usa el del portal, sin versionar la
+      # clave.
+      KEYCLOAK_SMTP_HOST: ${KEYCLOAK_SMTP_HOST:-mailpit}
+      KEYCLOAK_SMTP_PORT: ${KEYCLOAK_SMTP_PORT:-1025}
+      KEYCLOAK_SMTP_FROM: ${KEYCLOAK_SMTP_FROM:-no-reply@portal-facturas.local}
+      KEYCLOAK_SMTP_SECURITY: ${KEYCLOAK_SMTP_SECURITY:-none}
+      KEYCLOAK_SMTP_USER: ${KEYCLOAK_SMTP_USER:-}
+      KEYCLOAK_SMTP_PASSWORD: ${KEYCLOAK_SMTP_PASSWORD:-}
+    # Solo en localhost, como PostgreSQL.
+    ports:
+      - "127.0.0.1:${KEYCLOAK_PORT:-58080}:8080"
+    volumes:
+      # Datos de Keycloak (base dev-file en data/h2): usuarios y sesiones sobreviven a los reinicios. Se monta data/
+      # completo porque existe en la imagen con el dueno keycloak; data/h2 no existe y Docker lo crearia de root.
+      - keycloak-data:/opt/keycloak/data
+      - ./infra/keycloak/realm-ultrasist-portal.json:/opt/keycloak/data/import/realm-ultrasist-portal.json:ro
+      - ./infra/keycloak/common_passwords.txt:/opt/keycloak/data/password-blacklists/common_passwords.txt:ro
+      # Tema de login "ultrasist" (con start-dev no hay cache: los cambios se ven al recargar) y el script que lo asigna
+      # al realm existente, porque --import-realm no reimporta un realm que ya existe.
+      - ./infra/keycloak/themes/ultrasist:/opt/keycloak/themes/ultrasist:ro
+      - ./infra/keycloak/configure-realm.sh:/opt/keycloak/scripts/configure-realm.sh:ro
+    # La imagen no trae curl: la sonda usa /dev/tcp de bash contra el puerto de administracion (9000).
+    healthcheck:
+      test:
+        - CMD
+        - bash
+        - -c
+        - "exec 3<>/dev/tcp/127.0.0.1/9000 && printf 'GET /health/ready HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3 && grep -q '200 OK' <&3"
+      interval: 10s
+      start_period: 30s
+      retries: 30
+    # Sin reinicio automatico: con una variable faltante, "up --wait" falla en lugar de reintentar sin fin.
+    restart: "no"
+
+  mailpit:
+    # Servidor de correo de pruebas: captura los correos de Keycloak de desarrollo sin enviarlos. Version exacta fija;
+    # se actualiza por PR. Interfaz web y API (/api/v1/messages) solo en localhost; el SMTP (1025) no se publica: solo
+    # lo alcanza Keycloak por la red de compose.
+    image: axllent/mailpit:v1.31.4
+    ports:
+      - "127.0.0.1:${MAILPIT_PORT:-58025}:8025"
+    healthcheck:
+      test: ["CMD", "/mailpit", "readyz"]
+      interval: 5s
+      retries: 10
+    restart: "no"
+
+volumes:
+  pgdata:
+  keycloak-data:

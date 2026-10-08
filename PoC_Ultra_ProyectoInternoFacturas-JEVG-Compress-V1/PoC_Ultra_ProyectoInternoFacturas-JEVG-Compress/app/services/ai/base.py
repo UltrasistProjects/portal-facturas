@@ -15,4 +15,3 @@ class DocumentAnalyzer(ABC):
 
     @abstractmethod
     def semantic_compare(self, expected: str, detected: str) -> dict[str, Any]: ...
-

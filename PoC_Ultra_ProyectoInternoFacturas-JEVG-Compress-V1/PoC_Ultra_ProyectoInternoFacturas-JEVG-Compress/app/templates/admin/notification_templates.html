@@ -1,0 +1,7 @@
+{% extends "base.html" %}{% block title %}Plantillas de correo{% endblock %}{% block content %}
+<div class="page-heading"><div><span class="eyebrow">CONFIGURACION</span><h1>Plantillas de correo</h1><p>Correos que el sistema envía cuando una factura cambia de estatus. El destinatario lo fija la regla de negocio de cada evento.</p></div></div>
+{% if notice %}<div class="alert alert-success">{{ notice }}</div>{% endif %}
+<section class="panel"><div class="table-responsive"><table class="table enterprise-table"><thead><tr><th>Evento</th><th>Destinatario</th><th>Asunto</th><th>Última modificación</th><th></th></tr></thead><tbody>
+{% for row in rows %}<tr><td><strong>{{ row.spec.label }}</strong></td><td>{{ row.spec.recipient_label }}</td><td>{{ row.template.subject }}</td><td>{% if row.modified_by %}{{ row.modified_at }}<small>{{ row.modified_by }}</small>{% else %}Predeterminada{% endif %}</td><td><a class="btn btn-sm btn-light" href="/admin/notification-templates/{{ row.spec.event.value }}">Editar</a></td></tr>
+{% endfor %}</tbody></table></div></section>
+{% endblock %}

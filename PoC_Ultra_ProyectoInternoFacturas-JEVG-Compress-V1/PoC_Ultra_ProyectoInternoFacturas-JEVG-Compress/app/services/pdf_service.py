@@ -1,6 +1,10 @@
+import logging
 from pathlib import Path
 from typing import Any
+
 import fitz
+
+logger = logging.getLogger(__name__)
 
 
 def analyze_pdf(path: Path) -> dict[str, Any]:
@@ -15,5 +19,9 @@ def analyze_pdf(path: Path) -> dict[str, Any]:
                 "metadata": dict(document.metadata or {}),
             }
     except Exception as exc:
+        # El detalle tecnico va al log; el usuario recibe un mensaje generico.
+        logger.warning(
+            "pdf.analysis_failed",
+            extra={"event": "pdf.analysis_failed", "error_type": type(exc).__name__, "error": str(exc)},
+        )
         raise ValueError("El PDF no puede abrirse o esta danado") from exc
-

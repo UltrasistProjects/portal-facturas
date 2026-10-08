@@ -1,6 +1,12 @@
 .venv\Scripts\Activate.ps1
-Copy-Item .env.example .env
-python scripts\reset_demo.py
+python scripts\create_env.py
+# PostgreSQL en Docker (requiere Docker Desktop o Podman); espera a que este "healthy":
+docker compose up -d --wait db
+python scripts\init_db.py
 uvicorn app.main:app --reload
 
-uvicorn app.main:app --reload
+# Reconstruir la demo desde cero (respalda antes y pide confirmacion si hay datos no-demo):
+python scripts\reset_demo.py
+
+# Detener PostgreSQL conservando los datos (con -v tambien se borran):
+docker compose down

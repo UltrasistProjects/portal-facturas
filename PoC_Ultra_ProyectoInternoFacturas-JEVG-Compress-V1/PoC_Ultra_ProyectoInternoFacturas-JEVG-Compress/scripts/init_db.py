@@ -1,10 +1,39 @@
-from pathlib import Path
+"""Aplica las migraciones hasta head y siembra la demo sólo si la base está vacía. No borra datos."""
+
 import sys
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from app.core.database import Base, engine
-import app.models  # noqa: F401
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+
+from alembic import command
+from alembic.config import Config
+from sqlalchemy import select
+
+from app.core.database import SessionLocal, engine
+from app.models import User
+from scripts import pgtools
+
+
+def main() -> None:
+    try:
+        pgtools.check_database(engine.url)
+    except RuntimeError as exc:
+        raise SystemExit(str(exc)) from exc
+    config = Config(str(ROOT / "alembic.ini"))
+    config.set_main_option("script_location", str(ROOT / "alembic"))
+    command.upgrade(config, "head")
+    with SessionLocal() as db:
+        empty = db.scalar(select(User.id).limit(1)) is None
+    if empty:
+        from scripts.seed_db import main as seed
+
+        seed()
+    print(
+        "Base de datos en la ultima revision"
+        + (" y sembrada con la demo." if empty else "; datos existentes conservados.")
+    )
+
 
 if __name__ == "__main__":
-    Base.metadata.create_all(engine)
-    print("Base de datos inicializada.")
-
+    main()

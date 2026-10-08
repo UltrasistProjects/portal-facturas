@@ -1,0 +1,187 @@
+{
+  "id": "HU-22",
+  "run": "RMUY9TNYO",
+  "inicio": "2026-10-07T15:39:22.819Z",
+  "fin": "2026-10-07T15:39:30.408Z",
+  "estado": "PASS",
+  "bloqueo": null,
+  "notas": [],
+  "prueba": {
+    "titulo": "HU-22 · Requisitos de alta del contrato",
+    "archivo": "20-HU-22-requisitos-contrato.spec.ts"
+  },
+  "escenarios": [
+    {
+      "nombre": "Requisitos del contrato configurados en Requisitos mínimos",
+      "estado": "PASS",
+      "pasos": [
+        {
+          "paso": "Abrir Requisitos mínimos › Alta de contrato",
+          "esperado": "El menú agrupa las tres configuraciones de documentos; la tabla muestra Contrato como Obligatorio, y Orden de compra y Anexos como Opcionales con varios archivos; todos los niveles son editables.",
+          "obtenido": "Menú \"Requisitos mínimos\": Archivos de factura, Alta de proveedor y Alta de contrato. Contrato: Obligatorio (editable); Orden de compra y Anexos: Opcional, varios archivos.",
+          "estado": "PASS",
+          "evidencias": [
+            {
+              "archivo": "HU-22/01-configuracion-requisitos-contrato.png",
+              "descripcion": "Requisitos del contrato: Contrato obligatorio; Orden de compra y Anexos opcionales; niveles editables.",
+              "tipo": "aplicacion"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "nombre": "El alta crea el contrato Registrado y pide sus requisitos",
+      "estado": "PASS",
+      "pasos": [
+        {
+          "paso": "Dar de alta el contrato \"QA Contrato RMUY9TNYO\" de Carlos Hernandez Lopez (DEMO)",
+          "esperado": "El contrato queda \"Registrado\", el sistema abre su expediente con \"Contrato creado. Cargue sus requisitos para activarlo.\" y \"Falta 1 requisito obligatorio\"; el botón \"Activar contrato\" está deshabilitado.",
+          "obtenido": "Contrato 13: \"Falta 1 requisito obligatorio\"; botón \"Activar contrato\" deshabilitado.",
+          "estado": "PASS",
+          "evidencias": [
+            {
+              "archivo": "HU-22/02-contrato-registrado.png",
+              "descripcion": "Expediente del contrato recién creado: el contrato firmado pendiente y la activación deshabilitada.",
+              "tipo": "aplicacion"
+            }
+          ]
+        },
+        {
+          "paso": "Buscarlo en el listado de contratos",
+          "esperado": "El listado lo muestra \"Registrado\" con \"Faltan 1\" en la columna Requisitos y liga a su expediente.",
+          "obtenido": "Fila: \"Carlos Hernandez Lopez (DEMO) QA Contrato RMUY9TNYO Miguel PMO (DEMO) Python Data Analytics $50,000.00 MXN 01/01/2026 — 31/12/2026 Registrado Faltan 1 Monto original Modificar monto\".",
+          "estado": "PASS",
+          "evidencias": [
+            {
+              "archivo": "HU-22/03-listado-contrato-por-activar.png",
+              "descripcion": "Listado de contratos: el contrato por activar con su requisito pendiente.",
+              "tipo": "aplicacion"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "nombre": "Con el contrato firmado se activa y se ofrece al facturar",
+      "estado": "PASS",
+      "pasos": [
+        {
+          "paso": "Cargar el contrato firmado y dos anexos desde el expediente del contrato",
+          "esperado": "El panel indica \"Requisitos del contrato completos\", lista los dos anexos y el botón \"Activar contrato\" se habilita.",
+          "obtenido": "\"Requisitos del contrato completos\"; anexos cargados: 2.",
+          "estado": "PASS",
+          "evidencias": [
+            {
+              "archivo": "HU-22/04-requisitos-contrato-completos.png",
+              "descripcion": "Expediente del contrato con el contrato firmado y dos anexos.",
+              "tipo": "aplicacion"
+            }
+          ]
+        },
+        {
+          "paso": "Pulsar \"Activar contrato\" y confirmar",
+          "esperado": "El diálogo de la página pide confirmación; el contrato queda \"Activo\" con el aviso \"Contrato activado\".",
+          "obtenido": "Estatus: \"Activo\"; aviso: \"Contrato activado\".",
+          "estado": "PASS",
+          "evidencias": [
+            {
+              "archivo": "HU-22/05-confirmacion-activacion.png",
+              "descripcion": "Diálogo de confirmación de la activación.",
+              "tipo": "aplicacion"
+            },
+            {
+              "archivo": "HU-22/06-contrato-activo.png",
+              "descripcion": "Contrato activado.",
+              "tipo": "aplicacion"
+            }
+          ]
+        },
+        {
+          "paso": "Abrir \"Registrar factura\" con el usuario del proveedor",
+          "esperado": "El formulario ofrece el contrato activado entre los contratos del proveedor.",
+          "obtenido": "Contratos ofrecidos: QA Contrato RMUVJ4GBS · $50,000.00 MXN | QA Contrato RMUVJ59U2 · $50,000.00 MXN | QA Contrato RMUVVA7RK · $50,000.00 MXN | QA Contrato RMUVVE30F · $50,000.00 MXN | QA Contrato RMUVVO8A5 · $50,000.00 MXN | QA Contrato RMUVVRQW1 · $50,000.00 MXN | QA Contrato RMUY9TNYO · $50,000.00 MXN | Servicios de Analitica 2026 · $75,000.00 MXN.",
+          "estado": "PASS",
+          "evidencias": [
+            {
+              "archivo": "HU-22/07-contrato-ofrecido-al-facturar.png",
+              "descripcion": "Formulario \"Registrar factura\" del proveedor con el contrato activado.",
+              "tipo": "aplicacion"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "nombre": "Editar y eliminar un tipo desde su fila",
+      "estado": "PASS",
+      "pasos": [
+        {
+          "paso": "Crear el tipo temporal \"Requisito de contrato temporal QA RMUY9TNYO\"",
+          "esperado": "La fila del tipo muestra las acciones \"Editar\" y \"Eliminar\", igual que las filas de los tipos del sistema.",
+          "obtenido": "Fila \"Requisito de contrato temporal QA RMUY9TNYO\" con Editar y Eliminar; las 4 filas de la tabla tienen ambas acciones.",
+          "estado": "PASS",
+          "evidencias": [
+            {
+              "archivo": "HU-22/08-acciones-editar-eliminar.png",
+              "descripcion": "Todas las filas, también las del sistema, con Editar y Eliminar.",
+              "tipo": "aplicacion"
+            }
+          ]
+        },
+        {
+          "paso": "Pulsar \"Editar\" y renombrarlo a \"Requisito de contrato temporal QA RMUY9TNYO editado\"",
+          "esperado": "Se abre su formulario de edición y, al guardar, el portal responde \"Requisito actualizado\".",
+          "obtenido": "Aviso \"Requisito actualizado\"; la fila ahora dice \"Requisito de contrato temporal QA RMUY9TNYO editado\".",
+          "estado": "PASS",
+          "evidencias": [
+            {
+              "archivo": "HU-22/09-formulario-edicion.png",
+              "descripcion": "Formulario de edición abierto desde la fila.",
+              "tipo": "aplicacion"
+            }
+          ]
+        },
+        {
+          "paso": "Pulsar \"Eliminar\" y no confirmar",
+          "esperado": "Aparece la confirmación con el nombre del tipo; al cerrarla el tipo sigue en la tabla.",
+          "obtenido": "Confirmación \"¿Eliminar «Requisito de contrato temporal QA RMUY9TNYO editado»?\" mostrada y cerrada; el tipo sigue listado.",
+          "estado": "PASS",
+          "evidencias": [
+            {
+              "archivo": "HU-22/10-confirmacion-eliminar.png",
+              "descripcion": "Confirmación antes de eliminar.",
+              "tipo": "aplicacion"
+            }
+          ]
+        },
+        {
+          "paso": "Pulsar \"Eliminar\" y confirmar",
+          "esperado": "El portal responde \"Requisito eliminado\" y el tipo deja de listarse: la baja es lógica.",
+          "obtenido": "Aviso \"Requisito eliminado\"; \"Requisito de contrato temporal QA RMUY9TNYO editado\" ya no aparece en la configuración.",
+          "estado": "PASS",
+          "evidencias": [
+            {
+              "archivo": "HU-22/11-tipo-eliminado.png",
+              "descripcion": "Aviso \"Requisito eliminado\".",
+              "tipo": "aplicacion"
+            }
+          ]
+        },
+        {
+          "paso": "Pulsar \"Mostrar eliminados\"",
+          "esperado": "El tipo eliminado se conserva: aparece con su fecha de eliminación y la acción \"Restaurar\".",
+          "obtenido": "\"Requisito de contrato temporal QA RMUY9TNYO editado\" listado como eliminado el 07/10/2026 09:39.",
+          "estado": "PASS",
+          "evidencias": [
+            {
+              "archivo": "HU-22/12-tipo-en-eliminados.png",
+              "descripcion": "\"Requisito de contrato temporal QA RMUY9TNYO editado\" en la lista de eliminados, con \"Restaurar\".",
+              "tipo": "aplicacion"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

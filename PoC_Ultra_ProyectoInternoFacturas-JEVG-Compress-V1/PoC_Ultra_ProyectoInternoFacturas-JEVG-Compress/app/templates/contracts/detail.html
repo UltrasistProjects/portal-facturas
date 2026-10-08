@@ -1,0 +1,42 @@
+{% extends "base.html" %}{% block title %}{{ contract.project_name }}{% endblock %}{% block content %}<div class="breadcrumb"><a href="/contracts">Contratos</a><i class="bi bi-chevron-right"></i>Expediente del contrato</div>
+<div class="page-heading"><div><span class="status status-contract-{{ contract.status.value|lower }}">{{ status_labels[contract.status] }}</span><h1>{{ contract.project_name }}</h1><p>{{ contract.supplier.business_name }} · {{ contract.authorized_amount|money }} {{ contract.currency }}</p></div></div>
+{% if notice %}<div class="alert alert-success">{{ notice }}</div>{% endif %}{% if error %}<div class="alert alert-danger">{{ error }}</div>{% endif %}
+<div class="two-column">
+<section class="panel"><h2>Datos del contrato</h2><dl class="data-list">
+<dt>Proveedor</dt><dd><a href="/suppliers/{{ contract.supplier.id }}">{{ contract.supplier.business_name }}</a><small class="d-block text-muted">{{ supplier_status_labels[contract.supplier.status] }}</small></dd>
+<dt>Proyecto</dt><dd>{{ contract.project_name }}</dd>
+<dt>Líder</dt><dd>{{ contract.project_leader }}</dd>
+<dt>Tecnología autorizada</dt><dd>{{ contract.authorized_technology }}</dd>
+<dt>Monto autorizado</dt><dd>{{ contract.authorized_amount|money }} {{ contract.currency }}</dd>
+<dt>Vigencia</dt><dd>{{ contract.start_date.strftime('%d/%m/%Y') }} — {{ contract.end_date.strftime('%d/%m/%Y') }}</dd>
+<dt>Estatus</dt><dd>{{ status_labels[contract.status] }}</dd>
+</dl></section>
+<section class="panel requirements-panel"><h2>Requisitos del contrato</h2>
+<p class="requirements-summary {% if checklist.pending %}text-danger{% else %}text-success{% endif %}">{{ checklist.label }}</p>
+<div class="document-list">{% for row in checklist.rows %}<div class="document-row"><i class="bi {% if row.documents %}bi-check-circle-fill text-success{% elif row.required %}bi-circle text-danger{% else %}bi-circle text-muted{% endif %}"></i><span><strong>{{ row.document_type.name }}</strong><small class="requirement-status">{{ "Obligatorio" if row.required else "Opcional" }} · {{ "Cargado" if row.documents else "Pendiente" }}</small>{% if row.document_type.description %}<small>{{ row.document_type.description }}</small>{% endif %}{% for document in row.documents %}<a class="contract-file" href="/contracts/{{ contract.id }}/documents/{{ document.id }}/download"><i class="bi bi-download"></i> {{ document.original_filename }} · {{ document.uploaded_at|business_date }}</a>{% endfor %}</span></div>{% endfor %}</div>
+{% if checklist.others %}<h3 class="requirements-others">Otros documentos del contrato</h3>
+<div class="document-list">{% for other in checklist.others %}<div class="document-row"><i class="bi bi-file-earmark text-muted"></i><span><strong>{{ other.name }}</strong><small>{{ other.document.original_filename }} · Ya no es requisito del contrato</small></span><a class="icon-action" href="/contracts/{{ contract.id }}/documents/{{ other.document.id }}/download" aria-label="Descargar {{ other.name }}"><i class="bi bi-download"></i></a></div>{% endfor %}</div>{% endif %}
+</section>
+</div>
+{% if can_activate %}<section class="panel access-panel contract-activation"><div class="panel-header"><div><h2>Activación</h2><p>Un contrato activo se ofrece al proveedor para registrar facturas.</p></div></div>
+<form method="post" action="/contracts/{{ contract.id }}/activate" id="activate-form" class="access-actions" data-confirm="Se activará el contrato {{ contract.project_name }} de {{ contract.supplier.business_name }}. El proveedor podrá registrar facturas con él.">
+<input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+<button class="btn btn-primary btn-sm" id="activate-submit"{% if activation_blocker %} disabled{% endif %}><i class="bi bi-check2-circle"></i> Activar contrato</button>{% if activation_blocker %}<small class="authorize-hint">{{ activation_blocker }}{% if contract.supplier.status.value != 'ACTIVE' %} · <a href="/suppliers/{{ contract.supplier.id }}">Ver proveedor</a>{% endif %}</small>{% else %}<small class="text-muted">Requisitos completos y proveedor autorizado.</small>{% endif %}</form>
+<div class="modal fade" id="activate-confirm" tabindex="-1" aria-labelledby="activate-confirm-title" aria-hidden="true"><div class="modal-dialog modal-dialog-centered"><div class="modal-content">
+<div class="modal-header"><h2 class="modal-title fs-5" id="activate-confirm-title">Activar contrato</h2><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button></div>
+<div class="modal-body"><p id="activate-confirm-text" class="mb-0"></p></div>
+<div class="modal-footer"><button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancelar</button><button type="button" class="btn btn-primary" id="activate-confirm-accept">Activar contrato</button></div>
+</div></div></div>
+</section>{% endif %}
+{% if can_upload %}<details class="panel admin-create"{% if checklist.pending %} open{% endif %}><summary>+ Agregar documento del contrato</summary>
+<form method="post" action="/contracts/{{ contract.id }}/documents" enctype="multipart/form-data" class="form-grid">
+<input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+<div class="field"><label for="contract-document-type">Documento</label><select id="contract-document-type" name="document_type" class="form-select">{% for row in checklist.rows %}<option value="{{ row.document_type.code }}">{{ row.document_type.name }}{% if row.required %} (obligatorio){% endif %}{% if row.document_type.allows_multiple %} · varios archivos{% endif %}</option>{% endfor %}</select></div>
+{% if replaceable %}<div class="field"><label for="contract-replaces">Reemplaza a</label><select id="contract-replaces" name="replaces_document_id" class="form-select"><option value="">Ninguno: agregar un archivo</option>{% for document_type, document in replaceable %}<option value="{{ document.id }}">{{ document_type.name }}: {{ document.original_filename }}</option>{% endfor %}</select><small class="text-muted">Sólo para los documentos con varios archivos. Uno de un solo archivo reemplaza al vigente.</small></div>{% endif %}
+<div class="field span-2"><label for="contract-upload">Archivo</label><input id="contract-upload" type="file" name="upload" class="form-control" required></div>
+<button class="btn btn-primary">Guardar documento</button>
+</form></details>{% endif %}
+<section class="panel"><div class="panel-header"><div><h2>Enmiendas del monto</h2><p>Historial de cambios del monto autorizado.</p></div></div>
+{% if contract.amendments %}<ul class="amendment-list contract-amendments">{% for a in contract.amendments %}<li><span class="mono">{{ a.created_at.strftime('%d/%m/%Y %H:%M') }}</span> · {{ a.author.email }}<br>{{ a.previous_amount|money }} → <strong>{{ a.new_amount|money }}</strong><br><small>{{ a.reason }}</small></li>{% endfor %}</ul>{% else %}<p class="contract-amendments text-muted">Monto original, sin enmiendas.</p>{% endif %}
+</section>{% endblock %}
+{% block scripts %}{% if can_activate %}<script src="{{ url_for('static', path='/js/contract_activate.js') }}"></script>{% endif %}{% endblock %}

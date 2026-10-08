@@ -1,0 +1,32 @@
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+extend-exclude = ["app/static/vendor"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]
+
+[tool.ruff.lint.per-file-ignores]
+# Los scripts agregan la raiz del proyecto a sys.path antes de importar `app`.
+"scripts/*" = ["E402"]
+
+[tool.ruff.lint.isort]
+# Sin esto, el directorio alembic/ del proyecto hace que ruff trate al paquete como propio.
+known-third-party = ["alembic"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# Umbral = cobertura medida tras migrar a PostgreSQL (93.76 %), redondeada hacia abajo; nunca menor que 80.
+addopts = "--cov=app --cov-report=term-missing:skip-covered --cov-report=xml --cov-fail-under=93"
+filterwarnings = [
+    # PyMuPDF (SWIG) emite estas advertencias al importarse en Python 3.12+.
+    "ignore:builtin type Swig.* has no __module__ attribute:DeprecationWarning",
+    "ignore:builtin type swigvarlink has no __module__ attribute:DeprecationWarning",
+]
+
+[tool.coverage.run]
+source = ["app"]
+branch = true
+
+[tool.coverage.report]
+exclude_also = ["if TYPE_CHECKING:"]

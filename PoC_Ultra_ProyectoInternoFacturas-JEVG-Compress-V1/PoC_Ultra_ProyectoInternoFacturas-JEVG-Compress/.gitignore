@@ -6,16 +6,31 @@ __pycache__/
 .coverage
 htmlcov/
 data/*.db
+data/*.db-*
 data/*.sqlite*
 storage/invoices/*
 storage/suppliers/*
 storage/temp/*
+storage/contracts/*
 !storage/**/.gitkeep
 logs/*
 !logs/.gitkeep
+backups/
+outbox/
+dist/
+Microsoft/
 *.log
 .idea/
 .vscode/
 *.key
 *.pem
 
+coverage.xml
+.coverage
+
+# Artefactos regenerables de la suite Playwright de HUs
+playwright-report/
+test-results/
+# Vercel CLI: enlace del proyecto y variables descargadas (vercel link / env pull)
+.vercel
+.env.local

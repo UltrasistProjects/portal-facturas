@@ -1,0 +1,22 @@
+{% extends "base.html" %}{% block title %}Plantilla {{ spec.label }}{% endblock %}{% block content %}
+{% set url = "/admin/notification-templates/" ~ spec.event.value %}
+<div class="breadcrumb"><a href="/admin/notification-templates">Plantillas de correo</a><i class="bi bi-chevron-right"></i>{{ spec.label }}</div>
+<div class="page-heading"><div><span class="eyebrow">CONFIGURACION</span><h1>Plantilla: {{ spec.label }}</h1><p>Destinatario: {{ spec.recipient_label }}</p></div></div>
+{% if notice %}<div class="alert alert-info">{{ notice }}</div>{% endif %}
+{% if error %}<div class="alert alert-danger">{{ error }} <a href="{{ url }}">Abrir la versión vigente</a></div>{% endif %}
+{% if errors %}<div class="alert alert-danger"><strong>Corrija la plantilla:</strong><ul class="template-errors">{% for item in errors %}<li>{{ item }}</li>{% endfor %}</ul></div>{% endif %}
+<div class="two-column">
+<section class="panel"><form method="post" action="{{ url }}" class="upload-form"><input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}"><input type="hidden" name="version" value="{{ version }}">
+<div class="field"><label for="subject">Asunto</label><input id="subject" name="subject" class="form-control" value="{{ subject }}"></div>
+<div class="field"><label for="body">Cuerpo (texto plano)</label><textarea id="body" name="body" class="form-control template-body" rows="16">{{ body }}</textarea></div>
+<div class="form-actions template-actions"><a class="btn btn-light" href="{{ url }}?default=1">Cargar texto predeterminado</a><button class="btn btn-light" formaction="{{ url }}/preview"><i class="bi bi-eye"></i> Vista previa</button><button class="btn btn-primary">Guardar</button></div>
+</form></section>
+<section class="panel"><div class="panel-header"><div><h2>Variables</h2><p>Escriba cada variable entre llaves dobles. Las obligatorias deben aparecer en el cuerpo.</p></div></div><div class="table-responsive"><table class="table enterprise-table"><thead><tr><th>Variable</th><th>Contenido</th><th>Ejemplo</th></tr></thead><tbody>
+{% for item in spec.variable_rows() %}<tr><td><span class="mono">{{ item.tag }}</span>{% if item.required %}<small>Obligatoria</small>{% endif %}</td><td>{{ item.description }}</td><td>{{ item.example }}</td></tr>
+{% endfor %}</tbody></table></div></section>
+</div>
+{% if preview %}<section class="panel template-preview"><div class="panel-header"><div><h2>Vista previa</h2><p>Así se verá el correo, compuesto con datos de ejemplo. La plantilla no se ha guardado.</p></div></div><dl class="data-list"><dt>Asunto</dt><dd>{{ preview.subject }}</dd></dl>
+{# sandbox sin allow-scripts: nada se ejecuta en el correo; allow-same-origin solo deja que app.js ajuste la altura. #}
+<iframe class="email-preview" title="Vista previa del correo" sandbox="allow-same-origin" srcdoc="{{ preview_html }}"></iframe>
+<details class="template-preview-plain"><summary>Versión de texto plano</summary><div class="template-preview-body">{{ preview.body }}</div></details></section>{% endif %}
+{% endblock %}

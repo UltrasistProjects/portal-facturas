@@ -1,6 +1,8 @@
 from datetime import datetime, timezone
 from types import SimpleNamespace
+
 import pytest
+
 from app.core.constants import InvoiceStatus
 from app.rules.date_rules import date_rules
 from app.schemas import ValidationOutcome
@@ -13,7 +15,8 @@ def result(status, severity):
 
 
 def test_regla_fecha_despues_del_20_es_warning():
-    invoice = SimpleNamespace(created_at=datetime(2026, 8, 21, tzinfo=timezone.utc))
+    # 21 de agosto 06:00 en Ciudad de Mexico (el corte se evalua en la zona de negocio).
+    invoice = SimpleNamespace(created_at=datetime(2026, 8, 21, 12, 0, tzinfo=timezone.utc))
     check = date_rules(invoice)[0]
     assert check.status == "WARNING"
     assert "siguiente ciclo" in check.message
@@ -29,7 +32,9 @@ def test_score_explicable_y_bloqueo():
 
 def test_transicion_invalida_rechazada():
     class FakeDB:
-        def add(self, value): pass
-    invoice = SimpleNamespace(status=InvoiceStatus.DRAFT, id=1, submitted_at=None, reviewed_at=None, reviewed_by=None)
-    with pytest.raises(ValueError): transition_invoice(FakeDB(), invoice, InvoiceStatus.ACCEPTED, 1)
+        def add(self, value):
+            pass
 
+    invoice = SimpleNamespace(status=InvoiceStatus.DRAFT, id=1, submitted_at=None, reviewed_at=None, reviewed_by=None)
+    with pytest.raises(ValueError):
+        transition_invoice(FakeDB(), invoice, InvoiceStatus.ACCEPTED, 1)

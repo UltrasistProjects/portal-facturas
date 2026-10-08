@@ -1,0 +1,21 @@
+{
+  "id": "HU-16",
+  "run": "RMUY9TNYO",
+  "inicio": "2026-10-07T15:38:57.800Z",
+  "fin": "2026-10-07T15:38:57.804Z",
+  "estado": "BLOCKED",
+  "bloqueo": "Depende de HU-15, que no dejó el dato «hu15.factura» (resultado de HU-15: FAIL).",
+  "notas": [],
+  "prueba": {
+    "titulo": "HU-16 · Envío de factura por proveedor internacional",
+    "archivo": "13-HU-16-envio-factura-internacional.spec.ts"
+  },
+  "escenarios": [
+    {
+      "nombre": "Precondiciones",
+      "estado": "BLOCKED",
+      "motivo": "Depende de HU-15, que no dejó el dato «hu15.factura» (resultado de HU-15: FAIL).",
+      "pasos": []
+    }
+  ]
+}

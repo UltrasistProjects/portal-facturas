@@ -1,0 +1,169 @@
+{
+  "id": "HU-21",
+  "run": "RMUY9TNYO",
+  "inicio": "2026-10-07T15:39:13.478Z",
+  "fin": "2026-10-07T15:39:22.536Z",
+  "estado": "PASS",
+  "bloqueo": null,
+  "notas": [],
+  "prueba": {
+    "titulo": "HU-21 · Requisitos de alta del proveedor",
+    "archivo": "19-HU-21-requisitos-alta.spec.ts"
+  },
+  "escenarios": [
+    {
+      "nombre": "Requisitos de alta configurados por tipo de proveedor",
+      "estado": "PASS",
+      "pasos": [
+        {
+          "paso": "Abrir Requisitos mínimos › Alta de proveedor",
+          "esperado": "La tabla muestra cada requisito con un nivel para Persona moral, Persona física e Internacional; los siete documentos de la solicitud son obligatorios para la persona moral.",
+          "obtenido": "Columnas: REQUISITO | PERSONA MORAL | PERSONA FÍSICA | INTERNACIONAL | ACCIONES. Obligatorios para persona moral: Acta constitutiva, Poderes, Cédula fiscal, Identificación del representante legal, Comprobante de domicilio del representante legal, Comprobante de domicilio, Estado de cuenta bancario.",
+          "estado": "PASS",
+          "evidencias": [
+            {
+              "archivo": "HU-21/01-configuracion-requisitos.png",
+              "descripcion": "Requisitos de alta por tipo de proveedor: los siete de la solicitud, obligatorios para la persona moral.",
+              "tipo": "aplicacion"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "nombre": "El alta pide los requisitos y no permite autorizar sin ellos",
+      "estado": "PASS",
+      "pasos": [
+        {
+          "paso": "Dar de alta la persona moral \"QA Hotel Requisitos RMUY9TNYO SA de CV\" con el formulario de proveedores",
+          "esperado": "El proveedor queda \"Registrado\" y su expediente indica \"Faltan 7 requisitos obligatorios\"; el botón \"Autorizar proveedor\" está deshabilitado.",
+          "obtenido": "Expediente 84: \"Faltan 7 requisitos obligatorios\"; botón \"Autorizar proveedor\" deshabilitado.",
+          "estado": "PASS",
+          "evidencias": [
+            {
+              "archivo": "HU-21/02-expediente-requisitos-pendientes.png",
+              "descripcion": "Expediente recién dado de alta: siete requisitos obligatorios pendientes y la autorización deshabilitada.",
+              "tipo": "aplicacion"
+            }
+          ]
+        },
+        {
+          "paso": "Buscarlo en el listado de proveedores",
+          "esperado": "No tiene casilla de selección; muestra \"Faltan 7 requisitos\" con la liga a su expediente.",
+          "obtenido": "Fila: \"Faltan 7 requisitos QA Hotel Requisitos RMUY9TNYO SA de CV hotel.rmuy9tnyo@qa.example QAH260101NYO Persona Moral Registrado Faltan 7 0\".",
+          "estado": "PASS",
+          "evidencias": [
+            {
+              "archivo": "HU-21/03-listado-sin-casilla.png",
+              "descripcion": "Listado: el proveedor sin requisitos no se puede seleccionar para autorizar.",
+              "tipo": "aplicacion"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "nombre": "Con los requisitos completos se autoriza desde el expediente",
+      "estado": "PASS",
+      "pasos": [
+        {
+          "paso": "Cargar desde el expediente un documento por cada requisito obligatorio",
+          "esperado": "El expediente indica \"Requisitos de alta completos\" y el botón \"Autorizar proveedor\" se habilita.",
+          "obtenido": "Cargados: Acta constitutiva, Poderes, Cédula fiscal, Identificación del representante legal, Comprobante de domicilio del representante legal, Comprobante de domicilio, Estado de cuenta bancario.",
+          "estado": "PASS",
+          "evidencias": [
+            {
+              "archivo": "HU-21/04-requisitos-completos.png",
+              "descripcion": "Expediente con los siete requisitos cargados.",
+              "tipo": "aplicacion"
+            }
+          ]
+        },
+        {
+          "paso": "Pulsar \"Autorizar proveedor\" y confirmar",
+          "esperado": "El proveedor queda \"Autorizado\" y el resumen indica \"Autorizado · Credenciales enviadas\".",
+          "obtenido": "Resumen: \"1 autorizados · 0 omitidos · 0 no autorizados\".",
+          "estado": "PASS",
+          "evidencias": [
+            {
+              "archivo": "HU-21/05-autorizado-desde-expediente.png",
+              "descripcion": "Resultado de la autorización desde el expediente.",
+              "tipo": "aplicacion"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "nombre": "Editar y eliminar un tipo desde su fila",
+      "estado": "PASS",
+      "pasos": [
+        {
+          "paso": "Crear el tipo temporal \"Requisito temporal QA RMUY9TNYO\"",
+          "esperado": "La fila del tipo muestra las acciones \"Editar\" y \"Eliminar\", igual que las filas de los tipos del sistema.",
+          "obtenido": "Fila \"Requisito temporal QA RMUY9TNYO\" con Editar y Eliminar; las 14 filas de la tabla tienen ambas acciones.",
+          "estado": "PASS",
+          "evidencias": [
+            {
+              "archivo": "HU-21/06-acciones-editar-eliminar.png",
+              "descripcion": "Todas las filas, también las del sistema, con Editar y Eliminar.",
+              "tipo": "aplicacion"
+            }
+          ]
+        },
+        {
+          "paso": "Pulsar \"Editar\" y renombrarlo a \"Requisito temporal QA RMUY9TNYO editado\"",
+          "esperado": "Se abre su formulario de edición y, al guardar, el portal responde \"Requisito actualizado\".",
+          "obtenido": "Aviso \"Requisito actualizado\"; la fila ahora dice \"Requisito temporal QA RMUY9TNYO editado\".",
+          "estado": "PASS",
+          "evidencias": [
+            {
+              "archivo": "HU-21/07-formulario-edicion.png",
+              "descripcion": "Formulario de edición abierto desde la fila.",
+              "tipo": "aplicacion"
+            }
+          ]
+        },
+        {
+          "paso": "Pulsar \"Eliminar\" y no confirmar",
+          "esperado": "Aparece la confirmación con el nombre del tipo; al cerrarla el tipo sigue en la tabla.",
+          "obtenido": "Confirmación \"¿Eliminar «Requisito temporal QA RMUY9TNYO editado»?\" mostrada y cerrada; el tipo sigue listado.",
+          "estado": "PASS",
+          "evidencias": [
+            {
+              "archivo": "HU-21/08-confirmacion-eliminar.png",
+              "descripcion": "Confirmación antes de eliminar.",
+              "tipo": "aplicacion"
+            }
+          ]
+        },
+        {
+          "paso": "Pulsar \"Eliminar\" y confirmar",
+          "esperado": "El portal responde \"Requisito eliminado\" y el tipo deja de listarse: la baja es lógica.",
+          "obtenido": "Aviso \"Requisito eliminado\"; \"Requisito temporal QA RMUY9TNYO editado\" ya no aparece en la configuración.",
+          "estado": "PASS",
+          "evidencias": [
+            {
+              "archivo": "HU-21/09-tipo-eliminado.png",
+              "descripcion": "Aviso \"Requisito eliminado\".",
+              "tipo": "aplicacion"
+            }
+          ]
+        },
+        {
+          "paso": "Pulsar \"Mostrar eliminados\"",
+          "esperado": "El tipo eliminado se conserva: aparece con su fecha de eliminación y la acción \"Restaurar\".",
+          "obtenido": "\"Requisito temporal QA RMUY9TNYO editado\" listado como eliminado el 07/10/2026 09:39.",
+          "estado": "PASS",
+          "evidencias": [
+            {
+              "archivo": "HU-21/10-tipo-en-eliminados.png",
+              "descripcion": "\"Requisito temporal QA RMUY9TNYO editado\" en la lista de eliminados, con \"Restaurar\".",
+              "tipo": "aplicacion"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

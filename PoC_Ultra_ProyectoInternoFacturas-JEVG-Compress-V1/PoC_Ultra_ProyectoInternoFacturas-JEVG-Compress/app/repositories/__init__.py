@@ -1,2 +1,1 @@
 """Consultas de persistencia reutilizables."""
-

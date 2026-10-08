@@ -1,0 +1,109 @@
+{
+  "id": "HU-13",
+  "run": "RMUY9TNYO",
+  "inicio": "2026-10-07T15:38:34.006Z",
+  "fin": "2026-10-07T15:38:39.779Z",
+  "estado": "PASS",
+  "bloqueo": null,
+  "notas": [],
+  "prueba": {
+    "titulo": "HU-13 · Envío de factura por proveedor nacional",
+    "archivo": "11-HU-13-envio-factura-nacional.spec.ts"
+  },
+  "escenarios": [
+    {
+      "nombre": "Envío de una factura cuyo XML coincide con las Reglas de Validación (RN-HU13-02)",
+      "estado": "PASS",
+      "pasos": [
+        {
+          "paso": "Abrir la factura QA-RMUY9TNYO-N1 (\"Cargada\", de HU-12) y pulsar \"Enviar a validación\"",
+          "esperado": "El sistema valida el XML contra las Reglas de Validación; sin reglas en FAIL, la factura pasa a \"Enviada\" con el aviso \"Factura enviada a validación\".",
+          "obtenido": "Aviso \"Factura enviada a validación\"; estatus \"Enviada\"; \"Gestionar documentos\" ya no se ofrece.",
+          "estado": "PASS",
+          "evidencias": [
+            {
+              "archivo": "HU-13/01-antes-de-enviar.png",
+              "descripcion": "Detalle de QA-RMUY9TNYO-N1 en \"Cargada\" con el botón \"Enviar a validación\".",
+              "tipo": "aplicacion"
+            },
+            {
+              "archivo": "HU-13/02-factura-enviada.png",
+              "descripcion": "QA-RMUY9TNYO-N1 enviada: estatus \"Enviada\" y sin opción de modificar documentos.",
+              "tipo": "aplicacion"
+            }
+          ]
+        },
+        {
+          "paso": "Revisar en la matriz de evidencia las comparaciones del XML con las Reglas de Validación",
+          "esperado": "XML-002 (RFC), XML-009 (razón social), XML-010 (código postal) y FIN-004 (UUID no duplicado) resultan PASS.",
+          "obtenido": "XML-002 PASS (RFC receptor correcto); XML-009 PASS (Razón social del receptor correcta); XML-010 PASS (Código postal del receptor correcto); FIN-004 PASS (UUID no duplicado).",
+          "estado": "PASS",
+          "evidencias": [
+            {
+              "archivo": "HU-13/03-reglas-xml-pass.png",
+              "descripcion": "Matriz de evidencia: grupo XML (XML-001 a XML-010) en PASS frente a las Reglas de Validación.",
+              "tipo": "aplicacion"
+            },
+            {
+              "archivo": "HU-13/04-fin-004-uuid-unico.png",
+              "descripcion": "Matriz de evidencia: FIN-004 \"UUID no duplicado\" en PASS.",
+              "tipo": "aplicacion"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "nombre": "El XML no coincide con las Reglas de Validación: el envío no procede",
+      "estado": "PASS",
+      "pasos": [
+        {
+          "paso": "Registrar QA-RMUY9TNYO-N2 con un XML cuyo código postal del receptor es 06600 (configurado: 03930)",
+          "esperado": "La factura queda \"Cargada\" con sus 4 obligatorios.",
+          "obtenido": "Factura #95 \"QA-RMUY9TNYO-N2\" en \"Cargada\".",
+          "estado": "PASS",
+          "evidencias": []
+        },
+        {
+          "paso": "Pulsar \"Enviar a validación\"",
+          "esperado": "El envío no procede: se muestra \"El envío no procedió\" y \"Reglas que impiden el envío\" con XML-010 (esperado 03930, detectado 06600); la factura sigue \"Cargada\".",
+          "obtenido": "\"El envío no procedió. Corrija las reglas que lo impiden y vuelva a enviar la factura.\"; bloqueo: XML-010 Código postal del receptor incorrecto 03930 06600; estatus \"Cargada\".",
+          "estado": "PASS",
+          "evidencias": [
+            {
+              "archivo": "HU-13/05-envio-rechazado-reglas.png",
+              "descripcion": "El envío no procedió: XML-010 con el valor esperado (03930) y el detectado (06600).",
+              "tipo": "aplicacion"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "nombre": "Factura duplicada por el folio fiscal (UUID) del XML (RN-HU13-01)",
+      "estado": "PASS",
+      "pasos": [
+        {
+          "paso": "Registrar QA-RMUY9TNYO-N3 con un XML que repite el UUID de QA-RMUY9TNYO-N1",
+          "esperado": "La factura queda \"Cargada\" con sus 4 obligatorios.",
+          "obtenido": "Factura #96 \"QA-RMUY9TNYO-N3\" en \"Cargada\" (UUID B19D73C6-3215-46F4-94AE-502B398CB8C9).",
+          "estado": "PASS",
+          "evidencias": []
+        },
+        {
+          "paso": "Pulsar \"Enviar a validación\"",
+          "esperado": "El envío no procede por FIN-004 (\"Posible factura duplicada por UUID\"), sin revelar datos de la otra factura; la factura sigue \"Cargada\".",
+          "obtenido": "Bloqueo: FIN-004 Posible factura duplicada por UUID UUID unico B19D73C6-3215-46F4-94AE-502B398CB8C9; no se muestra el número de la otra factura; estatus \"Cargada\".",
+          "estado": "PASS",
+          "evidencias": [
+            {
+              "archivo": "HU-13/06-envio-rechazado-duplicado.png",
+              "descripcion": "El envío no procedió: FIN-004, UUID ya registrado en otra factura.",
+              "tipo": "aplicacion"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

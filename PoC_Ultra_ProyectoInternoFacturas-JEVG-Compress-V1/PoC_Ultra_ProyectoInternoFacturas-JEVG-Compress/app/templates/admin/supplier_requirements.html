@@ -1,0 +1,35 @@
+{% extends "base.html" %}{% block title %}Requisitos de alta{% endblock %}{% block content %}
+{% from "admin/_type_actions.html" import type_actions, delete_forms, restore_action, deleted_toggle, type_origin, edit_open with context %}
+{% set base_url = "/admin/supplier-requirements" %}
+{% macro level_select(name, current, label, field_id=None) %}<select{% if field_id %} id="{{ field_id }}"{% endif %} name="{{ name }}" class="form-select form-select-sm" aria-label="{{ label }}">{% for level, level_label in levels.items() %}<option value="{{ level.value }}"{% if current == level or (current is none and level.value == 'NOT_APPLICABLE') %} selected{% endif %}>{{ level_label }}</option>{% endfor %}</select>{% endmacro %}
+<div class="page-heading"><div><span class="eyebrow">ADMINISTRACION</span><h1>Requisitos de alta</h1><p>Documentos que debe tener el expediente del proveedor para poder autorizarlo, según su tipo.</p></div></div>
+{% if error %}<div class="alert alert-danger">{{ error }}</div>{% endif %}{% if notice %}<div class="alert alert-success">{{ notice }}</div>{% endif %}
+<section class="panel"><div class="panel-header"><div><h2>Configuración por tipo de proveedor</h2><p>Obligatorio: el proveedor no se autoriza sin el documento y SUP-003 lo exige al validar sus facturas. Opcional: se pide pero no se exige. No aplica: no se pide. Los cambios rigen para las autorizaciones siguientes: no cambian a los proveedores ya autorizados.</p></div><div>{{ deleted_toggle(base_url) }}</div></div>
+<form method="post" action="{{ base_url }}"><input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}"><input type="hidden" name="config_version" value="{{ config_version }}">
+<div class="table-responsive"><table class="table enterprise-table requirements-table"><thead><tr><th>Requisito</th>{% for key, label in profiles %}<th>{{ label }}</th>{% endfor %}<th>Acciones</th></tr></thead><tbody>
+{% for t in active_types %}<tr><td><strong>{{ t.name }}</strong><small>{{ type_origin(t, "Requisito del sistema", "Requisito del Administrador") }}{% if t.description %} · {{ t.description }}{% endif %}</small></td>{% for key, label in profiles %}<td>{{ level_select(key ~ '__' ~ t.code, t[key ~ '_requirement'], t.name ~ ' · ' ~ label) }}</td>{% endfor %}<td>{{ type_actions(t) }}</td></tr>{% endfor %}
+</tbody></table></div>
+<div class="form-actions m-0 px-4 pb-4"><button class="btn btn-primary">Guardar configuración</button></div></form></section>
+
+<section class="panel"><details class="admin-create"><summary>Nuevo requisito</summary>
+<form method="post" action="{{ base_url }}/types" class="form-grid"><input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+<div class="field"><label for="new-name">Nombre</label><input id="new-name" name="name" class="form-control" minlength="3" maxlength="80" required></div>
+<div class="field"><label for="new-description">Descripción (opcional)</label><input id="new-description" name="description" class="form-control" maxlength="300"></div>
+{% for key, label in profiles %}<div class="field"><label for="new-{{ key }}">{{ label }}</label>{{ level_select(key ~ '_requirement', None, label, 'new-' ~ key) }}</div>{% endfor %}
+<p class="text-muted span-2 mb-0">Los niveles empiezan en "No aplica": crear un requisito no cambia nada hasta que lo haga obligatorio u opcional.</p>
+<div class="form-actions span-2"><button class="btn btn-primary">Crear requisito</button></div></form></details></section>
+
+<section class="panel"><div class="panel-header"><div><h2>Editar requisitos</h2><p>Nombre y descripción de cualquier requisito. La clave no cambia y los documentos ya cargados se conservan.</p></div></div>
+{% for t in active_types + deleted_types %}<details id="editar-{{ t.id }}" class="admin-create border-bottom"{{ edit_open(t) }}><summary>{{ t.name }} <small class="text-muted">· {{ t.code }}{% if not t.is_active %} · Eliminado{% endif %}</small></summary>
+<form method="post" action="{{ base_url }}/types/{{ t.id }}" class="form-grid"><input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+<div class="field"><label for="name-{{ t.id }}">Nombre</label><input id="name-{{ t.id }}" name="name" class="form-control" value="{{ t.name }}" minlength="3" maxlength="80" required></div>
+<div class="field"><label for="description-{{ t.id }}">Descripción (opcional)</label><input id="description-{{ t.id }}" name="description" class="form-control" value="{{ t.description or '' }}" maxlength="300"></div>
+<div class="form-actions span-2"><button class="btn btn-primary">Guardar cambios</button></div></form></details>
+{% else %}<p class="empty-state">No hay requisitos.</p>{% endfor %}</section>
+
+{% if show_deleted %}<section class="panel inactive-types" id="eliminados"><div class="panel-header"><div><h2>Requisitos eliminados</h2><p>No se piden ni se exigen. Sus documentos ya cargados se conservan. Al restaurarlos recuperan sus niveles.</p></div></div>
+{% if deleted_types %}<div class="table-responsive"><table class="table enterprise-table"><thead><tr><th>Requisito</th>{% for key, label in profiles %}<th>{{ label }}</th>{% endfor %}<th>Eliminado</th><th>Acciones</th></tr></thead><tbody>
+{% for t in deleted_types %}<tr><td><strong>{{ t.name }}</strong><small>{{ t.code }}</small></td>{% for key, label in profiles %}<td>{{ levels[t[key ~ '_requirement']] }}</td>{% endfor %}<td>{{ t.deleted_at|business_datetime }}</td><td>{{ restore_action(t, base_url) }}</td></tr>{% endfor %}
+</tbody></table></div>{% else %}<p class="empty-state">No hay requisitos eliminados.</p>{% endif %}</section>{% endif %}
+{{ delete_forms(active_types, base_url) }}
+{% endblock %}

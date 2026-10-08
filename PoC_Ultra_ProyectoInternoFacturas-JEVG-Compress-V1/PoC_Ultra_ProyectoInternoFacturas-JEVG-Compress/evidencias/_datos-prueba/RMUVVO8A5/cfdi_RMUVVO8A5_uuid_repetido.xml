@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- DOCUMENTO FICTICIO PARA PRUEBAS. NO ES UN CFDI TIMBRADO VALIDO. -->
+<cfdi:Comprobante xmlns:cfdi="http://www.sat.gob.mx/cfd/4" xmlns:tfd="http://www.sat.gob.mx/TimbreFiscalDigital" Version="4.0" Fecha="2026-08-15T10:30:00" SubTotal="100000.00" Total="116000.00" Moneda="MXN" FormaPago="99" MetodoPago="PPD" TipoDeComprobante="I">
+  <cfdi:Emisor Rfc="TIC210101ABC" Nombre="TECNOLOGIA INTEGRAL DEL CENTRO SA DE CV"/>
+  <cfdi:Receptor Rfc="ULT940623AG0" Nombre="ULTRASIST" DomicilioFiscalReceptor="03930" RegimenFiscalReceptor="601" UsoCFDI="G03"/>
+  <cfdi:Conceptos><cfdi:Concepto Cantidad="1" ValorUnitario="100000.00" Importe="100000.00" Descripcion="08 Servicios desarrollo Power Automate"><cfdi:Impuestos><cfdi:Traslados><cfdi:Traslado Impuesto="002" TasaOCuota="0.160000" Importe="16000.00"/></cfdi:Traslados></cfdi:Impuestos></cfdi:Concepto></cfdi:Conceptos>
+  <cfdi:Impuestos TotalImpuestosTrasladados="16000.00"/><cfdi:Complemento><tfd:TimbreFiscalDigital UUID="74E4D61B-D0D2-48AF-992D-823A9B9D1466"/></cfdi:Complemento>
+</cfdi:Comprobante>
+

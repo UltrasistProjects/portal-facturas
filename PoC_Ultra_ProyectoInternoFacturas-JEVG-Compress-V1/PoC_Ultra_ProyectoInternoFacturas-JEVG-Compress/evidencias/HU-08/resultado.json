@@ -1,0 +1,133 @@
+{
+  "id": "HU-08",
+  "run": "RMUY9TNYO",
+  "inicio": "2026-10-07T15:38:25.630Z",
+  "fin": "2026-10-07T15:38:30.317Z",
+  "estado": "PASS",
+  "bloqueo": null,
+  "notas": [],
+  "prueba": {
+    "titulo": "HU-08 · Configuración de correos de notificación",
+    "archivo": "09-HU-08-correos-notificacion.spec.ts"
+  },
+  "escenarios": [
+    {
+      "nombre": "Consulta de destinatarios, copias por evento y transporte",
+      "estado": "PASS",
+      "pasos": [
+        {
+          "paso": "Abrir Administración › Notificaciones",
+          "esperado": "Se muestra el buzón \"Recepción de Facturas\" (recepcionfacturas@ultrasist.com.mx), las copias por evento (Autorizada, Rechazada, Observaciones, Cancelada) y el transporte vigente.",
+          "obtenido": "Buzón: \"recepcionfacturas@ultrasist.com.mx\nrecepcion.qa.rmuvvrqw1@ultrasist-qa.example\"; eventos con copias: Autorizada, Rechazada, Observaciones, Cancelada, Pagada, Complemento de pago adjuntado; transporte: Transporte Archivo (no se envían correos) Directorio de salida /home/Vadak/Desktop/PORTAL-FACTURACION_ULTRASIST/portal-facturas/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress-V1/PoC_Ultra_ProyectoInternoFacturas-JEVG-Compress/evidencias/_correos Remitente Portal de Proveedores ULTRASIST <no-reply@portal.local>.",
+          "estado": "PASS",
+          "evidencias": [
+            {
+              "archivo": "HU-08/01-destinatarios.png",
+              "descripcion": "Destinatarios: buzón \"Recepción de Facturas\" y copias por evento.",
+              "tipo": "aplicacion"
+            },
+            {
+              "archivo": "HU-08/02-transporte-y-prueba.png",
+              "descripcion": "Correo de prueba y transporte vigente (archivo .eml en este ambiente de pruebas).",
+              "tipo": "aplicacion"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "nombre": "Validación de las direcciones capturadas",
+      "estado": "PASS",
+      "pasos": [
+        {
+          "paso": "Agregar \"correo-sin-arroba\" al buzón y guardar",
+          "esperado": "El guardado se rechaza con un error de dirección inválida y la configuración no cambia.",
+          "obtenido": "Errores: Recepción de Facturas: «correo-sin-arroba» no es un correo válido. Al recargar, el buzón conserva su valor anterior: \"recepcionfacturas@ultrasist.com.mx, recepcion.qa.rmuvvrqw1@ultrasist-qa.example\".",
+          "estado": "PASS",
+          "evidencias": [
+            {
+              "archivo": "HU-08/03-direccion-invalida.png",
+              "descripcion": "Error al guardar una dirección inválida en el buzón.",
+              "tipo": "aplicacion"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "nombre": "Definir los destinatarios del buzón \"Recepción de Facturas\" y la copia del evento Cancelada",
+      "estado": "PASS",
+      "pasos": [
+        {
+          "paso": "Agregar recepcion.qa.rmuy9tnyo@ultrasist-qa.example al buzón y auditoria.qa.rmuy9tnyo@ultrasist-qa.example como copia de \"Cancelada\"; guardar",
+          "esperado": "Se guarda la configuración (\"Configuración guardada\") con ambas listas.",
+          "obtenido": "Aviso \"Configuración guardada\"; buzón: recepcionfacturas@ultrasist.com.mx, recepcion.qa.rmuy9tnyo@ultrasist-qa.example; Cc Cancelada: auditoria.qa.rmuy9tnyo@ultrasist-qa.example.",
+          "estado": "PASS",
+          "evidencias": [
+            {
+              "archivo": "HU-08/04-destinatarios-guardados.png",
+              "descripcion": "Configuración guardada: buzón con dos direcciones y copia en \"Cancelada\".",
+              "tipo": "aplicacion"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "nombre": "Correo de prueba con la configuración vigente",
+      "estado": "PASS",
+      "pasos": [
+        {
+          "paso": "Enviar un correo de prueba a prueba.qa.rmuy9tnyo@ultrasist-qa.example",
+          "esperado": "Se informa \"Correo de prueba enviado a …\" y la bitácora registra el envío.",
+          "obtenido": "Aviso \"Correo de prueba enviado a prueba.qa.rmuy9tnyo@ultrasist-qa.example\"; bitácora: 07/10/2026 09:38 Prueba prueba.qa.rmuy9tnyo@ultrasist-qa.example Enviado.",
+          "estado": "PASS",
+          "evidencias": [
+            {
+              "archivo": "HU-08/05-correo-prueba.png",
+              "descripcion": "Aviso del correo de prueba enviado.",
+              "tipo": "aplicacion"
+            },
+            {
+              "archivo": "HU-08/06-bitacora-prueba.png",
+              "descripcion": "Bitácora de envíos con el correo de prueba.",
+              "tipo": "aplicacion"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "nombre": "El aviso a \"Recepción de Facturas\" toma los destinatarios de esta configuración",
+      "estado": "PASS",
+      "pasos": [
+        {
+          "paso": "El proveedor registra la factura QA-RMUY9TNYO-H08 y la cancela cargando el acuse (dispara el aviso \"Cancelada\" a Recepción de Facturas)",
+          "esperado": "La factura queda \"Cancelada\" y se notifica a Recepción de Facturas.",
+          "obtenido": "\"Factura cancelada. Se notificó a Recepción de Facturas.\"; estatus \"Cancelada\".",
+          "estado": "PASS",
+          "evidencias": [
+            {
+              "archivo": "HU-08/07-cancelacion-notificada.png",
+              "descripcion": "Factura QA-RMUY9TNYO-H08 cancelada: \"Se notificó a Recepción de Facturas\".",
+              "tipo": "aplicacion"
+            }
+          ]
+        },
+        {
+          "paso": "Revisar el correo \"Cancelada\" generado",
+          "esperado": "El correo va a recepcionfacturas@ultrasist.com.mx y recepcion.qa.rmuy9tnyo@ultrasist-qa.example (Para) con copia a auditoria.qa.rmuy9tnyo@ultrasist-qa.example (Cc), tal como se configuró.",
+          "obtenido": "Para: recepcion.qa.rmuy9tnyo@ultrasist-qa.example, recepcionfacturas@ultrasist.com.mx; Cc: auditoria.qa.rmuy9tnyo@ultrasist-qa.example; asunto \"Cancelación de la factura QA-RMUY9TNYO-H08 de Tecnologia Integral del Centro SA de CV\".",
+          "estado": "PASS",
+          "evidencias": [
+            {
+              "archivo": "HU-08/08-correo-cancelada-destinatarios.png",
+              "descripcion": "Correo \"Cancelada\" con los destinatarios configurados en Notificaciones.",
+              "tipo": "correo"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

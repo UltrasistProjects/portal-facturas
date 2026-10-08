@@ -1,0 +1,31 @@
+{% extends "base.html" %}{% block title %}Notificaciones{% endblock %}{% block content %}
+<div class="page-heading"><div><span class="eyebrow">ADMINISTRACION</span><h1>Notificaciones</h1><p>Direcciones que reciben los correos del portal. El destinatario principal de cada evento lo fija su regla de negocio; aquí se definen el buzón y las copias.</p></div></div>
+{% if notice %}<div class="alert alert-success">{{ notice }}</div>{% endif %}
+{% if error %}<div class="alert alert-danger">{{ error }} <a href="/admin/notifications">Recargar</a></div>{% endif %}
+{% if errors %}<div class="alert alert-danger"><strong>Corrija los destinatarios:</strong><ul class="template-errors">{% for item in errors %}<li>{{ item }}</li>{% endfor %}</ul></div>{% endif %}
+{% if test_delivery %}{% if test_delivery.status.value == 'SENT' %}<div class="alert alert-success">Correo de prueba enviado a {{ test_delivery.to_addresses|join(', ') }}</div>{% else %}<div class="alert alert-danger">No se pudo enviar el correo de prueba a {{ test_delivery.to_addresses|join(', ') }}: {{ test_delivery.error }}</div>{% endif %}{% endif %}
+
+<section class="panel"><div class="panel-header"><div><h2>Destinatarios</h2><p>Un correo por línea (también se aceptan comas o punto y coma). Hasta 10 por lista.</p></div></div>
+<form method="post" action="/admin/notifications" class="recipients-panel"><input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}"><input type="hidden" name="config_version" value="{{ config_version }}">
+<div class="field"><label for="list-{{ mailbox.key }}">{{ mailbox.label }}</label><textarea id="list-{{ mailbox.key }}" name="{{ mailbox.key }}" class="form-control recipients-input" rows="3">{{ values.get(mailbox.key, '') }}</textarea><small class="text-muted">Recibe los avisos de facturas Autorizadas y Canceladas. Obligatorio: al menos un correo.</small></div>
+<div class="table-responsive"><table class="table enterprise-table"><thead><tr><th>Evento</th><th>Destinatario principal</th><th>Copias (Cc)</th></tr></thead><tbody>
+{% for item in copies %}<tr><td><strong>{{ item.event_label }}</strong></td><td>{{ item.primary }}</td><td><textarea id="list-{{ item.key }}" name="{{ item.key }}" class="form-control recipients-input" rows="2" aria-label="{{ item.label }}">{{ values.get(item.key, '') }}</textarea></td></tr>
+{% endfor %}</tbody></table></div>
+<div class="form-actions"><button class="btn btn-primary">Guardar destinatarios</button></div></form></section>
+
+<div class="two-column">
+<section class="panel"><div class="panel-header"><div><h2>Correo de prueba</h2><p>Verifica que el portal puede enviar correos con la configuración vigente.</p></div></div>
+{% if test_errors %}<div class="alert alert-danger m-3">{% for item in test_errors %}{{ item }}{% if not loop.last %}<br>{% endif %}{% endfor %}</div>{% endif %}
+<form method="post" action="/admin/notifications/test" class="upload-form"><input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+<div class="field"><label for="test-address">Enviar a</label><input id="test-address" name="address" class="form-control" value="{{ test_address }}" maxlength="254" inputmode="email" required></div>
+<div class="form-actions m-0"><button class="btn btn-light"><i class="bi bi-send"></i> Enviar prueba</button></div></form></section>
+
+<section class="panel"><div class="panel-header"><div><h2>Transporte</h2><p>Se configura en el archivo .env del servidor.</p></div></div>
+<dl class="data-list transport-list"><dt>Transporte</dt><dd>{{ transport.label }}</dd>{% for label, value in transport.details %}<dt>{{ label }}</dt><dd>{{ value }}</dd>{% endfor %}<dt>Remitente</dt><dd>{{ transport.sender }}</dd></dl></section>
+</div>
+
+<section class="panel"><div class="panel-header"><div><h2>Bitácora de envíos</h2><p>Todos los intentos, del más reciente al más antiguo. No se guarda el texto de los correos.</p></div></div>
+{% if deliveries %}<div class="table-responsive"><table class="table enterprise-table"><thead><tr><th>Fecha</th><th>Evento</th><th>Destinatarios</th><th>Resultado</th></tr></thead><tbody>
+{% for d in deliveries %}<tr><td>{{ format_datetime(d.created_at) }}</td><td>{{ delivery_label(d) }}</td><td class="delivery-recipients">{{ d.to_addresses|join(', ') }}{% if d.cc_addresses %}<small>Cc: {{ d.cc_addresses|join(', ') }}</small>{% endif %}</td><td><span class="status status-delivery-{{ d.status.value|lower }}">{{ 'Enviado' if d.status.value == 'SENT' else 'Fallido' }}</span>{% if d.error %}<small class="delivery-error">{{ d.error }}</small>{% endif %}</td></tr>
+{% endfor %}</tbody></table></div>{% include "components/pagination.html" %}{% else %}<p class="empty-state">Aún no se ha enviado ningún correo.</p>{% endif %}</section>
+{% endblock %}
