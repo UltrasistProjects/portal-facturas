@@ -1,0 +1,94 @@
+# Keycloak de preproduccion: el portal corre en Vercel, que no puede alojar Keycloak (servidor Java con estado). Se
+# levanta en un servidor con Docker y un nombre DNS publico (README.md, "Despliegue en Vercel (preproduccion)"):
+#   docker compose --env-file .env up -d --wait
+#   docker compose --env-file .env exec -T keycloak bash /opt/keycloak/scripts/configure-realm.sh
+# A diferencia del compose.yaml de desarrollo: Keycloak en modo produccion (start), con su propia PostgreSQL, y Caddy
+# delante con HTTPS automatico (Let's Encrypt). Solo Caddy publica puertos.
+name: keycloak-preprod
+
+services:
+  db:
+    # Misma version que el compose.yaml de desarrollo.
+    image: postgres:18.6-alpine
+    environment:
+      POSTGRES_USER: keycloak
+      POSTGRES_DB: keycloak
+      POSTGRES_PASSWORD: ${KC_DB_PASSWORD:?Defina KC_DB_PASSWORD en .env}
+    volumes:
+      - pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U keycloak -d keycloak"]
+      interval: 5s
+      retries: 10
+    restart: unless-stopped
+
+  keycloak:
+    # La misma version que desarrollo y que keycloakVersion del tema.
+    image: quay.io/keycloak/keycloak:26.7.4
+    # start: modo produccion (cache de temas, sin valores de desarrollo). Importa el realm versionado si aun no existe.
+    command: ["start", "--import-realm"]
+    environment:
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://db:5432/keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: ${KC_DB_PASSWORD:?Defina KC_DB_PASSWORD en .env}
+      # URL publica: la de los tokens (iss) y la de las paginas. Caddy termina TLS y reenvia por HTTP.
+      KC_HOSTNAME: https://${KEYCLOAK_HOSTNAME:?Defina KEYCLOAK_HOSTNAME en .env}
+      KC_HTTP_ENABLED: "true"
+      KC_PROXY_HEADERS: xforwarded
+      KC_HEALTH_ENABLED: "true"
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KC_BOOTSTRAP_ADMIN_USERNAME:?Defina KC_BOOTSTRAP_ADMIN_USERNAME en .env}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KC_BOOTSTRAP_ADMIN_PASSWORD:?Defina KC_BOOTSTRAP_ADMIN_PASSWORD en .env}
+      # El realm los lee como ${KEYCLOAK_CLIENT_SECRET} y ${KEYCLOAK_ADMIN_CLIENT_SECRET} al importarse; son los mismos
+      # que las variables de entorno del portal en Vercel.
+      KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET:?Defina KEYCLOAK_CLIENT_SECRET en .env}
+      KEYCLOAK_ADMIN_CLIENT_SECRET: ${KEYCLOAK_ADMIN_CLIENT_SECRET:?Defina KEYCLOAK_ADMIN_CLIENT_SECRET en .env}
+      # Para configure-realm.sh: URL del portal (cliente portal-facturas-web) y correo de Keycloak.
+      PORTAL_URL: ${PORTAL_URL:?Defina PORTAL_URL en .env}
+      KEYCLOAK_SMTP_HOST: ${KEYCLOAK_SMTP_HOST:?Defina KEYCLOAK_SMTP_HOST en .env}
+      KEYCLOAK_SMTP_PORT: ${KEYCLOAK_SMTP_PORT:-587}
+      KEYCLOAK_SMTP_FROM: ${KEYCLOAK_SMTP_FROM:?Defina KEYCLOAK_SMTP_FROM en .env}
+      KEYCLOAK_SMTP_SECURITY: ${KEYCLOAK_SMTP_SECURITY:-starttls}
+      KEYCLOAK_SMTP_USER: ${KEYCLOAK_SMTP_USER:-}
+      KEYCLOAK_SMTP_PASSWORD: ${KEYCLOAK_SMTP_PASSWORD:-}
+    volumes:
+      - ../keycloak/realm-ultrasist-portal.json:/opt/keycloak/data/import/realm-ultrasist-portal.json:ro
+      - ../keycloak/common_passwords.txt:/opt/keycloak/data/password-blacklists/common_passwords.txt:ro
+      - ../keycloak/themes/ultrasist:/opt/keycloak/themes/ultrasist:ro
+      - ../keycloak/configure-realm.sh:/opt/keycloak/scripts/configure-realm.sh:ro
+    depends_on:
+      db:
+        condition: service_healthy
+    # La imagen no trae curl: la sonda usa /dev/tcp de bash contra el puerto de administracion (9000).
+    healthcheck:
+      test:
+        - CMD
+        - bash
+        - -c
+        - "exec 3<>/dev/tcp/127.0.0.1/9000 && printf 'GET /health/ready HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3 && grep -q '200 OK' <&3"
+      interval: 10s
+      start_period: 60s
+      retries: 30
+    restart: unless-stopped
+
+  caddy:
+    # Proxy inverso con HTTPS automatico para KEYCLOAK_HOSTNAME. Version exacta fija.
+    image: caddy:2.11.7-alpine
+    environment:
+      KEYCLOAK_HOSTNAME: ${KEYCLOAK_HOSTNAME:?Defina KEYCLOAK_HOSTNAME en .env}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      keycloak:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  caddy-data:
+  caddy-config:

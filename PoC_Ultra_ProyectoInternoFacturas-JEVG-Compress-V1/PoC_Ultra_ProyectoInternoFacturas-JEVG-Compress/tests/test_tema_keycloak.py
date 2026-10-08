@@ -277,11 +277,13 @@ def test_script_coherente_con_el_realm_y_acotado():
     # EVENT_TYPES se escribe en varias lineas ('...'\ + '...'): se unen antes de leerla como JSON.
     event_types = re.search(r"^EVENT_TYPES=((?:'[^']*'\\\n)*'[^']*')$", SCRIPT, re.M)[1]
     assert json.loads(re.sub(r"'\\?\n?", "", event_types)) == REALM["enabledEventTypes"]
-    assert re.findall(r'"\$kcadm" update "([^"]+)"', SCRIPT) == ["realms/$REALM"]
-    attributes = set(re.findall(r'-s "?([\w.]+)=', SCRIPT))
+    # El realm y, solo con PORTAL_URL, el cliente del portal: su URL base, el callback y el cierre de sesion.
+    assert re.findall(r'"\$kcadm" update "([^"]+)"', SCRIPT) == ["realms/$REALM", "clients/$id"]
+    attributes = set(re.findall(r'-s "?([\w.]+|attributes\.\\"[\w.]+\\")=', SCRIPT))
     assert attributes and all(
-        name in {"loginTheme", "resetPasswordAllowed", "eventsEnabled", "enabledEventTypes"}
+        name in {"loginTheme", "resetPasswordAllowed", "eventsEnabled", "enabledEventTypes", "baseUrl", "redirectUris"}
         or name.startswith("smtpServer.")
+        or name == 'attributes.\\"post.logout.redirect.uris\\"'
         for name in attributes
     )
     # Sin secretos: las contrasenas solo llegan por variables de entorno.

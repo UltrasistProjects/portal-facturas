@@ -155,6 +155,18 @@ def test_tiempo_de_espera_smtp_fuera_de_rango(no_mail_env, timeout):
         build(secret_key=VALID_KEY, smtp_timeout=timeout)
 
 
+@pytest.mark.parametrize(("value", "expected"), [(None, "local"), (" ", "local"), (" Database ", "database")])
+def test_almacenamiento_por_omision_y_normalizado(monkeypatch, value, expected):
+    monkeypatch.delenv("STORAGE_BACKEND", raising=False)
+    values = {} if value is None else {"storage_backend": value}
+    assert build(secret_key=VALID_KEY, **values).storage_backend == expected
+
+
+def test_almacenamiento_fuera_de_dominio():
+    with pytest.raises(ValidationError, match="local"):
+        build(secret_key=VALID_KEY, storage_backend="s3")
+
+
 EXAMPLE = "APP_ENV=development\nSECRET_KEY=\nPOSTGRES_USER=portal\nPOSTGRES_DB=portal\nPOSTGRES_PORT=55432\n"
 EXAMPLE += "POSTGRES_PASSWORD=\nDATABASE_URL=\nDEBUG=false\n"
 

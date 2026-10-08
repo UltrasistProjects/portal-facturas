@@ -8,7 +8,7 @@ from starlette.datastructures import Headers, UploadFile
 
 from app.core.config import settings
 from app.core.database import SessionLocal
-from app.models import Document
+from app.models import Document, FileContent
 from app.services.file_service import LocalFileStorage
 from tests.conftest import ROOT, csrf, invoice_by_number, login, supplier_by_email
 
@@ -123,6 +123,49 @@ def test_ruta_fuera_de_la_raiz_rechazada(storage):
         asyncio.run(storage._save("../../fuera", 1, upload(PDF, "x.pdf")))
 
 
+# --- STORAGE_BACKEND=database ----------------------------------------------------------------------------------
+
+
+@pytest.fixture()
+def database_storage(tmp_path):
+    return LocalFileStorage(tmp_path / "storage", backend="database")
+
+
+def stored_content(relative_path):
+    with SessionLocal() as db:
+        return db.get(FileContent, relative_path)
+
+
+def test_almacenamiento_local_no_escribe_en_la_base(storage):
+    stored = save(storage, PDF, "factura.pdf")
+    assert stored_content(stored.relative_path) is None
+
+
+def test_almacenamiento_en_base_guarda_el_contenido(database_storage):
+    stored = save(database_storage, PDF, "factura.pdf")
+    row = stored_content(stored.relative_path)
+    assert (row.content, row.size, row.sha256) == (PDF, len(PDF), stored.sha256)
+    assert stored.path.read_bytes() == PDF
+
+
+def test_almacenamiento_en_base_rehace_la_copia_local(database_storage):
+    # Otra instancia de Vercel: la base tiene el archivo, el disco efimero no.
+    stored = save(database_storage, PDF, "factura.pdf")
+    stored.path.unlink()
+    assert database_storage.resolve(stored.relative_path).read_bytes() == PDF
+    assert stored_files(database_storage) == [stored.path]
+
+
+def test_almacenamiento_en_base_sin_contenido_guardado(database_storage):
+    with pytest.raises(FileNotFoundError):
+        database_storage.resolve("invoices/7/inexistente.pdf")
+
+
+def test_almacenamiento_en_base_rechaza_rutas_fuera_de_la_raiz(database_storage):
+    with pytest.raises(FileNotFoundError):
+        database_storage.resolve("../fuera.pdf")
+
+
 # --- Endpoints -------------------------------------------------------------------------------------------------
 
 
@@ -187,6 +230,21 @@ def test_descarga_forzada_como_octet_stream(client):
     assert response.headers["content-type"] == "application/octet-stream"
     assert response.headers["content-disposition"].startswith("attachment;")
     assert response.headers["x-content-type-options"] == "nosniff"
+
+
+def test_descarga_con_almacenamiento_en_base_sin_copia_local(client, monkeypatch):
+    monkeypatch.setattr(settings, "storage_backend", "database")
+    invoice = invoice_by_number("BORRADOR-001")
+    login(client, "proveedor1@poc.local")
+    assert post_document(client, invoice, PDF, "en-base.pdf").status_code == 303
+    with SessionLocal() as db:
+        document = db.scalar(
+            select(Document).where(Document.invoice_id == invoice.id, Document.original_filename == "en-base.pdf")
+        )
+    (settings.storage_path / document.path).unlink()
+    response = client.get(f"/invoices/{invoice.id}/documents/{document.id}/download")
+    assert response.status_code == 200
+    assert response.content == PDF
 
 
 def test_proveedor_no_descarga_documentos_ajenos(client):

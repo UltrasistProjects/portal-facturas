@@ -31,3 +31,6 @@ coverage.xml
 # Artefactos regenerables de la suite Playwright de HUs
 playwright-report/
 test-results/
+# Vercel CLI: enlace del proyecto y variables descargadas (vercel link / env pull)
+.vercel
+.env.local

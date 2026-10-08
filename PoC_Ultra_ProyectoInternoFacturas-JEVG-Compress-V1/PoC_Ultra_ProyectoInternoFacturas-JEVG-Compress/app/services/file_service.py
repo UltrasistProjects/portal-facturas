@@ -10,8 +10,11 @@ from pathlib import Path
 from uuid import uuid4
 
 from fastapi import UploadFile
+from sqlalchemy import select
 
 from app.core.config import settings
+from app.core.database import SessionLocal
+from app.models import FileContent
 
 logger = logging.getLogger(__name__)
 
@@ -68,8 +71,13 @@ class StoredFile:
 
 
 class LocalFileStorage:
-    def __init__(self, root: Path | None = None):
+    """Archivos bajo la raiz de almacenamiento. Con STORAGE_BACKEND=database el contenido se guarda ademas en
+    stored_files y la copia local se rehace al leerla: en Vercel el disco es efimero y no se comparte entre
+    instancias. Los lectores reciben siempre una ruta local."""
+
+    def __init__(self, root: Path | None = None, backend: str | None = None):
         self.root = (root or settings.storage_path).resolve()
+        self.backend = backend or settings.storage_backend
         self.root.mkdir(parents=True, exist_ok=True)
 
     def relative_path(self, path: Path) -> str:
@@ -80,7 +88,36 @@ class LocalFileStorage:
         path = (self.root / relative_path).resolve()
         if self.root not in path.parents:
             raise FileNotFoundError(relative_path)
+        if self.backend == "database" and not path.is_file():
+            self._restore(path)
         return path
+
+    def store(self, destination: Path, content: bytes) -> None:
+        """Escribe el archivo y, con STORAGE_BACKEND=database, guarda su contenido en stored_files."""
+        destination.write_bytes(content)
+        if self.backend == "database":
+            with SessionLocal() as db, db.begin():
+                db.add(
+                    FileContent(
+                        path=self.relative_path(destination),
+                        content=content,
+                        size=len(content),
+                        sha256=hashlib.sha256(content).hexdigest(),
+                    )
+                )
+
+    def _restore(self, path: Path) -> None:
+        """Rehace la copia local desde stored_files; sin contenido guardado, FileNotFoundError."""
+        relative = self.relative_path(path)
+        with SessionLocal() as db:
+            content = db.scalar(select(FileContent.content).where(FileContent.path == relative))
+        if content is None:
+            raise FileNotFoundError(relative)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        # Se escribe aparte y se renombra: otra peticion de la misma instancia puede estar leyendo el mismo archivo.
+        partial = path.with_name(f".{uuid4().hex}.partial")
+        partial.write_bytes(content)
+        partial.replace(path)
 
     async def save_invoice_file(self, invoice_id: int, upload: UploadFile) -> StoredFile:
         return await self._save("invoices", invoice_id, upload)
@@ -110,7 +147,7 @@ class LocalFileStorage:
             raise ValueError("Ruta de almacenamiento invalida")
         folder.mkdir(parents=True, exist_ok=True)
         destination = folder / stored
-        destination.write_bytes(content)
+        self.store(destination, content)
         return StoredFile(
             original,
             stored,

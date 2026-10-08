@@ -2,7 +2,7 @@
 # Aplica al realm ultrasist-portal ya importado lo que --import-realm solo aplica al crearlo: el tema de login, el
 # restablecimiento de contrasena, los eventos que se registran (incluidos los del restablecimiento) y el servidor de
 # correo de Keycloak. Idempotente: repetirlo deja el mismo estado.
-# No toca clientes, roles, flujos de autenticacion ni la politica de contrasenas.
+# No toca roles, flujos de autenticacion ni la politica de contrasenas; el cliente del portal, solo con PORTAL_URL.
 #
 # Local (run_local.* lo ejecuta despues de levantar Keycloak):
 #   docker compose exec -T keycloak bash /opt/keycloak/scripts/configure-realm.sh
@@ -12,6 +12,10 @@
 # Correo de Keycloak (opcional): con KEYCLOAK_SMTP_HOST definida se configura smtpServer con KEYCLOAK_SMTP_PORT,
 # KEYCLOAK_SMTP_FROM, KEYCLOAK_SMTP_SECURITY (none | starttls | ssl) y, si el servidor la pide, KEYCLOAK_SMTP_USER y
 # KEYCLOAK_SMTP_PASSWORD. Sin KEYCLOAK_SMTP_HOST no se toca el correo configurado en el realm.
+#
+# URL del portal (QA y produccion, opcional): con PORTAL_URL (https://) el cliente del portal (KEYCLOAK_CLIENT_ID,
+# portal-facturas-web por omision) solo admite el callback (/auth/callback) y el cierre de sesion (/) de esa URL, en
+# lugar de los locales del realm versionado. Sin PORTAL_URL no se toca el cliente.
 set -euo pipefail
 
 REALM=ultrasist-portal
@@ -104,5 +108,29 @@ if ! output=$("$kcadm" update "realms/$REALM" --config "$config" "${settings[@]}
   fail "no se pudo actualizar el realm $REALM"
 fi
 
+portal="sin cambios"
+
+if [ -n "${PORTAL_URL:-}" ]; then
+  url=${PORTAL_URL%/}
+  case "$url" in
+    https://*) ;;
+    *) fail "PORTAL_URL debe comenzar con https://" ;;
+  esac
+  client=${KEYCLOAK_CLIENT_ID:-portal-facturas-web}
+  if ! id=$("$kcadm" get clients -r "$REALM" --config "$config" -q "clientId=$client" --fields id --format csv \
+    --noquotes 2>&1) || [ -z "$id" ]; then
+    show "$id"
+    fail "no se encontro el cliente $client en el realm $REALM"
+  fi
+  if ! output=$("$kcadm" update "clients/$id" -r "$REALM" --config "$config" \
+    -s "baseUrl=$url/" \
+    -s "redirectUris=[\"$url/auth/callback\"]" \
+    -s "attributes.\"post.logout.redirect.uris\"=$url/" 2>&1); then
+    show "$output"
+    fail "no se pudo actualizar el cliente $client"
+  fi
+  portal=$url
+fi
+
 echo "Realm $REALM: tema de login $LOGIN_THEME, restablecimiento de contrasena $RESET_PASSWORD_ALLOWED," \
-  "eventos del restablecimiento registrados, correo $mail."
+  "eventos del restablecimiento registrados, correo $mail, portal $portal."
