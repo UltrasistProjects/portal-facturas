@@ -175,7 +175,7 @@ El portal corre en Vercel como una Vercel Function (Python 3.12, `app/main.py`).
 
 - Disco efímero y no compartido: sólo se escribe en `/tmp`, y cada instancia tiene el suyo. Con `STORAGE_BACKEND=database` cada archivo se guarda también en `stored_files` y `STORAGE_PATH` (en `/tmp`) es una copia que se rehace al leer; los lectores siguen recibiendo una ruta local. `LOG_DIR` va a `/tmp`: los logs se consultan en el panel de Vercel.
 - 4.5 MB por petición: `MAX_UPLOAD_MB=4`. Un envío cuyos archivos sumen más recibe un 413 de Vercel antes de llegar al portal.
-- `.vercelignore` es una lista de permitidos: sólo se suben `app/`, `requirements.txt`, `vercel.json` y `.python-version`. `pyproject.toml` queda fuera a propósito: si existe, Vercel lo toma como manifiesto e ignora `requirements.txt`.
+- `.vercelignore` excluye todo lo que no se usa en ejecución: sólo se suben `app/`, `requirements.txt`, `vercel.json` y `.python-version`. `pyproject.toml` queda fuera a propósito: si existe, Vercel lo toma como manifiesto e ignora `requirements.txt`.
 - Keycloak no puede correr en Vercel: es un servidor Java con estado.
 
 **Keycloak (`infra/preprod/`).**
@@ -200,10 +200,11 @@ El portal corre en Vercel como una Vercel Function (Python 3.12, `app/main.py`).
 
 **Base de datos y demo.** Las migraciones y el seed se ejecutan desde un equipo con el proyecto, con `DATABASE_URL`, `KEYCLOAK_*`, `APP_ENV=test` y `STORAGE_BACKEND=database` de preproducción en el entorno: `python scripts/init_db.py`. Las contraseñas temporales de las cuentas demo se muestran una sola vez, y Keycloak pide cambiarlas en el primer acceso. `reset_demo.py` se niega a correr contra un servidor que no sea local, y `backup.py` usa el contenedor `db` local: en Neon, la restauración es la del propio servicio.
 
-**Publicar.**
+**Publicar.** El proyecto de Vercel está conectado al repositorio, con *Root Directory* en este directorio y `main` como rama de producción:
 
-- Manual: `npx vercel deploy --prod` desde el directorio del proyecto, con el proyecto enlazado (`vercel link`; `.vercel/` no se versiona).
-- Automático al hacer merge a `main`: el proyecto de Vercel conectado al repositorio (app de Vercel instalada en la organización de GitHub), con *Root Directory* en este directorio y `main` como rama de producción. `git.deploymentEnabled` de `vercel.json` sólo despliega `main`: las demás ramas no tienen variables de Preview y fallarían al arrancar.
+- Cada merge a `main` se despliega solo. `git.deploymentEnabled` de `vercel.json` desactiva las demás ramas: no tienen variables de Preview y fallarían al arrancar.
+- Para volver a publicar sin cambios de código (por ejemplo, tras cambiar una variable): **Redeploy** en el panel de Vercel. Con *Root Directory* configurado, `vercel deploy` desde este directorio falla: Vercel busca la subcarpeta dentro de él.
+- `.vercelignore` no lleva rutas ancladas: en los despliegues desde Git, Vercel aplica sus reglas desde la raíz del repositorio, no desde este directorio. Con una regla como `/*` borraría la aplicación entera.
 
 ## Respaldo y restauración
 
