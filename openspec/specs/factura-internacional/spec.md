@@ -100,12 +100,12 @@ Al validar una factura internacional, el motor SHALL extraer el texto del PDF de
 INT-001, INT-002 e INT-004 SHALL comparar sin acentos, sin distinguir mayúsculas e ignorando espacios y signos de puntuación. Una regla INT eliminada SHALL resultar `NOT_APPLICABLE` con "Regla inactiva en Reglas de Validación". Si la factura no tiene Invoice o su PDF no tiene texto legible, las reglas activas SHALL resultar `NOT_EVALUATED` con "No se pudo leer el texto del Invoice". Las facturas de proveedores nacionales MUST NOT generar reglas INT.
 
 #### Scenario: Invoice con los datos esperados
-- **WHEN** el texto del Invoice contiene "Tax ID: 98-7654321", "Bill to: ULTRASIST, S.A. de C.V." y "C.P. 03930", el proveedor tiene `foreign_tax_id = 987654321`, INT-002 espera "ULTRASIST SA DE CV" e INT-003 espera `03930`
+- **WHEN** el texto del Invoice contiene "Tax ID: 98-7654321", "Bill to: FERROMEX, S.A. de C.V." y "C.P. 03930", el proveedor tiene `foreign_tax_id = 987654321`, INT-002 espera "FERROMEX SA DE CV" e INT-003 espera `03930`
 - **THEN** INT-001, INT-002 e INT-003 resultan `PASS`
 
 #### Scenario: Razón social ausente
 - **WHEN** el texto del Invoice no contiene la Razón Social de INT-002
-- **THEN** INT-002 resulta `WARNING` con "No se encontró la razón social de ULTRASIST en el Invoice" y el envío procede si no hay ningún `FAIL`
+- **THEN** INT-002 resulta `WARNING` con "No se encontró la razón social de FERROMEX en el Invoice" y el envío procede si no hay ningún `FAIL`
 
 #### Scenario: Invoice escaneado
 - **WHEN** el PDF del Invoice no tiene capa de texto

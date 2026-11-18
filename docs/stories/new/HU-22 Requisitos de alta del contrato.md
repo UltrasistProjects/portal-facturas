@@ -61,14 +61,14 @@ Con `requisitos-alta-proveedor` ya archivado, ejecutar `/opsx:propose requisitos
 | Activarlo | Nueva acción **Activar contrato**: pasa de "Registrado" a "Activo" (`ACTIVE`). Sólo un contrato activo se ofrece al facturar (spec `flujo-facturas`) y cumple SUP-002 |
 | Requisitos o documentos del contrato | Nuevo expediente del contrato: documentos ligados al contrato (`documents.contract_id`), en una página de detalle del contrato que hoy no existe |
 | Sección de configuración / módulo de Requisitos mínimos | **Administración › Requisitos mínimos › Alta de contrato**, junto a los archivos de la factura (HU-04) y los requisitos de alta del proveedor (HU-21) |
-| Contrato | El contrato firmado con ULTRASIST, en el contrato y no en el expediente del proveedor |
+| Contrato | El contrato firmado con FERROMEX, en el contrato y no en el expediente del proveedor |
 | Orden de compra | La orden de compra que respalda la contratación. Es distinta de la orden de compra de cada factura (HU-04, regla DOC-003) |
 | Anexos | Anexos del contrato (técnico, económico, de alcance…). Puede haber varios archivos |
 | Requisitos que pasan del alta del proveedor al contrato | "Contrato" (`SUPPLIER_CONTRACT`), que HU-21 conserva como opcional en el expediente del proveedor. "Propuesta económica" queda como pregunta (P-01) |
 
 ## 2. Contexto y motivación
 
-Los Lineamientos de facturación 2024 v1.4.1 ponen el contrato como prerrequisito de toda factura y lo condicionan al expediente del proveedor. En 1.i dicen: "Debe existir contrato vigente entre el Asociado y Ultrasist S.A. de C.V., para ello debe estar dado de alta en el catálogo de Asociados con el cumplimiento al 100% de los requisitos detallados en el 'Anexo A'". El Anexo A se titula "De los requisitos para elaborar contrato".
+Los Lineamientos de facturación 2024 v1.4.1 ponen el contrato como prerrequisito de toda factura y lo condicionan al expediente del proveedor. En 1.i dicen: "Debe existir contrato vigente entre el Asociado y Ferromex S.A. de C.V., para ello debe estar dado de alta en el catálogo de Asociados con el cumplimiento al 100% de los requisitos detallados en el 'Anexo A'". El Anexo A se titula "De los requisitos para elaborar contrato".
 
 Hoy el PoC registra el contrato sin respaldo documental:
 
@@ -176,7 +176,7 @@ Ninguna bloquea `/opsx:propose`. P-01 a P-04 cambian valores iniciales o la conf
 
 | ID | Pregunta | Valor aplicado mientras tanto | Impacto de la respuesta |
 | --- | --- | --- | --- |
-| P-01 | La "Propuesta económica autorizada por el Líder de ULTRASIST" (Anexo A) es por contratación, no por proveedor. ¿Pasa también al contrato? | Se queda en el alta del proveedor (HU-21), exigible si el alta es por cotización o licitación | Se agrega como requisito del sistema del contrato y `ECONOMIC_PROPOSAL` se fija en No aplica en el proveedor, igual que "Contrato" (RD-11). El indicador `suppliers.economic_proposal` pierde su uso |
+| P-01 | La "Propuesta económica autorizada por el Líder de FERROMEX" (Anexo A) es por contratación, no por proveedor. ¿Pasa también al contrato? | Se queda en el alta del proveedor (HU-21), exigible si el alta es por cotización o licitación | Se agrega como requisito del sistema del contrato y `ECONOMIC_PROPOSAL` se fija en No aplica en el proveedor, igual que "Contrato" (RD-11). El indicador `suppliers.economic_proposal` pierde su uso |
 | P-02 | Con el contrato y sus anexos en el contrato, ¿se dejan de ofrecer "Contrato" y "Anexo del contrato" en cada factura (HU-04)? | Sin cambios: siguen Opcional en cada factura | El Administrador los pone en No aplica en Archivos de factura, sin cambios de código. Recomendación del equipo: No aplica |
 | P-03 | ¿La orden de compra del contrato sustituye a la orden de compra de cada factura (DOC-003)? | No. La del contrato respalda la contratación; la de la factura, el periodo facturado (`purchase_order_number`) | Si la sustituye, "Orden de compra" de la factura pasa a Opcional o No aplica en Archivos de factura |
 | P-04 | ¿Un contrato puede tener varias órdenes de compra? | Sí: "Orden de compra" admite varios archivos | Se cambia el valor sembrado antes de desplegar (no se edita desde la pantalla, D8) |
@@ -209,7 +209,7 @@ Se reutiliza la enumeración `DocumentRequirement`.
 
 | Solicitud | Clave | Nombre | Descripción (ayuda en el expediente) | Nivel | Varios archivos |
 | --- | --- | --- | --- | --- | --- |
-| Contrato – Obligatorio | `SIGNED_CONTRACT` | **Contrato** | Contrato firmado con ULTRASIST | Obligatorio (fijo, RD-03) | No |
+| Contrato – Obligatorio | `SIGNED_CONTRACT` | **Contrato** | Contrato firmado con FERROMEX | Obligatorio (fijo, RD-03) | No |
 | Orden de Compra – Opcional | `CONTRACT_PURCHASE_ORDER` | **Orden de compra** | Orden de compra que respalda la contratación | Opcional | Sí (P-04) |
 | Anexos – Opcional | `CONTRACT_ANNEXES` | **Anexos** | Anexos del contrato: técnico, económico, de alcance u otros | Opcional | Sí |
 
@@ -875,7 +875,7 @@ Se agrega el escenario siguiente; los vigentes se conservan.)
 | --- | --- |
 | Solicitud de negocio (2026-10-02) | Texto de la sección 1: sección de configuración de requisitos del contrato, obligatorios u opcionales; pedirlos al dar de alta y activar el contrato. Lista: Contrato (obligatorio), Orden de compra (opcional), Anexos (opcional) |
 | Aclaración del equipo (2026-10-02) | La configuración vive en Requisitos mínimos; los requisitos del alta del proveedor que corresponden al contrato pasan al contrato |
-| Lineamientos de facturación 2024 v1.4.1 | 1.i: "Debe existir contrato vigente … para ello debe estar dado de alta en el catálogo de Asociados con el cumplimiento al 100% de los requisitos detallados en el 'Anexo A'". 1.iii: convenio de confidencialidad vigente. Anexo A: "De los requisitos para elaborar contrato", incluida la "Propuesta Económica autorizada por el Líder de ULTRASIST" |
+| Lineamientos de facturación 2024 v1.4.1 | 1.i: "Debe existir contrato vigente … para ello debe estar dado de alta en el catálogo de Asociados con el cumplimiento al 100% de los requisitos detallados en el 'Anexo A'". 1.iii: convenio de confidencialidad vigente. Anexo A: "De los requisitos para elaborar contrato", incluida la "Propuesta Económica autorizada por el Líder de FERROMEX" |
 | ERS v1.4 | RF-20 propuesto para esta HU. Modifica RF-19 (HU-21, propuesto) |
 | HU-21 | Sección 6.3: `SUPPLIER_CONTRACT` Opcional, que esta HU fija en No aplica. Patrón del checklist y de la activación condicionada |
 | HU-04 | Archivos de la factura `CONTRACT`, `CONTRACT_ANNEX` y `PURCHASE_ORDER` (P-02, P-03). Patrón de niveles fijos con candado |

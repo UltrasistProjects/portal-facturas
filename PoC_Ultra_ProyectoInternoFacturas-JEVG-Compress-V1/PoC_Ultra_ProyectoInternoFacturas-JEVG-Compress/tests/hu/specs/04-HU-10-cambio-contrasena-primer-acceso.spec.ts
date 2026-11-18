@@ -16,7 +16,7 @@ test('HU-10 · Cambio de contraseña en primer inicio de sesión', async ({ brow
   await ejecutarHU('HU-10', browser, testInfo, async (hu) => {
     const { run } = leerEstado();
     const credencial = hu.requiere<{ correo: string; razon_social: string; desde: string }>('HU-03', 'hu03.credencial');
-    const correo = buscarCorreo(credencial.correo, 'Acceso al Portal de Proveedores ULTRASIST', credencial.desde);
+    const correo = buscarCorreo(credencial.correo, 'Acceso al Portal de Proveedores FERROMEX', credencial.desde);
     const temporal = correo?.texto.match(/Contraseña temporal: (\S+)/)?.[1];
     if (!temporal) throw new Bloqueo(`No se encontró el correo de credenciales de ${credencial.correo} (HU-03).`);
     const nueva = `Qa#${run}x9`;
@@ -29,7 +29,7 @@ test('HU-10 · Cambio de contraseña en primer inicio de sesión', async ({ brow
         'El portal redirige al inicio de sesión de Keycloak (proveedor de identidad).',
         async () => {
           await proveedor.goto('/');
-          await expect(proveedor).toHaveURL(new RegExp(`^${KEYCLOAK_URL}/realms/ultrasist-portal/`));
+          await expect(proveedor).toHaveURL(new RegExp(`^${KEYCLOAK_URL}/realms/ferromex-portal/`));
           await expect(proveedor.locator('#kc-login')).toBeVisible();
           await hu.captura(proveedor, 'login-keycloak', 'Pantalla de inicio de sesión de Keycloak a la que redirige el portal.');
           return `Redirigido a ${new URL(proveedor.url()).origin}${new URL(proveedor.url()).pathname} con el título "${(await proveedor.title()).trim()}".`;

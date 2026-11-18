@@ -14,7 +14,7 @@ import { APP_ROOT, EVIDENCIAS } from '../lib/rutas';
 
 const VIDEO = path.join(EVIDENCIAS, 'video', 'recorrido-flujo-completo.webm');
 // Incrustado: una about:blank a la que se llega navegando no carga imagenes del portal.
-const LOGO = `data:image/png;base64,${fs.readFileSync(path.join(APP_ROOT, 'app', 'static', 'img', 'Ultrasistlogo.png')).toString('base64')}`;
+const LOGO = `data:image/png;base64,${fs.readFileSync(path.join(APP_ROOT, 'app', 'static', 'img', 'Ferromexlogo.png')).toString('base64')}`;
 
 /** Capa del video (rotulo inferior y cursor visible), instalada en cada documento que abre la pagina. */
 function instalarCapa(): void {
@@ -233,7 +233,7 @@ test('Recorrido del flujo completo del portal', async ({ page }) => {
   const fx = herramienta('fixtures', run, carpeta);
   const clave = demoPassword();
   const numero = `FAC-${run}`;
-  const pmo = { nombre: `PMO de Proyectos ${run}`, correo: `pmo.${run.toLowerCase()}@ultrasist-qa.example`, clave: `Pmo#${run}x7` };
+  const pmo = { nombre: `PMO de Proyectos ${run}`, correo: `pmo.${run.toLowerCase()}@ferromex-qa.example`, clave: `Pmo#${run}x7` };
   let facturaId = 0;
 
   let actual: [string, string] = ['', ''];
@@ -246,7 +246,7 @@ test('Recorrido del flujo completo del portal', async ({ page }) => {
     await page.evaluate(([e, t]) => (window as any).__recorrido?.rotulo(e, t), actual).catch(() => undefined);
   };
 
-  await tarjeta(page, 'Portal de Proveedores ULTRASIST', 'Recorrido del flujo completo', [
+  await tarjeta(page, 'Portal de Proveedores FERROMEX', 'Recorrido del flujo completo', [
     '1. Administrador: alta y autorización de proveedores',
     '2. Administrador: alta del usuario PMO',
     '3. Proveedor nuevo: primer acceso y cambio de contraseña',
@@ -336,7 +336,7 @@ test('Recorrido del flujo completo del portal', async ({ page }) => {
   await senalar(page, page.locator('.authorization-summary'), 4000);
 
   const nuevo = proveedores[0];
-  const credenciales = buscarCorreo(nuevo.correo, 'Acceso al Portal de Proveedores ULTRASIST', desdeAutorizacion);
+  const credenciales = buscarCorreo(nuevo.correo, 'Acceso al Portal de Proveedores FERROMEX', desdeAutorizacion);
   const temporal = credenciales?.texto.match(/Contraseña temporal: (\S+)/)?.[1];
   if (!credenciales || !temporal) throw new Error(`No se generó el correo de credenciales de ${nuevo.correo}`);
   await mostrarCorreo(page, `Correo que recibe el proveedor ${nuevo.razon_social}`, credenciales);
@@ -396,7 +396,7 @@ test('Recorrido del flujo completo del portal', async ({ page }) => {
     'Carga del XML y PDF del CFDI, la orden de compra y el Vo.Bo.',
     'Prevalidación automática contra las reglas y envío a validación',
   ]);
-  await rotular('Proveedor', 'Inicia sesión un proveedor que ya opera con ULTRASIST');
+  await rotular('Proveedor', 'Inicia sesión un proveedor que ya opera con FERROMEX');
   await iniciarSesion(page, CUENTAS.proveedor1, clave);
   await rotular('Proveedor', 'Tablero del proveedor: sus facturas y avisos');
   await page.waitForTimeout(3000);
@@ -533,7 +533,7 @@ test('Recorrido del flujo completo del portal', async ({ page }) => {
   await rotular('', '');
   await cerrarSesion(page);
 
-  await tarjeta(page, 'Portal de Proveedores ULTRASIST', 'Fin del recorrido', [
+  await tarjeta(page, 'Portal de Proveedores FERROMEX', 'Fin del recorrido', [
     `3 proveedores dados de alta y autorizados; usuario PMO creado`,
     `Factura ${numero}: registrada, prevalidada, autorizada, pagada y con su Complemento de Pago`,
     'Correos generados en cada paso: credenciales, autorización, pago y complemento',

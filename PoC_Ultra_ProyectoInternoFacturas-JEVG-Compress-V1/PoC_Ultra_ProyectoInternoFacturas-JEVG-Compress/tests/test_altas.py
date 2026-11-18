@@ -13,7 +13,7 @@ from app.services.keycloak_admin import UPDATE_PASSWORD
 from tests.conftest import SUPPLIER_PROFILE_FORM, csrf, login, supplier_by_email
 
 
-def create_user(client, email="nuevo@ultrasist.com.mx", **extra):
+def create_user(client, email="nuevo@ferromex.com.mx", **extra):
     data = {"name": "Usuario Nuevo", "email": email, "role": "PMO", **extra}
     return client.post("/admin/users", data={**data, "csrf_token": csrf(client, "/admin/users")})
 
@@ -25,13 +25,13 @@ def user_exists(email: str) -> bool:
 
 def test_alta_crea_el_usuario_en_keycloak_sin_contrasena_local(client, keycloak):
     login(client)
-    response = create_user(client, email="valida@ultrasist.com.mx")
+    response = create_user(client, email="valida@ferromex.com.mx")
     assert response.status_code == 200 and response.headers["cache-control"] == "no-store"
     with SessionLocal() as db:
-        created = db.scalar(select(User).where(User.email == "valida@ultrasist.com.mx"))
+        created = db.scalar(select(User).where(User.email == "valida@ferromex.com.mx"))
     # RN-HU03-01: el portal no guarda la contrasena ni su hash; la cuenta vive en Keycloak, enlazada por sub.
     assert created.password_hash is None and created.keycloak_sub
-    account = keycloak.account("valida@ultrasist.com.mx")
+    account = keycloak.account("valida@ferromex.com.mx")
     assert (account.id, account.roles, account.required_actions) == (created.keycloak_sub, {"PMO"}, [UPDATE_PASSWORD])
     # La temporal se muestra una sola vez, en esta respuesta (D15). Escapada: puede contener &, < o >.
     assert f"<code>{html.escape(account.password)}</code>" in response.text
@@ -54,8 +54,8 @@ def test_correo_invalido_en_alta_de_usuario(client):
 
 def test_correo_duplicado_responde_409(client):
     login(client)
-    assert create_user(client, email="duplicado@ultrasist.com.mx").status_code == 200
-    response = create_user(client, email="Duplicado@Ultrasist.com.mx")
+    assert create_user(client, email="duplicado@ferromex.com.mx").status_code == 200
+    response = create_user(client, email="Duplicado@Ferromex.com.mx")
     assert response.status_code == 409
     assert "Ya existe un usuario" in response.text
 
@@ -108,9 +108,9 @@ def test_alta_individual_queda_registrada(client, restore_notification_recipient
 def test_alta_individual_con_correo_en_uso(client):
     login(client)
     assert create_supplier(client, rfc="SNU260101CU1", email="compartido@serviciosnuevos.mx").status_code == 200
-    assert create_user(client, email="usuario.existente@ultrasist.com.mx").status_code == 200
+    assert create_user(client, email="usuario.existente@ferromex.com.mx").status_code == 200
     try:
-        for email in ("Compartido@ServiciosNuevos.mx", "usuario.existente@ultrasist.com.mx"):
+        for email in ("Compartido@ServiciosNuevos.mx", "usuario.existente@ferromex.com.mx"):
             response = create_supplier(client, rfc="SNU260101CU2", email=email)
             assert response.status_code == 409
             assert "El correo ya lo usa otro proveedor o usuario." in response.text
@@ -119,7 +119,7 @@ def test_alta_individual_con_correo_en_uso(client):
     finally:
         with SessionLocal() as db:
             supplier_id = db.scalar(select(Supplier.id).where(Supplier.rfc == "SNU260101CU1"))
-            user_id = db.scalar(select(User.id).where(User.email == "usuario.existente@ultrasist.com.mx"))
+            user_id = db.scalar(select(User.id).where(User.email == "usuario.existente@ferromex.com.mx"))
             db.execute(delete(User).where(User.id == user_id))
             db.execute(delete(Supplier).where(Supplier.id == supplier_id))
             db.commit()

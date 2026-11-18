@@ -3,13 +3,13 @@ import { buscarCorreo, guardarDato, leerEstado, type Correo } from '../lib/estad
 import { ejecutarHU } from '../lib/hu';
 import { clicNavegando, enviarAlta, llenarAltaFactura, texto } from '../lib/portal';
 
-const BUZON = 'recepcionfacturas@ultrasist.com.mx';
+const BUZON = 'recepcionfacturas@ferromex.com.mx';
 
 test('HU-08 · Configuración de correos de notificación', async ({ browser }, testInfo) => {
   await ejecutarHU('HU-08', browser, testInfo, async (hu) => {
     const { run, fixtures } = leerEstado();
-    const buzonQa = `recepcion.qa.${run.toLowerCase()}@ultrasist-qa.example`;
-    const copiaQa = `auditoria.qa.${run.toLowerCase()}@ultrasist-qa.example`;
+    const buzonQa = `recepcion.qa.${run.toLowerCase()}@ferromex-qa.example`;
+    const copiaQa = `auditoria.qa.${run.toLowerCase()}@ferromex-qa.example`;
     const admin = await hu.sesion('admin');
     const buzon = () => admin.locator('.recipients-panel textarea').first();
     const copiaCancelada = () => admin.locator('.recipients-panel tbody tr').filter({ hasText: 'Cancelada' }).locator('textarea');
@@ -19,7 +19,7 @@ test('HU-08 · Configuración de correos de notificación', async ({ browser }, 
       await hu.paso(
         admin,
         'Abrir Administración › Notificaciones',
-        'Se muestra el buzón "Recepción de Facturas" (recepcionfacturas@ultrasist.com.mx), las copias por evento (Autorizada, Rechazada, Observaciones, Cancelada) y el transporte vigente.',
+        'Se muestra el buzón "Recepción de Facturas" (recepcionfacturas@ferromex.com.mx), las copias por evento (Autorizada, Rechazada, Observaciones, Cancelada) y el transporte vigente.',
         async () => {
           await admin.goto('/admin/notifications');
           await expect(admin.locator('h1')).toHaveText('Notificaciones');
@@ -77,7 +77,7 @@ test('HU-08 · Configuración de correos de notificación', async ({ browser }, 
     });
 
     await hu.escenario('Correo de prueba con la configuración vigente', async () => {
-      const destino = `prueba.qa.${run.toLowerCase()}@ultrasist-qa.example`;
+      const destino = `prueba.qa.${run.toLowerCase()}@ferromex-qa.example`;
       await hu.paso(admin, `Enviar un correo de prueba a ${destino}`, 'Se informa "Correo de prueba enviado a …" y la bitácora registra el envío.', async () => {
         await admin.goto('/admin/notifications');
         await admin.locator('#test-address').fill(destino);

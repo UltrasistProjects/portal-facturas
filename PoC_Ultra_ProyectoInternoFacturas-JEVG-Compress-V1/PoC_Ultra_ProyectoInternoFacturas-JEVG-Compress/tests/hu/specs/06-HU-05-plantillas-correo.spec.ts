@@ -162,7 +162,7 @@ test('HU-05 · Configuración de plantillas de estatus de factura', async ({ bro
         return `"${await texto(proveedor, '#cancellation-result')}".`;
       });
       await hu.paso(null, 'Abrir el correo "Cancelada" generado', `El asunto del correo enviado incluye "${marca}": se compuso con la plantilla guardada.`, async () => {
-        const correo = buscarCorreo('recepcionfacturas@ultrasist.com.mx', marca, desde) as Correo;
+        const correo = buscarCorreo('recepcionfacturas@ferromex.com.mx', marca, desde) as Correo;
         expect(correo, 'No se encontró el correo con el asunto de la plantilla guardada').not.toBeNull();
         expect(correo.asunto).toContain(numero);
         expect(correo.asunto).toContain(marca);

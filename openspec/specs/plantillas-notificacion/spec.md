@@ -144,7 +144,7 @@ El sistema SHALL reportar todos los errores juntos, con el formato "Campo: mensa
 - `aviso_complemento` = "Es importante que adjunte su “Complemento de Pago” a dicha factura pagada antes del 28/09/2026 10:30. Mientras no lo adjunte, el portal no le permitirá enviar nuevas facturas a validación.";
 - `usuario` = "contacto@serviciosdelnorte.mx";
 - `contrasena_temporal` = "Ejemplo#Temporal2026";
-- `url_portal` = "https://proveedores.ultrasist.com.mx/login".
+- `url_portal` = "https://proveedores.ferromex.com.mx/login".
 
 Si el borrador no es válido, SHALL responder HTTP 400 con los errores y sin vista previa. La vista previa MUST NOT guardar la plantilla, cambiar su versión ni generar registros de auditoría. SHALL funcionar sin JavaScript y mostrar el texto compuesto escapado.
 
@@ -160,7 +160,7 @@ El correo SHALL mostrarse como lo recibe el destinatario: la misma versión HTML
 
 #### Scenario: Vista previa de las credenciales
 - **WHEN** el Administrador pide la vista previa de la plantilla Credenciales de acceso con su texto predeterminado
-- **THEN** el cuerpo contiene "Usuario: contacto@serviciosdelnorte.mx", "Contraseña temporal: Ejemplo#Temporal2026" y "https://proveedores.ultrasist.com.mx/login"
+- **THEN** el cuerpo contiene "Usuario: contacto@serviciosdelnorte.mx", "Contraseña temporal: Ejemplo#Temporal2026" y "https://proveedores.ferromex.com.mx/login"
 
 #### Scenario: La vista previa no guarda
 - **WHEN** el Administrador modifica el cuerpo de la plantilla Rechazada, pide la vista previa y vuelve a abrir la plantilla
@@ -176,7 +176,7 @@ El correo SHALL mostrarse como lo recibe el destinatario: la misma versión HTML
 
 #### Scenario: Vista previa como el correo
 - **WHEN** el Administrador pide la vista previa de la plantilla Credenciales de acceso con su texto predeterminado
-- **THEN** la página contiene un `iframe` `sandbox="allow-same-origin"` cuyo `srcdoc` es el HTML del correo con el logo, el asunto "Acceso al Portal de Proveedores ULTRASIST" como título y "Contraseña temporal" con "Ejemplo#Temporal2026" en el bloque de datos, y la versión de texto plano plegada debajo
+- **THEN** la página contiene un `iframe` `sandbox="allow-same-origin"` cuyo `srcdoc` es el HTML del correo con el logo, el asunto "Acceso al Portal de Proveedores FERROMEX" como título y "Contraseña temporal" con "Ejemplo#Temporal2026" en el bloque de datos, y la versión de texto plano plegada debajo
 
 ### Requirement: Guardado con control de edición concurrente
 `POST /admin/notification-templates/{codigo}` SHALL recibir `subject`, `body` y `version`, que es la versión que el Administrador tenía al abrir el formulario. Si el texto es válido y `version` coincide con la vigente, el sistema SHALL guardar el asunto y el cuerpo, aumentar la versión en 1 y registrar la fecha y el Administrador de la modificación. Después SHALL redirigir con HTTP 303 al listado, que muestra el aviso "Plantilla actualizada".
@@ -210,7 +210,7 @@ Los textos predeterminados SHALL cumplir las reglas de validación de su plantil
 - Cancelada: "Cancelación de la factura {{numero_factura}} de {{proveedor}}";
 - Pagada: "Factura {{numero_factura}} pagada";
 - Complemento de pago adjuntado: "Complemento de pago de la factura {{numero_factura}}";
-- Credenciales de acceso: "Acceso al Portal de Proveedores ULTRASIST".
+- Credenciales de acceso: "Acceso al Portal de Proveedores FERROMEX".
 
 El cuerpo SHALL contener:
 - Autorizada (RN-HU20-02): "La factura número {{numero_factura}} del proveedor {{proveedor}} por el monto {{monto}} ha sido Autorizada para su pago.";

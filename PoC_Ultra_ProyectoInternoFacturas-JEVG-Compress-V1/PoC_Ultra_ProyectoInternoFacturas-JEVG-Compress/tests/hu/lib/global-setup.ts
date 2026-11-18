@@ -24,7 +24,7 @@ export default async function globalSetup(): Promise<void> {
   }
   const [portal, detallePortal] = await disponible(`${PORTAL_URL}/health`);
   const [keycloak, detalleKeycloak] = await disponible(
-    `${KEYCLOAK_URL}/realms/ultrasist-portal/.well-known/openid-configuration`,
+    `${KEYCLOAK_URL}/realms/ferromex-portal/.well-known/openid-configuration`,
   );
   const run = `R${Date.now().toString(36).toUpperCase()}`;
   const carpeta = path.join(DATOS, run);

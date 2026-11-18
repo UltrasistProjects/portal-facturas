@@ -92,7 +92,7 @@ def test_formulario_local_retirado(client):
         ({"nonce": "nonce-ajeno"}, "nonce"),
         ({"exp": int(time.time()) - 120}, "token"),  # vencido hace 2 minutos (tolerancia: 60 s)
         ({"aud": "otro-cliente", "azp": "otro-cliente"}, "token"),
-        ({"iss": "http://otro-keycloak/realms/ultrasist-portal"}, "token"),
+        ({"iss": "http://otro-keycloak/realms/ferromex-portal"}, "token"),
         ({"foreign_key": True}, "token"),  # firmado con una clave ajena al JWKS del realm
         ({"sub": None}, "token"),
     ],
@@ -150,7 +150,7 @@ def test_keycloak_no_disponible_en_el_callback(client, keycloak):
 
 
 def test_cuenta_de_keycloak_sin_usuario_en_el_portal(client, keycloak):
-    email = f"fantasma.{uuid4().hex[:8]}@ultrasist.mx"
+    email = f"fantasma.{uuid4().hex[:8]}@ferromex.mx"
     keycloak.add_account(email, "PMO")
     response = login(client, email)
     assert response.status_code == 403 and "Su cuenta no está habilitada en el portal." in response.text
@@ -167,7 +167,7 @@ def test_mismo_correo_con_otro_sub(client):
 
 @pytest.fixture()
 def inactive_user():
-    email = f"inactivo.{uuid4().hex[:8]}@ultrasist.mx"
+    email = f"inactivo.{uuid4().hex[:8]}@ferromex.mx"
     with SessionLocal() as db:
         user = User(
             name="Inactivo", email=email, role=Role.PMO, is_active=False, keycloak_sub=identity_account(email, Role.PMO)

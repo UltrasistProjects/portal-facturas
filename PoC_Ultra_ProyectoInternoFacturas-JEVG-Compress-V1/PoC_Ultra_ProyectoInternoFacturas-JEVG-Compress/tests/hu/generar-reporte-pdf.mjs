@@ -276,7 +276,7 @@ await pagina.pdf({
   printBackground: true,
   displayHeaderFooter: true,
   headerTemplate: '<div></div>',
-  footerTemplate: `<div style="font: 7pt Arial, sans-serif; color: #697789; width: 100%; padding: 0 12mm; display: flex; justify-content: space-between;"><span>EVIDENCIA DE PRUEBAS — HUs · Portal de Proveedores ULTRASIST · ejecución ${esc(estado.run)}</span><span>Página <span class="pageNumber"></span> de <span class="totalPages"></span></span></div>`,
+  footerTemplate: `<div style="font: 7pt Arial, sans-serif; color: #697789; width: 100%; padding: 0 12mm; display: flex; justify-content: space-between;"><span>EVIDENCIA DE PRUEBAS — HUs · Portal de Proveedores FERROMEX · ejecución ${esc(estado.run)}</span><span>Página <span class="pageNumber"></span> de <span class="totalPages"></span></span></div>`,
   margin: { top: '12mm', bottom: '14mm', left: '12mm', right: '12mm' },
 });
 await navegador.close();

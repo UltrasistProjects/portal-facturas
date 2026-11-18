@@ -6,14 +6,14 @@ import { CUENTAS } from '../lib/hu';
 import { clicNavegando } from '../lib/portal';
 import { EVIDENCIAS, KEYCLOAK_URL, PORTAL_URL } from '../lib/rutas';
 
-// Criterios de aceptacion del tema de login "ultrasist" (change tema-login-keycloak), contra Keycloak real: login,
+// Criterios de aceptacion del tema de login "ferromex" (change tema-login-keycloak), contra Keycloak real: login,
 // credenciales invalidas, primer acceso con contrasena temporal, cambio voluntario, restablecimiento completo por
 // correo (Mailpit), enlace ya usado, contrasena anterior, confirmacion de cierre de sesion, cuenta deshabilitada y los
 // eventos del restablecimiento en Keycloak. En cada pagina de Keycloak se verifica que no aparezca el diseno por defecto
 // y que no haya desplazamiento horizontal.
 
 const MAILPIT_URL = process.env.MAILPIT_URL ?? 'http://127.0.0.1:58025';
-const REALM_URL = `${KEYCLOAK_URL}/realms/ultrasist-portal`;
+const REALM_URL = `${KEYCLOAK_URL}/realms/ferromex-portal`;
 const LINK_DE_ACCION = /https?:\/\/\S+\/login-actions\/action-token\?key=[^\s"<>]+/;
 const CREDENCIALES_INVALIDAS = 'Correo o contraseña incorrectos.';
 // Keycloak informa los errores de politica de la contrasena nueva en la alerta de la pagina o junto al campo.
@@ -41,7 +41,7 @@ class Recorrido {
     fs.mkdirSync(dir, { recursive: true });
   }
 
-  /** Verifica que la pagina de Keycloak use el tema ultrasist y la captura. */
+  /** Verifica que la pagina de Keycloak use el tema ferromex y la captura. */
   async keycloak(nombre: string): Promise<void> {
     const { page } = this;
     expect(page.url().startsWith(KEYCLOAK_URL), `${nombre}: se esperaba una pagina de Keycloak (${page.url()})`).toBe(true);
@@ -51,7 +51,7 @@ class Recorrido {
       .locator('link[href], script[src]')
       .evaluateAll((nodos) => nodos.map((n) => n.getAttribute('href') ?? n.getAttribute('src') ?? ''));
     expect(hojas.length, `${nombre}: sin hojas de estilo`).toBeGreaterThan(0);
-    expect(hojas.every((href) => href.includes('/login/ultrasist/')), `${nombre}: ${hojas.join(', ')}`).toBe(true);
+    expect(hojas.every((href) => href.includes('/login/ferromex/')), `${nombre}: ${hojas.join(', ')}`).toBe(true);
     expect(recursos.filter((r) => /keycloak\.v2|patternfly/i.test(r)), `${nombre}: recursos del tema por defecto`).toEqual([]);
     await expect(page.locator('img.brand-logo:visible').first()).toBeVisible();
     const [anchoDocumento, anchoVentana] = await page.evaluate(() => [document.documentElement.scrollWidth, window.innerWidth]);
@@ -141,7 +141,7 @@ async function eventosDesde(desde: number): Promise<EventoKeycloak[]> {
   if (!token.ok) throw new Error(`No se pudo consultar la API de administración de Keycloak (${token.status})`);
   const { access_token } = await token.json();
   const dia = new Date(desde).toISOString().slice(0, 10);
-  const respuesta = await fetch(`${KEYCLOAK_URL}/admin/realms/ultrasist-portal/events?dateFrom=${dia}&max=1000`, {
+  const respuesta = await fetch(`${KEYCLOAK_URL}/admin/realms/ferromex-portal/events?dateFrom=${dia}&max=1000`, {
     headers: { Authorization: `Bearer ${access_token}` },
   });
   const eventos: EventoKeycloak[] = await respuesta.json();
@@ -189,13 +189,13 @@ async function deshabilitarUsuario(browser: Browser, correo: string): Promise<vo
   }
 }
 
-test('tema de login ultrasist: inicio de sesión, primer acceso y restablecimiento', async ({ page, browser }, testInfo) => {
+test('tema de login ferromex: inicio de sesión, primer acceso y restablecimiento', async ({ page, browser }, testInfo) => {
   const run = `${Date.now().toString(36)}${testInfo.project.name.slice(0, 3)}`.toUpperCase();
-  const correo = `pmo.tema.${run.toLowerCase()}@ultrasist-qa.example`;
+  const correo = `pmo.tema.${run.toLowerCase()}@ferromex-qa.example`;
   const clave1 = `Tema#${run}a1`;
   const clave2 = `Tema#${run}b2`;
   const recorrido = new Recorrido(page, path.join(EVIDENCIAS, 'tema-login-keycloak', testInfo.project.name));
-  const inexistente = `noexiste.${run.toLowerCase()}@ultrasist-qa.example`;
+  const inexistente = `noexiste.${run.toLowerCase()}@ferromex-qa.example`;
   const inicio = Date.now() - 1_000;
   const temporal = await crearPmo(browser, `PMO Tema ${run}`, correo);
 

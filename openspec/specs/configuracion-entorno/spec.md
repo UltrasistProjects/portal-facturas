@@ -115,7 +115,7 @@ Todas las rutas de la aplicación (`.env`, `storage/`, `logs/`, `backups/`, `app
 ### Requirement: Transporte de correo configurable por entorno
 El transporte de correo SHALL configurarse con variables de entorno:
 - `MAIL_BACKEND`: `smtp` o `file`; sin definir, `smtp` si `APP_ENV=production` y `file` en los demás entornos;
-- `MAIL_FROM`: remitente de los correos; obligatorio con `smtp`, y con `file` toma por omisión "Portal de Proveedores ULTRASIST <no-reply@portal.local>";
+- `MAIL_FROM`: remitente de los correos; obligatorio con `smtp`, y con `file` toma por omisión "Portal de Proveedores FERROMEX <no-reply@portal.local>";
 - `MAIL_OUTBOX_DIR`: directorio donde el transporte `file` escribe cada correo como archivo `.eml`; por omisión `./outbox`, relativo a la raíz del proyecto;
 - `SMTP_HOST`: obligatorio con `smtp`;
 - `SMTP_PORT`: por omisión 587;
@@ -127,7 +127,7 @@ Un valor fuera de su dominio, o la falta de `SMTP_HOST` o `MAIL_FROM` con `smtp`
 
 #### Scenario: Valores por omisión fuera de producción
 - **WHEN** `APP_ENV=development` y no se define ninguna variable de correo
-- **THEN** el transporte es `file`, el directorio de salida es `<raíz del proyecto>/outbox` y el remitente es "Portal de Proveedores ULTRASIST <no-reply@portal.local>"
+- **THEN** el transporte es `file`, el directorio de salida es `<raíz del proyecto>/outbox` y el remitente es "Portal de Proveedores FERROMEX <no-reply@portal.local>"
 
 #### Scenario: SMTP sin servidor
 - **WHEN** `MAIL_BACKEND=smtp`, `MAIL_FROM` está definido y `SMTP_HOST` no

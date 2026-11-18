@@ -392,7 +392,7 @@ def test_credenciales_enviadas(client, registered_suppliers):
     authorize(client, [registered.id])
     [message] = messages()
     assert message["To"] == registered.email and message["Cc"] is None
-    assert message["Subject"] == "Acceso al Portal de Proveedores ULTRASIST"
+    assert message["Subject"] == "Acceso al Portal de Proveedores FERROMEX"
     body = message.get_body(("plain",)).get_content()
     assert f"Usuario: {registered.email}" in body and "Portal: http://testserver/login" in body
     assert PASSWORD_LINE.search(body)

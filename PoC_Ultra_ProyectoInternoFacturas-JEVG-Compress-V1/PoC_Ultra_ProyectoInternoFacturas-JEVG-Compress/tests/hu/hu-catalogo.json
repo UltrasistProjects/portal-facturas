@@ -51,9 +51,9 @@
     },
     {
       "id": "HU-06", "nombre": "Configuración de reglas de validación", "rol": "Administrador", "rf": "RF-11", "rn": [],
-      "objetivo": "Yo como administrador requiero configurar las Reglas de Validación, definiendo los datos de ULTRASIST (RFC, Razón Social, Dirección y Código Postal) contra los que se comparan las facturas, para que el sistema valide automáticamente la información de las facturas que envían los proveedores.",
+      "objetivo": "Yo como administrador requiero configurar las Reglas de Validación, definiendo los datos de FERROMEX (RFC, Razón Social, Dirección y Código Postal) contra los que se comparan las facturas, para que el sistema valide automáticamente la información de las facturas que envían los proveedores.",
       "criterios": [
-        "El Administrador deberá poder dar de alta, modificar y baja los campos y los valores de referencia de ULTRASIST usados en la validación.",
+        "El Administrador deberá poder dar de alta, modificar y baja los campos y los valores de referencia de FERROMEX usados en la validación.",
         "Las reglas configuradas deberán ser las que consume la validación de facturas nacionales (RF-08) y, en la medida de lo posible, la validación de facturas extranjeras (RF-15)."
       ],
       "dependencias": []
@@ -128,9 +128,9 @@
     },
     {
       "id": "HU-16", "nombre": "Envío de factura por proveedor internacional", "rol": "Proveedor Internacional", "rf": "RF-15", "rn": [],
-      "objetivo": "Yo como proveedor “Internacional” requiero enviar mi Invoice al área de validación (PMO), previa validación —en la medida de lo posible— de mis datos, de los datos de ULTRASIST y de la dirección, para que mi factura sea revisada.",
+      "objetivo": "Yo como proveedor “Internacional” requiero enviar mi Invoice al área de validación (PMO), previa validación —en la medida de lo posible— de mis datos, de los datos de FERROMEX y de la dirección, para que mi factura sea revisada.",
       "criterios": [
-        "Antes del envío, el sistema deberá validar, en la medida de lo posible, los datos del Invoice (datos del proveedor, datos de ULTRASIST y dirección) contra las Reglas de Validación aplicables (RF-11).",
+        "Antes del envío, el sistema deberá validar, en la medida de lo posible, los datos del Invoice (datos del proveedor, datos de FERROMEX y dirección) contra las Reglas de Validación aplicables (RF-11).",
         "Una vez enviada, la factura deberá tomar el estatus “Enviada” (consistente con RF-08)."
       ],
       "dependencias": ["HU-15", "HU-06"]

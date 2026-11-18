@@ -137,7 +137,7 @@ def test_cookie_secure_segun_configuracion(tmp_path):
             "APP_ENV": "production",
             "LOG_DIR": str(tmp_path),
             "PYTHONPATH": str(ROOT),
-            "KEYCLOAK_SERVER_URL": "https://sso.ultrasist.example",
+            "KEYCLOAK_SERVER_URL": "https://sso.ferromex.example",
         }
     )
     result = subprocess.run([sys.executable, "-c", code], env=env, cwd=ROOT, capture_output=True, text=True, check=True)

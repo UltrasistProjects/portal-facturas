@@ -152,7 +152,7 @@ def test_guardado_sin_token_csrf(client):
     assert edit(client, NATIONAL, "XML-009", "OTRA RAZON", token=False).status_code == 403
     target = rule(NATIONAL, "XML-010")
     assert client.post(f"{URL}/national/{target.id}/delete", data={"csrf_token": "x"}).status_code == 403
-    assert rule(NATIONAL, "XML-009").parameter == "ULTRASIST" and rule(NATIONAL, "XML-010").is_active
+    assert rule(NATIONAL, "XML-009").parameter == "FERROMEX" and rule(NATIONAL, "XML-010").is_active
 
 
 def test_rutas(client):
@@ -198,12 +198,12 @@ def test_migracion_de_una_configuracion_modificada():
     """La configuracion unica se convierte en reglas nacionales y siembra las internacionales con los mismos valores."""
     settings = {
         **migration_module("0007_validation_rules_catalogs").SETTINGS,
-        "receiver_name": "ULTRASIST SA DE CV",
+        "receiver_name": "FERROMEX SA DE CV",
         "check_receiver_postal_code": False,
         "receiver_address": "Av. Insurgentes Sur 1",
     }
     values = {(o, c): (p, a) for o, c, _, p, a in migration_module("0020_validation_rules").rule_values(settings)}
-    assert values["NATIONAL", "XML-009"] == values["INTERNATIONAL", "INT-002"] == ("ULTRASIST SA DE CV", True)
+    assert values["NATIONAL", "XML-009"] == values["INTERNATIONAL", "INT-002"] == ("FERROMEX SA DE CV", True)
     assert values["NATIONAL", "XML-010"] == values["INTERNATIONAL", "INT-003"] == ("03930", False)
     assert values["INTERNATIONAL", "INT-004"] == ("Av. Insurgentes Sur 1", True)
     assert values["NATIONAL", "XML-011"] == ("601", False)
@@ -257,7 +257,7 @@ def test_regla_de_otro_origen(client):
     int002 = rule(INTERNATIONAL, "INT-002")
     data = {"name": "Otra", "parameter": "OTRA", "version": 1, "csrf_token": csrf(client, "/")}
     assert client.post(f"{URL}/national/{int002.id}", data=data).status_code == 404
-    assert rule(INTERNATIONAL, "INT-002").parameter == "ULTRASIST"
+    assert rule(INTERNATIONAL, "INT-002").parameter == "FERROMEX"
 
 
 def test_editar_una_regla_eliminada(client):
@@ -387,8 +387,8 @@ def test_accion_desconocida(client):
 
 
 def test_razon_social_con_otro_formato():
-    assert results_for(demo_xml(Nombre="Últrasist  "))["XML-009"].status == "PASS"
-    assert normalize_name(" Últra   SIST ") == "ultra sist"
+    assert results_for(demo_xml(Nombre="Férromex  "))["XML-009"].status == "PASS"
+    assert normalize_name(" Férro   MEX ") == "ferro mex"
 
 
 def test_codigo_postal_distinto_en_una_factura(client):
@@ -443,19 +443,19 @@ def test_xml_no_exigido_y_ausente():
 def test_factura_internacional_con_reglas_internacionales(client):
     """Una factura internacional se valida solo con las reglas internacionales; la nacional, solo con las nacionales."""
     login(client)
-    edit(client, INTERNATIONAL, "INT-002", "ULTRASIST SA DE CV")
+    edit(client, INTERNATIONAL, "INT-002", "FERROMEX SA DE CV")
     edit(client, INTERNATIONAL, "INT-003", "06600")
     supplier = supplier_by_email("proveedor3@poc.local")
-    text = "Tax ID 98-7654321. Bill to: ULTRASIST, S.A. de C.V., C.P. 03930"
+    text = "Tax ID 98-7654321. Bill to: FERROMEX, S.A. de C.V., C.P. 03930"
     results = {r.rule_code: r for r in international_rules(text, True, supplier, rule_set(INTERNATIONAL))}
-    assert (results["INT-002"].status, results["INT-002"].expected_value) == ("PASS", "ULTRASIST SA DE CV")
+    assert (results["INT-002"].status, results["INT-002"].expected_value) == ("PASS", "FERROMEX SA DE CV")
     assert (results["INT-003"].status, results["INT-003"].expected_value) == ("WARNING", "06600")
     national = engine_results("A-CORRECTA")
-    assert (national["XML-009"].expected_value, national["XML-010"].expected_value) == ("ULTRASIST", "03930")
+    assert (national["XML-009"].expected_value, national["XML-010"].expected_value) == ("FERROMEX", "03930")
     assert not any(code.startswith("INT-") for code in national)
     international = engine_results("INV-2026-0042")
     assert (international["INT-002"].expected_value, international["INT-003"].expected_value) == (
-        "ULTRASIST SA DE CV",
+        "FERROMEX SA DE CV",
         "06600",
     )
     assert international["XML-009"].status == "NOT_APPLICABLE"
@@ -465,6 +465,6 @@ def test_regla_eliminada_en_un_solo_origen(client):
     login(client)
     change(client, INTERNATIONAL, "INT-002", "delete")
     supplier = supplier_by_email("proveedor3@poc.local")
-    results = {r.rule_code: r for r in international_rules("ULTRASIST", True, supplier, rule_set(INTERNATIONAL))}
+    results = {r.rule_code: r for r in international_rules("FERROMEX", True, supplier, rule_set(INTERNATIONAL))}
     assert (results["INT-002"].status, results["INT-002"].message) == ("NOT_APPLICABLE", DISABLED)
     assert results_for(demo_xml(Nombre="OTRA"))["XML-009"].status == "FAIL"

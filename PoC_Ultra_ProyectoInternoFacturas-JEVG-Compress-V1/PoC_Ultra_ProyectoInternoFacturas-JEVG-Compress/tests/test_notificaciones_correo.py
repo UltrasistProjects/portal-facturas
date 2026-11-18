@@ -128,7 +128,7 @@ def smtp_settings(monkeypatch):
     monkeypatch.setattr(settings, "smtp_username", "usuario-smtp-secreto")
     monkeypatch.setattr(settings, "smtp_password", SecretStr("Clave#Smtp#Secreta"))
     monkeypatch.setattr(settings, "smtp_timeout", 2)
-    monkeypatch.setattr(settings, "mail_from", "Portal ULTRASIST <portal@ultrasist.com.mx>")
+    monkeypatch.setattr(settings, "mail_from", "Portal FERROMEX <portal@ferromex.com.mx>")
 
 
 class FakeSMTP:
@@ -174,8 +174,8 @@ def test_sin_acceso_para_pmo_ni_proveedor(client, email):
     token = csrf(client, "/")
     responses = [
         client.get(URL),
-        client.post(URL, data={RECEPTION: "otro@ultrasist.com.mx", "config_version": "x", "csrf_token": token}),
-        client.post(f"{URL}/test", data={"address": "otro@ultrasist.com.mx", "csrf_token": token}),
+        client.post(URL, data={RECEPTION: "otro@ferromex.com.mx", "config_version": "x", "csrf_token": token}),
+        client.post(f"{URL}/test", data={"address": "otro@ferromex.com.mx", "csrf_token": token}),
     ]
     assert [response.status_code for response in responses] == [403, 403, 403]
     assert configuration()[RECEPTION] == RECEPTION_SEED
@@ -185,7 +185,7 @@ def test_sin_acceso_para_pmo_ni_proveedor(client, email):
 @pytest.mark.parametrize("token", [None, "token-invalido"])
 def test_guardado_sin_token_csrf(client, token):
     login(client)
-    data = form_data(client, **{RECEPTION: "otro@ultrasist.com.mx"})
+    data = form_data(client, **{RECEPTION: "otro@ferromex.com.mx"})
     if token:
         data["csrf_token"] = token
     else:
@@ -216,10 +216,10 @@ def test_instalacion_nueva():
 
 def test_cambio_del_buzon(client):
     login(client)
-    response = save(client, **{RECEPTION: "facturas@ultrasist.com.mx\ncxp@ultrasist.com.mx"})
+    response = save(client, **{RECEPTION: "facturas@ferromex.com.mx\ncxp@ferromex.com.mx"})
     assert response.status_code == 303 and response.headers["location"] == f"{URL}?ok=saved"
     assert "Configuración guardada" in client.get(response.headers["location"]).text
-    assert configuration()[RECEPTION] == ["facturas@ultrasist.com.mx", "cxp@ultrasist.com.mx"]
+    assert configuration()[RECEPTION] == ["facturas@ferromex.com.mx", "cxp@ferromex.com.mx"]
     with SessionLocal() as db:
         mailbox = ns.load(db).mailbox
         assert mailbox.updated_by == admin().id
@@ -251,9 +251,9 @@ def test_copias_iniciales(client):
 
 def test_copia_agregada(client):
     login(client)
-    assert save(client, **{REJECTED.value: "pmo@ultrasist.com.mx"}).status_code == 303
+    assert save(client, **{REJECTED.value: "pmo@ferromex.com.mx"}).status_code == 303
     lists = configuration()
-    assert lists[REJECTED] == ["pmo@ultrasist.com.mx"]
+    assert lists[REJECTED] == ["pmo@ferromex.com.mx"]
     assert lists[AUTHORIZED] == lists[OBSERVATIONS] == lists[CANCELLED] == []
     assert lists[RECEPTION] == RECEPTION_SEED
 
@@ -263,9 +263,9 @@ def test_copia_agregada(client):
 
 def test_normalizacion(client):
     login(client)
-    raw = " Facturas@Ultrasist.com.mx ; cxp@ultrasist.com.mx,facturas@ultrasist.com.mx "
+    raw = " Facturas@Ferromex.com.mx ; cxp@ferromex.com.mx,facturas@ferromex.com.mx "
     assert save(client, **{RECEPTION: raw}).status_code == 303
-    assert configuration()[RECEPTION] == ["facturas@ultrasist.com.mx", "cxp@ultrasist.com.mx"]
+    assert configuration()[RECEPTION] == ["facturas@ferromex.com.mx", "cxp@ferromex.com.mx"]
 
 
 def test_direccion_invalida(client):
@@ -278,7 +278,7 @@ def test_direccion_invalida(client):
 
 def test_demasiadas_direcciones(client):
     login(client)
-    many = "\n".join(f"buzon{i}@ultrasist.com.mx" for i in range(11))
+    many = "\n".join(f"buzon{i}@ferromex.com.mx" for i in range(11))
     response = save(client, **{RECEPTION: many})
     assert response.status_code == 400
     assert "Recepción de Facturas: admite hasta 10 correos" in response.text
@@ -302,11 +302,11 @@ def test_varios_errores_conservan_lo_capturado(client):
 def test_edicion_concurrente(client):
     login(client)
     stale = form_data(client)
-    assert save(client, **{RECEPTION: "primero@ultrasist.com.mx"}).status_code == 303
-    response = client.post(URL, data={**stale, RECEPTION: "segundo@ultrasist.com.mx"}, follow_redirects=False)
+    assert save(client, **{RECEPTION: "primero@ferromex.com.mx"}).status_code == 303
+    response = client.post(URL, data={**stale, RECEPTION: "segundo@ferromex.com.mx"}, follow_redirects=False)
     assert response.status_code == 409
     assert "La configuración cambió mientras la editaba. Recargue la página." in response.text
-    assert configuration()[RECEPTION] == ["primero@ultrasist.com.mx"]
+    assert configuration()[RECEPTION] == ["primero@ferromex.com.mx"]
 
 
 def test_sin_cambios(client):
@@ -325,21 +325,21 @@ def test_sin_cambios(client):
 
 def test_evento_dirigido_al_buzon():
     set_lists(
-        INVOICE_RECEPTION=["facturas@ultrasist.com.mx", "cxp@ultrasist.com.mx"],
-        INVOICE_AUTHORIZED=["cxp@ultrasist.com.mx", "pmo@ultrasist.com.mx"],
+        INVOICE_RECEPTION=["facturas@ferromex.com.mx", "cxp@ferromex.com.mx"],
+        INVOICE_AUTHORIZED=["cxp@ferromex.com.mx", "pmo@ferromex.com.mx"],
     )
     with SessionLocal() as db:
         recipients = ns.recipients_for(db, AUTHORIZED)
-    assert recipients.to == ("facturas@ultrasist.com.mx", "cxp@ultrasist.com.mx")
-    assert recipients.cc == ("pmo@ultrasist.com.mx",)
+    assert recipients.to == ("facturas@ferromex.com.mx", "cxp@ferromex.com.mx")
+    assert recipients.cc == ("pmo@ferromex.com.mx",)
 
 
 def test_autorizada_con_copia_al_proveedor():
-    set_lists(INVOICE_AUTHORIZED=["pmo@ultrasist.com.mx", "contacto@proveedor.mx"])
+    set_lists(INVOICE_AUTHORIZED=["pmo@ferromex.com.mx", "contacto@proveedor.mx"])
     with SessionLocal() as db:
         recipients = ns.recipients_for(db, AUTHORIZED, " Contacto@Proveedor.mx ")
     assert recipients.to == tuple(RECEPTION_SEED)
-    assert recipients.cc == ("contacto@proveedor.mx", "pmo@ultrasist.com.mx")
+    assert recipients.cc == ("contacto@proveedor.mx", "pmo@ferromex.com.mx")
 
 
 def test_cancelada_sin_copia_al_proveedor():
@@ -350,27 +350,27 @@ def test_cancelada_sin_copia_al_proveedor():
 
 
 def test_evento_dirigido_al_proveedor():
-    set_lists(INVOICE_REJECTED=["pmo@ultrasist.com.mx"])
+    set_lists(INVOICE_REJECTED=["pmo@ferromex.com.mx"])
     with SessionLocal() as db:
         recipients = ns.recipients_for(db, REJECTED, " Contacto@Proveedor.mx ")
     assert recipients.to == ("contacto@proveedor.mx",)
-    assert recipients.cc == ("pmo@ultrasist.com.mx",)
+    assert recipients.cc == ("pmo@ferromex.com.mx",)
 
 
 def test_aviso_de_pago_al_proveedor():
-    set_lists(INVOICE_PAID=["cxp@ultrasist.com.mx"])
+    set_lists(INVOICE_PAID=["cxp@ferromex.com.mx"])
     with SessionLocal() as db:
         recipients = ns.recipients_for(db, PAID, "contacto@proveedor.mx")
     assert recipients.to == ("contacto@proveedor.mx",)
-    assert recipients.cc == ("cxp@ultrasist.com.mx",)
+    assert recipients.cc == ("cxp@ferromex.com.mx",)
 
 
 def test_complemento_adjuntado_a_recepcion():
-    set_lists(PAYMENT_COMPLEMENT=["pmo@ultrasist.com.mx"])
+    set_lists(PAYMENT_COMPLEMENT=["pmo@ferromex.com.mx"])
     with SessionLocal() as db:
         recipients = ns.recipients_for(db, COMPLEMENT)
     assert recipients.to == tuple(RECEPTION_SEED)
-    assert recipients.cc == ("pmo@ultrasist.com.mx",)
+    assert recipients.cc == ("pmo@ferromex.com.mx",)
 
 
 @pytest.mark.parametrize("supplier_email", [None, "  "])
@@ -388,7 +388,7 @@ def test_envio_al_buzon_con_el_transporte_de_archivo():
     delivery = notify(AUTHORIZED, entity="Invoice", entity_id=42)
     assert delivery.status == DeliveryStatus.SENT and delivery.transport == "file"
     [message] = outbox_messages()
-    assert message["To"] == "recepcionfacturas@ultrasist.com.mx"
+    assert message["To"] == "recepcionfacturas@ferromex.com.mx"
     assert message["Cc"] is None
     assert message["From"] == settings.mail_from
     assert message["Subject"] == "Factura A-1024 autorizada para pago"
@@ -431,7 +431,7 @@ def test_version_html_escapa_los_valores():
 
 def test_version_html_enlaces_y_datos():
     body = (
-        "Ingrese a https://portal.ultrasist.mx/login?a=1&b=2. Ignore javascript:alert(1).\n\n"
+        "Ingrese a https://portal.ferromex.mx/login?a=1&b=2. Ignore javascript:alert(1).\n\n"
         "Nota: sin datos.\n\n"
         "Portal: http://127.0.0.1:8000/login\nUsuario: contacto@proveedor.mx"
     )
@@ -440,7 +440,7 @@ def test_version_html_enlaces_y_datos():
         [
             mail_layout.Segment("Ingrese a "),
             mail_layout.Segment(
-                "https://portal.ultrasist.mx/login?a=1&b=2", "https://portal.ultrasist.mx/login?a=1&b=2"
+                "https://portal.ferromex.mx/login?a=1&b=2", "https://portal.ferromex.mx/login?a=1&b=2"
             ),
             mail_layout.Segment(". Ignore javascript:alert(1)."),
         ]
@@ -448,17 +448,17 @@ def test_version_html_enlaces_y_datos():
     assert note.fields is None and note.lines == [[mail_layout.Segment("Nota: sin datos.")]]
     assert [field.label for field in fields.fields] == ["Portal", "Usuario"]
     content = mail_layout.render_html("Asunto", body, "cid:logo@portal.local")
-    assert '<a href="https://portal.ultrasist.mx/login?a=1&amp;b=2"' in content
+    assert '<a href="https://portal.ferromex.mx/login?a=1&amp;b=2"' in content
     assert 'href="javascript' not in content
 
 
 def test_copias_en_el_mensaje():
-    set_lists(INVOICE_OBSERVATIONS=["pmo@ultrasist.com.mx", "calidad@ultrasist.com.mx"])
+    set_lists(INVOICE_OBSERVATIONS=["pmo@ferromex.com.mx", "calidad@ferromex.com.mx"])
     delivery = notify(OBSERVATIONS, supplier_email="contacto@proveedor.mx")
     [message] = outbox_messages()
     assert message["To"] == "contacto@proveedor.mx"
-    assert message["Cc"] == "pmo@ultrasist.com.mx, calidad@ultrasist.com.mx"
-    assert delivery.cc_addresses == ["pmo@ultrasist.com.mx", "calidad@ultrasist.com.mx"]
+    assert message["Cc"] == "pmo@ferromex.com.mx, calidad@ferromex.com.mx"
+    assert delivery.cc_addresses == ["pmo@ferromex.com.mx", "calidad@ferromex.com.mx"]
 
 
 def test_servidor_de_correo_caido(smtp_settings):
@@ -527,7 +527,7 @@ def test_envios_en_la_pantalla(client):
                 EmailDelivery(
                     event=AUTHORIZED,
                     status=DeliveryStatus.SENT,
-                    to_addresses=[f"envio{number:02d}@ultrasist.com.mx"],
+                    to_addresses=[f"envio{number:02d}@ferromex.com.mx"],
                     cc_addresses=[],
                     transport="file",
                     message_id=f"<{number}@portal.local>",
@@ -536,9 +536,9 @@ def test_envios_en_la_pantalla(client):
             )
         db.commit()
     login(client)
-    shown = re.findall(r"envio(\d\d)@ultrasist\.com\.mx", client.get(URL).text)
+    shown = re.findall(r"envio(\d\d)@ferromex\.com\.mx", client.get(URL).text)
     assert shown == [f"{number:02d}" for number in range(29, 4, -1)]
-    older = re.findall(r"envio(\d\d)@ultrasist\.com\.mx", client.get(URL, params={"page": 2}).text)
+    older = re.findall(r"envio(\d\d)@ferromex\.com\.mx", client.get(URL, params={"page": 2}).text)
     assert older == ["04", "03", "02", "01", "00"]
 
 
@@ -547,20 +547,20 @@ def test_envios_en_la_pantalla(client):
 
 def test_prueba_exitosa(client):
     login(client)
-    response = send_test(client, "Admin@Ultrasist.com.mx")
+    response = send_test(client, "Admin@Ferromex.com.mx")
     [delivery] = deliveries()
     assert response.status_code == 303 and response.headers["location"] == f"{URL}?test={delivery.id}"
-    assert "Correo de prueba enviado a admin@ultrasist.com.mx" in client.get(response.headers["location"]).text
+    assert "Correo de prueba enviado a admin@ferromex.com.mx" in client.get(response.headers["location"]).text
     assert (delivery.event, delivery.status, delivery.requested_by) == (None, DeliveryStatus.SENT, admin().id)
     [message] = outbox_messages()
-    assert message["To"] == "admin@ultrasist.com.mx"
-    assert message["Subject"] == "Correo de prueba del Portal de Proveedores ULTRASIST"
+    assert message["To"] == "admin@ferromex.com.mx"
+    assert message["Subject"] == "Correo de prueba del Portal de Proveedores FERROMEX"
     assert admin().name in message.get_body(("plain",)).get_content()
 
 
 def test_prueba_fallida(client, smtp_settings):
     login(client)
-    response = send_test(client, "admin@ultrasist.com.mx")
+    response = send_test(client, "admin@ferromex.com.mx")
     page = client.get(response.headers["location"]).text
     assert "No se pudo enviar el correo de prueba" in page and "ConnectionRefusedError" in page
     assert [d.status for d in deliveries()] == [DeliveryStatus.FAILED]
@@ -571,7 +571,7 @@ def test_prueba_fallida(client, smtp_settings):
     [
         ("admin@", "Correo de prueba: «admin@» no es un correo válido"),
         ("", "Correo de prueba: indique al menos un correo"),
-        ("a@ultrasist.com.mx, b@ultrasist.com.mx", "Correo de prueba: indique un solo correo"),
+        ("a@ferromex.com.mx, b@ferromex.com.mx", "Correo de prueba: indique un solo correo"),
     ],
 )
 def test_direccion_de_prueba_invalida(client, address, message):
@@ -608,14 +608,14 @@ def test_transporte_smtp_sin_credenciales_en_la_pagina(client, smtp_settings):
 
 def test_auditoria_de_un_cambio(client):
     login(client)
-    assert save(client, **{CANCELLED.value: "cxp@ultrasist.com.mx"}).status_code == 303
+    assert save(client, **{CANCELLED.value: "cxp@ferromex.com.mx"}).status_code == 303
     with SessionLocal() as db:
         entry = db.scalar(
             select(AuditLog).where(AuditLog.action == "NOTIFICATION_RECIPIENTS_UPDATED").order_by(AuditLog.id.desc())
         )
     assert (entry.entity, entry.user_id) == ("NotificationRecipients", admin().id)
     assert entry.old_value == {"INVOICE_CANCELLED": []}
-    assert entry.new_value == {"INVOICE_CANCELLED": ["cxp@ultrasist.com.mx"]}
+    assert entry.new_value == {"INVOICE_CANCELLED": ["cxp@ferromex.com.mx"]}
 
 
 def test_acciones_sin_auditoria(client):
@@ -624,7 +624,7 @@ def test_acciones_sin_auditoria(client):
     stale = form_data(client)
     assert save(client, **{RECEPTION: ""}).status_code == 400
     assert save(client).status_code == 303  # sin cambios
-    assert send_test(client, "admin@ultrasist.com.mx").status_code == 303
-    set_lists(INVOICE_REJECTED=["otro@ultrasist.com.mx"])  # cambio fuera de la pantalla: la huella vieja caduca
+    assert send_test(client, "admin@ferromex.com.mx").status_code == 303
+    set_lists(INVOICE_REJECTED=["otro@ferromex.com.mx"])  # cambio fuera de la pantalla: la huella vieja caduca
     assert client.post(URL, data=stale, follow_redirects=False).status_code == 409
     assert audit_count() == before

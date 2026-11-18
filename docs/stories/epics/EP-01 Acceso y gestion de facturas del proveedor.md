@@ -220,9 +220,9 @@ La minuta pide "evitar duplicados inicialmente por nombre de archivo".
 - **Reglas que dejan de aplicar:** XML-001 a XML-010 y FIN-004 resultan `NOT_APPLICABLE` para el origen Internacional, con el mensaje "No aplica a proveedores internacionales". SEM-001 resulta `NOT_EVALUATED`: el Invoice no tiene conceptos estructurados.
 - **Reglas nuevas (categoría `INT`):** se evalúan sobre el texto del PDF. Hoy `analyze_pdf` sólo guarda los primeros 2 000 caracteres en `text_preview`, así que el motor debe releer el PDF completo.
   - INT-001: el identificador fiscal del proveedor (`foreign_tax_id`) aparece en el Invoice.
-  - INT-002: la Razón Social de ULTRASIST (Reglas de Validación) aparece en el Invoice.
-  - INT-003: el Código Postal de ULTRASIST aparece en el Invoice como número aislado.
-  - INT-004: la Dirección de ULTRASIST aparece en el Invoice; "No aplica" si no está configurada.
+  - INT-002: la Razón Social de FERROMEX (Reglas de Validación) aparece en el Invoice.
+  - INT-003: el Código Postal de FERROMEX aparece en el Invoice como número aislado.
+  - INT-004: la Dirección de FERROMEX aparece en el Invoice; "No aplica" si no está configurada.
   - INT-002 e INT-003 respetan los interruptores de Razón Social y Código Postal de las Reglas de Validación. (Implementado así en `factura-internacional`; el borrador inicial juntaba dirección y código postal en una sola regla.)
 - **Severidad de las reglas INT:** `WARNING`. Nunca bloquean el envío, porque el texto puede no extraerse bien o venir con otro formato. Si el PDF no tiene capa de texto (por ejemplo, un escaneo), resultan `NOT_EVALUATED`.
 - **Expediente del proveedor:** que SUP-003 y SUP-004 apliquen o no al internacional lo decide P-06.
@@ -360,7 +360,7 @@ El texto literal dice "me solicite cambiar mi **correo**": es una errata de "con
 **Criterios clave:**
 
 - Un Invoice sin XML deja las reglas XML en `NOT_APPLICABLE`, y eso no bloquea el envío.
-- Si el texto del Invoice no contiene la Razón Social de ULTRASIST, INT-002 resulta `WARNING` y la factura pasa a "Enviada".
+- Si el texto del Invoice no contiene la Razón Social de FERROMEX, INT-002 resulta `WARNING` y la factura pasa a "Enviada".
 - Un PDF escaneado sin texto deja las reglas INT en `NOT_EVALUATED` con el mensaje "No se pudo leer el texto del Invoice", y la factura se envía.
 
 **Decide la HU:** P-06, P-07 y la lista final de reglas INT, una vez analizadas las muestras.
@@ -429,7 +429,7 @@ Ninguna bloquea el inicio de la épica. Cada una tiene un valor que se aplica mi
 | P-02 | ¿También deben cambiar la contraseña en su primer acceso los usuarios internos a quienes el Administrador asigna una contraseña inicial? | Sí, con el mismo mecanismo | HU-10 | Sólo cambia qué altas activan la marca |
 | P-03 | RN-HU13-01: ¿el "número de folio del XML" es el UUID (folio fiscal)? | Sí (DT-03), y el PoC ya lo garantiza | HU-13 | Si es Serie y Folio: extraerlos del XML y agregar una regla por RFC emisor |
 | P-04 | ¿"Rechazada" es definitiva, de modo que el proveedor debe emitir un CFDI nuevo? | Sí. "Observaciones" es la vía para corregir la misma factura | HU-13, HU-17, EP-02 | Si no es definitiva, "Rechazada" debe admitir reenvío y la unicidad del UUID cambia |
-| P-05 | ¿Desde qué estatus puede cancelar el proveedor? ¿También desde "Autorizada", con el pago en curso? | Desde cualquier estatus excepto "Cancelada": el SAT pedirá a ULTRASIST aceptar la cancelación en todos los casos | HU-14 | Cambia las transiciones a "Cancelada" y lo que ve el PMO |
+| P-05 | ¿Desde qué estatus puede cancelar el proveedor? ¿También desde "Autorizada", con el pago en curso? | Desde cualquier estatus excepto "Cancelada": el SAT pedirá a FERROMEX aceptar la cancelación en todos los casos | HU-14 | Cambia las transiciones a "Cancelada" y lo que ve el PMO |
 | P-06 | ¿Qué expediente debe tener el proveedor internacional? (P-02 de HU-04) | SUP-003 y SUP-004 no aplican al internacional | HU-16 | Si se define, se agrega su lista y SUP-003 vuelve a aplicarle |
 | P-07 | Con las tres muestras de invoices extranjeros: ¿qué datos deben verificarse y con qué severidad? ¿Se requiere extracción automática con IA? | INT-001 a INT-004 como advertencias sobre el texto del PDF | HU-16 | Puede agregar reglas o subir severidades. La IA sería una HU aparte |
 | P-08 | El duplicado por nombre de archivo, ¿se busca dentro del mismo proveedor o en todo el portal? ¿Cuentan las facturas canceladas? | Mismo proveedor, sin contar las canceladas | HU-15 | Cambia la consulta de la regla |
@@ -497,7 +497,7 @@ Recorrido de extremo a extremo que debe funcionar al cerrar la épica:
 | HU-12 | RF-07 | RN-HU12-01 | Rol Proveedor: "registrar, validar y dar seguimiento a las facturas"; "Proveedores nacionales: carga de PDF y XML; documentos soporte" | Dentro del MVP |
 | HU-13 | RF-08 | RN-HU13-01, RN-HU13-02 | "control de duplicados mediante el identificador contenido en el XML"; "Validación nacional: comparar RFC, Razón Social, Dirección y Código Postal" | Dentro del MVP |
 | HU-15 | RF-14 | — | "Proveedores extranjeros: carga de Invoice en PDF y documentos soporte; evitar duplicados inicialmente por nombre de archivo" | Nueva (cierre de cobertura) |
-| HU-16 | RF-15 | — | "Validación extranjera: validar, en la medida de lo posible, la información del Invoice, incluyendo datos del proveedor, datos de ULTRASIST y dirección" | Nueva (cierre de cobertura) |
+| HU-16 | RF-15 | — | "Validación extranjera: validar, en la medida de lo posible, la información del Invoice, incluyendo datos del proveedor, datos de FERROMEX y dirección" | Nueva (cierre de cobertura) |
 | HU-14 | RF-09 | — | "Cancelación: permitir solicitar la cancelación y enviar una notificación automática al área de Facturas Electrónicas para revisión y autorización" | Dentro del MVP |
 | HU-17 | RF-16 | — | "El portal permitirá registrar, validar y dar seguimiento a las facturas" | Nueva (cierre de cobertura) |
 

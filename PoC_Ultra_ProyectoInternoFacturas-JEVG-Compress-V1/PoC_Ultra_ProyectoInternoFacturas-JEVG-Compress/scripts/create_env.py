@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 POSTGRES_DEFAULTS = {"POSTGRES_USER": "portal", "POSTGRES_DB": "portal", "POSTGRES_PORT": "55432"}
 KEYCLOAK_DEFAULTS = {
     "KEYCLOAK_PORT": "58080",
-    "KEYCLOAK_REALM": "ultrasist-portal",
+    "KEYCLOAK_REALM": "ferromex-portal",
     "KC_BOOTSTRAP_ADMIN_USERNAME": "admin",
 }
 # Secretos de Keycloak que se generan si faltan: los dos clientes del realm y el administrador inicial.

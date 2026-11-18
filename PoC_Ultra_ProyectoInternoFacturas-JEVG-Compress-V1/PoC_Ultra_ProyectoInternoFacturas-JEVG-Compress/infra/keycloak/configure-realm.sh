@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Aplica al realm ultrasist-portal ya importado lo que --import-realm solo aplica al crearlo: el tema de login, el
+# Aplica al realm ferromex-portal ya importado lo que --import-realm solo aplica al crearlo: el tema de login, el
 # restablecimiento de contrasena, los eventos que se registran (incluidos los del restablecimiento) y el servidor de
 # correo de Keycloak. Idempotente: repetirlo deja el mismo estado.
 # No toca roles, flujos de autenticacion ni la politica de contrasenas; el cliente del portal, solo con PORTAL_URL.
@@ -18,11 +18,11 @@
 # lugar de los locales del realm versionado. Sin PORTAL_URL no se toca el cliente.
 set -euo pipefail
 
-REALM=ultrasist-portal
-# Deben coincidir con loginTheme, resetPasswordAllowed y enabledEventTypes de realm-ultrasist-portal.json (lo verifica
+REALM=ferromex-portal
+# Deben coincidir con loginTheme, resetPasswordAllowed y enabledEventTypes de realm-ferromex-portal.json (lo verifica
 # una prueba). Los eventos son los del inicio de sesion y los del restablecimiento: la solicitud (SEND_RESET_PASSWORD),
 # el enlace del correo (EXECUTE_ACTION_TOKEN, tambien si ya se uso o vencio) y el cambio (RESET_PASSWORD).
-LOGIN_THEME=ultrasist
+LOGIN_THEME=ferromex
 RESET_PASSWORD_ALLOWED=true
 EVENT_TYPES='["LOGIN","LOGIN_ERROR","LOGOUT","LOGOUT_ERROR","CODE_TO_TOKEN","CODE_TO_TOKEN_ERROR","UPDATE_PASSWORD",'\
 '"UPDATE_PASSWORD_ERROR","USER_DISABLED_BY_TEMPORARY_LOCKOUT","SEND_RESET_PASSWORD","SEND_RESET_PASSWORD_ERROR",'\
@@ -86,7 +86,7 @@ if [ -n "${KEYCLOAK_SMTP_HOST:-}" ]; then
     -s "smtpServer.host=$KEYCLOAK_SMTP_HOST"
     -s "smtpServer.port=$port"
     -s "smtpServer.from=$KEYCLOAK_SMTP_FROM"
-    -s "smtpServer.fromDisplayName=${KEYCLOAK_SMTP_FROM_NAME:-Portal de Proveedores ULTRASIST}"
+    -s "smtpServer.fromDisplayName=${KEYCLOAK_SMTP_FROM_NAME:-Portal de Proveedores FERROMEX}"
     -s "smtpServer.starttls=$starttls"
     -s "smtpServer.ssl=$ssl"
   )

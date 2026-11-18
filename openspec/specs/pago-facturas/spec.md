@@ -116,7 +116,7 @@ Después de confirmar cada carga válida del XML del Complemento de Pago en una 
 
 #### Scenario: Aviso a Recepción
 - **WHEN** con `MAIL_BACKEND=file` el proveedor "Servicios Digitales del Norte SA de CV" adjunta el complemento de la factura "A-1024"
-- **THEN** el buzón de salida tiene un correo para `recepcionfacturas@ultrasist.com.mx` con el asunto "Complemento de pago de la factura A-1024" y el texto "El Complemento de Pago ha sido adjuntado a la factura A-1024 del proveedor Servicios Digitales del Norte SA de CV.", y el proveedor ve "Se notificó a Recepción de Facturas"
+- **THEN** el buzón de salida tiene un correo para `recepcionfacturas@ferromex.com.mx` con el asunto "Complemento de pago de la factura A-1024" y el texto "El Complemento de Pago ha sido adjuntado a la factura A-1024 del proveedor Servicios Digitales del Norte SA de CV.", y el proveedor ve "Se notificó a Recepción de Facturas"
 
 #### Scenario: Reemplazo del complemento
 - **WHEN** el proveedor reemplaza el XML del complemento de una factura cuyo complemento ya estaba adjuntado

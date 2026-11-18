@@ -54,7 +54,7 @@ test('HU-06 · Configuración de reglas de validación', async ({ browser }, tes
           await admin.goto('/admin/rules/national');
           await expect(admin.locator('h1')).toHaveText('Reglas de validación — Nacionales');
           await expect(filaRegla(admin, 'XML-002')).toContainText('ULT940623AG0');
-          await expect(filaRegla(admin, 'XML-009')).toContainText('ULTRASIST');
+          await expect(filaRegla(admin, 'XML-009')).toContainText('FERROMEX');
           await expect(filaRegla(admin, 'XML-010')).toContainText('03930');
           await expect(admin.locator('td.mono', { hasText: 'INT-' })).toHaveCount(0);
           await hu.captura(admin, 'reglas-nacionales', 'Reglas de validación — Nacionales: valores esperados, severidad y acciones.', { completa: true });
@@ -69,7 +69,7 @@ test('HU-06 · Configuración de reglas de validación', async ({ browser }, tes
         async () => {
           await admin.goto('/admin/rules/international');
           await expect(admin.locator('h1')).toHaveText('Reglas de validación — Internacionales');
-          await expect(filaRegla(admin, 'INT-002')).toContainText('ULTRASIST');
+          await expect(filaRegla(admin, 'INT-002')).toContainText('FERROMEX');
           await expect(admin.locator('td.mono', { hasText: 'XML-' })).toHaveCount(0);
           await hu.captura(admin, 'reglas-internacionales', 'Reglas de validación — Internacionales.', { completa: true });
           const codigos = await admin.locator('table tbody td.mono').allInnerTexts();
@@ -99,14 +99,14 @@ test('HU-06 · Configuración de reglas de validación', async ({ browser }, tes
     await hu.escenario('Alta de un valor de referencia internacional (INT-004 / Dirección)', async () => {
       await hu.paso(
         admin,
-        'Capturar la Dirección de ULTRASIST en INT-004 (nace eliminada) y restaurarla',
+        'Capturar la Dirección de FERROMEX en INT-004 (nace eliminada) y restaurarla',
         'La regla guarda la dirección ("Regla actualizada") y al restaurarla queda activa ("Regla restaurada").',
         async () => {
           const editado = await editarRegla(admin, 'international', 'INT-004', direccion);
           const restaurado = await restaurarRegla(admin, 'international', 'INT-004');
           await admin.goto('/admin/rules/international');
           await expect(filaRegla(admin, 'INT-004')).toContainText(direccion);
-          await hu.captura(admin, 'direccion-guardada', 'INT-004 activa con la Dirección de ULTRASIST.', { enfocar: filaRegla(admin, 'INT-004') });
+          await hu.captura(admin, 'direccion-guardada', 'INT-004 activa con la Dirección de FERROMEX.', { enfocar: filaRegla(admin, 'INT-004') });
           return `Edición: "${editado}"; restauración: "${restaurado}"; INT-004 espera "${direccion}".`;
         },
       );
@@ -177,21 +177,21 @@ test('HU-06 · Configuración de reglas de validación', async ({ browser }, tes
     });
 
     await hu.escenario('Una factura nacional sólo usa las reglas nacionales', async () => {
-      await hu.paso(admin, 'Cambiar la Razón social de la regla internacional INT-002 a "OTRA RAZON QA"', 'Sólo cambia la regla internacional; XML-009 sigue esperando "ULTRASIST".', async () => {
+      await hu.paso(admin, 'Cambiar la Razón social de la regla internacional INT-002 a "OTRA RAZON QA"', 'Sólo cambia la regla internacional; XML-009 sigue esperando "FERROMEX".', async () => {
         const aviso = await editarRegla(admin, 'international', 'INT-002', 'OTRA RAZON QA');
         await admin.goto('/admin/rules/national');
-        await expect(filaRegla(admin, 'XML-009')).toContainText('ULTRASIST');
-        return `Aviso "${aviso}"; XML-009 (nacional) sigue en ULTRASIST.`;
+        await expect(filaRegla(admin, 'XML-009')).toContainText('FERROMEX');
+        return `Aviso "${aviso}"; XML-009 (nacional) sigue en FERROMEX.`;
       });
-      await hu.paso(proveedor, 'El proveedor pulsa "Verificar" en A-CORRECTA', 'XML-009 resulta PASS con el valor esperado nacional "ULTRASIST".', async () => {
+      await hu.paso(proveedor, 'El proveedor pulsa "Verificar" en A-CORRECTA', 'XML-009 resulta PASS con el valor esperado nacional "FERROMEX".', async () => {
         await verificar(proveedor);
         const regla = await resultadoRegla(proveedor, 'XML-009');
         expect(regla.estado).toBe('PASS');
-        expect(regla.esperado).toBe('ULTRASIST');
+        expect(regla.esperado).toBe('FERROMEX');
         return `XML-009: ${regla.estado} (esperado "${regla.esperado}").`;
       });
-      await hu.paso(admin, 'Restaurar "ULTRASIST" en INT-002', 'La regla internacional vuelve a su valor inicial.', async () => {
-        return `Aviso "${await editarRegla(admin, 'international', 'INT-002', 'ULTRASIST')}".`;
+      await hu.paso(admin, 'Restaurar "FERROMEX" en INT-002', 'La regla internacional vuelve a su valor inicial.', async () => {
+        return `Aviso "${await editarRegla(admin, 'international', 'INT-002', 'FERROMEX')}".`;
       });
     });
 

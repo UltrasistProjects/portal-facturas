@@ -19,7 +19,7 @@ from tests.test_acceso_proveedores import closed_port, messages
 
 pytestmark = pytest.mark.usefixtures("restore_notification_recipients")
 
-RECEPTION = "recepcionfacturas@ultrasist.com.mx"
+RECEPTION = "recepcionfacturas@ferromex.com.mx"
 PROVIDER_EMAIL = "proveedor1@poc.local"
 
 

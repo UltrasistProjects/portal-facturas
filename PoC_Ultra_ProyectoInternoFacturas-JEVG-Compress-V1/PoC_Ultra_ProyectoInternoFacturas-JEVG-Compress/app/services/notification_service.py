@@ -55,11 +55,11 @@ MSG_CHANGED = "La configuración cambió mientras la editaba. Recargue la págin
 AUDIT_ACTION = "NOTIFICATION_RECIPIENTS_UPDATED"
 ENTITY = "NotificationRecipients"
 TEST_LABEL = "Correo de prueba"
-TEST_SUBJECT = "Correo de prueba del Portal de Proveedores ULTRASIST"
+TEST_SUBJECT = "Correo de prueba del Portal de Proveedores FERROMEX"
 TEST_BODY = (
     "Este es un correo de prueba enviado por {name} el {date} desde Administración › Notificaciones.\n\n"
     "Si lo recibió, el portal puede enviar correos con la configuración vigente.\n\n"
-    "Este es un mensaje automático del Portal de Proveedores ULTRASIST. No responda a este correo."
+    "Este es un mensaje automático del Portal de Proveedores FERROMEX. No responda a este correo."
 )
 SECURITY_LABELS = {"starttls": "STARTTLS", "ssl": "SSL/TLS", "none": "Sin cifrar"}
 

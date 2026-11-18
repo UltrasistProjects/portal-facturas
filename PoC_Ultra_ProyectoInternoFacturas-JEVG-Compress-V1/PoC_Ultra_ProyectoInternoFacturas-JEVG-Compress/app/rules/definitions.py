@@ -117,7 +117,7 @@ RULE_DEFINITIONS = (
     RuleDefinition(
         INTERNATIONAL,
         "INT-002",
-        "Razón social de ULTRASIST",
+        "Razón social de FERROMEX",
         "Razón social en el texto del Invoice",
         Severity.WARNING,
         ParameterKind.TEXT,
@@ -126,7 +126,7 @@ RULE_DEFINITIONS = (
     RuleDefinition(
         INTERNATIONAL,
         "INT-003",
-        "Código postal de ULTRASIST",
+        "Código postal de FERROMEX",
         "Código postal en el texto del Invoice",
         Severity.WARNING,
         ParameterKind.POSTAL_CODE,
@@ -135,7 +135,7 @@ RULE_DEFINITIONS = (
     RuleDefinition(
         INTERNATIONAL,
         "INT-004",
-        "Dirección de ULTRASIST",
+        "Dirección de FERROMEX",
         "Dirección en el texto del Invoice",
         Severity.WARNING,
         ParameterKind.ADDRESS,

@@ -85,7 +85,7 @@ La carga también debe dejar en el catálogo los datos que consumen las HU poste
 | Carga masiva de otros catálogos o de contratos | HU-07 |
 | Expediente documental de proveedores internacionales (el Anexo A sólo cubre personas físicas y morales mexicanas) | HU-04 |
 | Datos bancarios | RD-08 |
-| Domicilio y código postal del proveedor | Ninguna HU del MVP los usa: HU-06 compara la dirección de ULTRASIST, no la del proveedor (RD-09) |
+| Domicilio y código postal del proveedor | Ninguna HU del MVP los usa: HU-06 compara la dirección de FERROMEX, no la del proveedor (RD-09) |
 
 ## 4. Situación actual del PoC
 

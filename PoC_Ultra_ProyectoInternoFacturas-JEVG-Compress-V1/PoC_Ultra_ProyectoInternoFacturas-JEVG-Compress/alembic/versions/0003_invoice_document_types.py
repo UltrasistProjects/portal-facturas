@@ -46,7 +46,7 @@ SYSTEM_TYPES = [
         "REQUIRED",
         "REQUIRED",
     ),
-    ("CONTRACT", "Contrato", "Contrato firmado con ULTRASIST", SUPPORT, "OPTIONAL", "OPTIONAL"),
+    ("CONTRACT", "Contrato", "Contrato firmado con FERROMEX", SUPPORT, "OPTIONAL", "OPTIONAL"),
     ("CONTRACT_ANNEX", "Anexo del contrato", "Anexo firmado del contrato", SUPPORT, "OPTIONAL", "OPTIONAL"),
     (
         "PAYMENT_COMPLEMENT_XML",

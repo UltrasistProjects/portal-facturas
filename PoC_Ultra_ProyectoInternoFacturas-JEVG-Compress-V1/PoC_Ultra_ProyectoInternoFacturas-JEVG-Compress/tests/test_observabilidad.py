@@ -258,7 +258,7 @@ def test_envio_de_correo_registrado(restore_notification_recipients):
     assert sent["event_code"] == "INVOICE_AUTHORIZED" and sent["delivery_id"] == delivery.id
     assert sent["transport"] == "file" and sent["recipients"] == 1 and "duration_ms" in sent
     content = json.dumps(events, ensure_ascii=False)
-    for value in ("recepcionfacturas@ultrasist.com.mx", "LOG-MAIL-1", "autorizada para pago", "Proveedor del log"):
+    for value in ("recepcionfacturas@ferromex.com.mx", "LOG-MAIL-1", "autorizada para pago", "Proveedor del log"):
         assert value not in content, value
 
 
@@ -269,23 +269,23 @@ def test_envio_fallido_registrado(client, monkeypatch, restore_notification_reci
     login(client)
     offset = log_offset()
     client.post(
-        "/admin/notifications/test", data={"address": "prueba-log@ultrasist.com.mx", "csrf_token": csrf(client, "/")}
+        "/admin/notifications/test", data={"address": "prueba-log@ferromex.com.mx", "csrf_token": csrf(client, "/")}
     )
     events = events_since(offset)
     [failed] = [e for e in events if e.get("event") == "notification.failed"]
     assert failed["level"] == "WARNING" and failed["event_code"] == "TEST"
     assert failed["error_type"] == "ConnectionRefusedError" and "error" not in failed
-    assert "prueba-log@ultrasist.com.mx" not in json.dumps(events)
+    assert "prueba-log@ferromex.com.mx" not in json.dumps(events)
 
 
 def test_cambio_de_destinatarios_registrado(client, restore_notification_recipients):
     login(client)
     offset = log_offset()
-    save_recipients(client, INVOICE_REJECTED="copia-log@ultrasist.com.mx")
+    save_recipients(client, INVOICE_REJECTED="copia-log@ferromex.com.mx")
     events = events_since(offset)
     updated = [e for e in events if e.get("event") == "notification_recipients.updated"]
     assert [e["lists"] for e in updated] == [["INVOICE_REJECTED"]]
-    assert "copia-log@ultrasist.com.mx" not in json.dumps(events)
+    assert "copia-log@ferromex.com.mx" not in json.dumps(events)
 
 
 def test_sin_datos_sensibles_al_enviar_correos(client, monkeypatch, restore_notification_recipients):
@@ -296,17 +296,17 @@ def test_sin_datos_sensibles_al_enviar_correos(client, monkeypatch, restore_noti
     monkeypatch.setattr(settings, "smtp_password", SecretStr("Clave#Smtp#DelLog"))
     login(client)
     offset = log_offset()
-    save_recipients(client, INVOICE_RECEPTION="buzon-log@ultrasist.com.mx")
+    save_recipients(client, INVOICE_RECEPTION="buzon-log@ferromex.com.mx")
     client.post(
-        "/admin/notifications/test", data={"address": "prueba-log@ultrasist.com.mx", "csrf_token": csrf(client, "/")}
+        "/admin/notifications/test", data={"address": "prueba-log@ferromex.com.mx", "csrf_token": csrf(client, "/")}
     )
     with SessionLocal() as db:
         notification_service.notify(db, NotificationEvent.INVOICE_AUTHORIZED, **INVOICE_VALUES)
     content = json.dumps(events_since(offset), ensure_ascii=False)
     for value in (
         "Clave#Smtp#DelLog",
-        "buzon-log@ultrasist.com.mx",
-        "prueba-log@ultrasist.com.mx",
+        "buzon-log@ferromex.com.mx",
+        "prueba-log@ferromex.com.mx",
         "Correo de prueba del Portal",
         "Factura LOG-MAIL-1 autorizada para pago",
     ):

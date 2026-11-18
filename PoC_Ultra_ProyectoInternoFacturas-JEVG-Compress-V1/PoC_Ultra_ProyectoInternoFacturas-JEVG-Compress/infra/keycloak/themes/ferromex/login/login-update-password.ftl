@@ -32,14 +32,14 @@
                 </#if>
 
                 <div id="password-requirements" class="password-help">
-                    <p class="password-help-title">${msg("ultrasistPasswordHelpTitle")}</p>
+                    <p class="password-help-title">${msg("ferromexPasswordHelpTitle")}</p>
                     <ul>
-                        <li>${msg("ultrasistPasswordHelpLength")}</li>
-                        <li>${msg("ultrasistPasswordHelpLetter")}</li>
-                        <li>${msg("ultrasistPasswordHelpDigit")}</li>
-                        <li>${msg("ultrasistPasswordHelpSpecial")}</li>
+                        <li>${msg("ferromexPasswordHelpLength")}</li>
+                        <li>${msg("ferromexPasswordHelpLetter")}</li>
+                        <li>${msg("ferromexPasswordHelpDigit")}</li>
+                        <li>${msg("ferromexPasswordHelpSpecial")}</li>
                     </ul>
-                    <p class="password-help-note">${msg("ultrasistPasswordHelpNote")}</p>
+                    <p class="password-help-note">${msg("ferromexPasswordHelpNote")}</p>
                 </div>
             </div>
 
@@ -70,10 +70,10 @@
 
             <div id="kc-form-buttons" class="${properties.kcFormButtonsClass!}">
                 <#if isAppInitiatedAction??>
-                    <input id="kc-submit" name="login" class="${properties.kcButtonClass!} ${properties.kcButtonPrimaryClass!} ${properties.kcButtonLargeClass!}" type="submit" value="${msg("ultrasistPasswordSubmit")}" />
+                    <input id="kc-submit" name="login" class="${properties.kcButtonClass!} ${properties.kcButtonPrimaryClass!} ${properties.kcButtonLargeClass!}" type="submit" value="${msg("ferromexPasswordSubmit")}" />
                     <button id="kc-cancel" class="${properties.kcButtonClass!} ${properties.kcButtonDefaultClass!} ${properties.kcButtonLargeClass!}" type="submit" name="cancel-aia" value="true">${msg("doCancel")}</button>
                 <#else>
-                    <input id="kc-submit" name="login" class="${properties.kcButtonClass!} ${properties.kcButtonPrimaryClass!} ${properties.kcButtonBlockClass!} ${properties.kcButtonLargeClass!}" type="submit" value="${msg("ultrasistPasswordSubmit")}" />
+                    <input id="kc-submit" name="login" class="${properties.kcButtonClass!} ${properties.kcButtonPrimaryClass!} ${properties.kcButtonBlockClass!} ${properties.kcButtonLargeClass!}" type="submit" value="${msg("ferromexPasswordSubmit")}" />
                 </#if>
             </div>
         </form>

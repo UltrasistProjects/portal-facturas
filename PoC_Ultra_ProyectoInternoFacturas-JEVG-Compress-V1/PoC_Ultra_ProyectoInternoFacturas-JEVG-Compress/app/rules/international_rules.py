@@ -1,6 +1,6 @@
 """Reglas del Invoice del proveedor internacional (HU-15 y HU-16).
 
-Las reglas INT buscan en el texto del Invoice los datos del proveedor y de ULTRASIST. El Invoice no tiene formato fijo
+Las reglas INT buscan en el texto del Invoice los datos del proveedor y de FERROMEX. El Invoice no tiene formato fijo
 y su texto puede extraerse mal, asi que una ausencia es una advertencia para el PMO y nunca bloquea el envio (D8).
 FIN-007 si bloquea: es el control de duplicados del Invoice, que no tiene UUID.
 """
@@ -21,8 +21,8 @@ FOUND, NOT_FOUND = "Encontrado en el Invoice", "No encontrado"
 
 
 def compact(value: str | None) -> str:
-    """Texto comparable: sin acentos, en minusculas y solo con letras y digitos. Asi "ULTRASIST, S.A. de C.V."
-    coincide con "ULTRASIST SA DE CV" y "98-7654321" con "987654321"."""
+    """Texto comparable: sin acentos, en minusculas y solo con letras y digitos. Asi "FERROMEX, S.A. de C.V."
+    coincide con "FERROMEX SA DE CV" y "98-7654321" con "987654321"."""
     plain = "".join(c for c in unicodedata.normalize("NFKD", value or "") if not unicodedata.combining(c))
     return re.sub(r"[^0-9a-z]", "", plain.casefold())
 
@@ -54,8 +54,8 @@ def _postal_code(postal_code: str, text: str) -> ValidationOutcome:
         "INT",
         found,
         "WARNING",
-        "Código postal de ULTRASIST presente en el Invoice",
-        "No se encontró el código postal de ULTRASIST en el Invoice",
+        "Código postal de FERROMEX presente en el Invoice",
+        "No se encontró el código postal de FERROMEX en el Invoice",
         postal_code,
         FOUND if found else NOT_FOUND,
         SOURCE,
@@ -80,16 +80,16 @@ def international_rules(text: str, readable: bool, supplier, rules: RuleSet) -> 
             "INT-002",
             rules.parameter("INT-002"),
             haystack,
-            "Razón social de ULTRASIST presente en el Invoice",
-            "No se encontró la razón social de ULTRASIST en el Invoice",
+            "Razón social de FERROMEX presente en el Invoice",
+            "No se encontró la razón social de FERROMEX en el Invoice",
         ),
         "INT-003": lambda: _postal_code(rules.parameter("INT-003"), text),
         "INT-004": lambda: _search(
             "INT-004",
             rules.parameter("INT-004"),
             haystack,
-            "Dirección de ULTRASIST presente en el Invoice",
-            "No se encontró la dirección de ULTRASIST en el Invoice",
+            "Dirección de FERROMEX presente en el Invoice",
+            "No se encontró la dirección de FERROMEX en el Invoice",
         ),
     }
     results = []

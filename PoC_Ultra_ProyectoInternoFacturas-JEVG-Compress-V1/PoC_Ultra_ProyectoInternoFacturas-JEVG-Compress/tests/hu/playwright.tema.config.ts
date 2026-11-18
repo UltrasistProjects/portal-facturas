@@ -1,7 +1,7 @@
 import { defineConfig } from '@playwright/test';
 import path from 'node:path';
 
-// Recorrido del tema de login "ultrasist" de Keycloak (tema/tema-login.spec.ts), en escritorio y en movil. Va aparte de
+// Recorrido del tema de login "ferromex" de Keycloak (tema/tema-login.spec.ts), en escritorio y en movil. Va aparte de
 // la suite de HUs: no escribe evidencias/playwright-resultados.json ni el estado de ejecucion de las HUs. Las capturas
 // quedan en evidencias/tema-login-keycloak/. Requiere el portal con MAIL_BACKEND=file y Mailpit (docker compose).
 const APP_ROOT = path.resolve(__dirname, '..', '..');

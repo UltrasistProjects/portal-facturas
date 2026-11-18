@@ -60,7 +60,7 @@ def create_foreign_invoice_pdf(path: Path) -> None:
     lines = [
         ("INVOICE INV-2026-0042 - FICTITIOUS DEMO DOCUMENT, NO FISCAL VALIDITY", 12),
         ("From: Global Data Services Inc. (DEMO) - Tax ID 98-7654321 - Austin, TX, USA", 11),
-        ("Bill to: ULTRASIST SA DE CV - Ciudad de Mexico, C.P. 03930, Mexico", 11),
+        ("Bill to: FERROMEX SA DE CV - Ciudad de Mexico, C.P. 03930, Mexico", 11),
         ("Invoice date: 2026-08-31 / Service period: August 2026", 11),
         ("Data analytics consulting - Analitica Global 2026", 11),
         ("Subtotal USD 18,000.00 / Tax USD 0.00 / Total USD 18,000.00", 11),

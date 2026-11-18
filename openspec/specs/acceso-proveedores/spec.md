@@ -219,7 +219,7 @@ El correo SHALL dirigirse al correo del proveedor, sin copias, y registrarse en 
 
 #### Scenario: Credenciales enviadas
 - **WHEN** con `MAIL_BACKEND=file` el Administrador autoriza un proveedor con el correo "contacto@proveedor.mx"
-- **THEN** el buzón de salida contiene un correo para "contacto@proveedor.mx", sin `Cc`, con el asunto "Acceso al Portal de Proveedores ULTRASIST" y un cuerpo con el usuario, la contraseña temporal y la dirección `/login` del portal
+- **THEN** el buzón de salida contiene un correo para "contacto@proveedor.mx", sin `Cc`, con el asunto "Acceso al Portal de Proveedores FERROMEX" y un cuerpo con el usuario, la contraseña temporal y la dirección `/login` del portal
 
 #### Scenario: Servidor de correo caído
 - **WHEN** el servidor SMTP rechaza la conexión y el Administrador autoriza un proveedor

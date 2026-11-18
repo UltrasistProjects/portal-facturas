@@ -238,20 +238,20 @@ def workspace(tmp_path, keycloak_server):
         execute(
             database,
             "INSERT INTO users (name, email, password_hash, role, is_active, created_at) "
-            "VALUES ('Ana', 'ana@ultrasist.com.mx', 'x', 'PMO', true, now())",
+            "VALUES ('Ana', 'ana@ferromex.com.mx', 'x', 'PMO', true, now())",
         )
         yield ws, env, tmp_path / "backups", database
 
 
 def ana_exists(database: URL) -> bool:
-    return scalar(database, "SELECT count(*) FROM users WHERE email = 'ana@ultrasist.com.mx'") == 1
+    return scalar(database, "SELECT count(*) FROM users WHERE email = 'ana@ferromex.com.mx'") == 1
 
 
 def test_reset_sin_terminal_ni_confirmacion_aborta(workspace):
     ws, env, backups, database = workspace
     result = run(env, "reset_demo.py", "--workspace", str(ws), check=False)
     assert result.returncode == 1
-    assert "ana@ultrasist.com.mx" in result.stdout
+    assert "ana@ferromex.com.mx" in result.stdout
     assert ana_exists(database)
     assert not backups.exists()
 

@@ -19,16 +19,16 @@ depends_on = None
 INVOICE_EVENTS = ("INVOICE_AUTHORIZED", "INVOICE_REJECTED", "INVOICE_OBSERVATIONS", "INVOICE_CANCELLED")
 EVENTS = (*INVOICE_EVENTS, "SUPPLIER_CREDENTIALS")
 TABLES = ("notification_templates", "notification_copies", "email_deliveries")
-SUBJECT = "Acceso al Portal de Proveedores ULTRASIST"
+SUBJECT = "Acceso al Portal de Proveedores FERROMEX"
 BODY = (
     "{{proveedor}}:\n\n"
-    "Su registro como proveedor de ULTRASIST fue autorizado. Estos son sus datos para ingresar por primera vez "
+    "Su registro como proveedor de FERROMEX fue autorizado. Estos son sus datos para ingresar por primera vez "
     "al Portal de Proveedores:\n\n"
     "Portal: {{url_portal}}\n"
     "Usuario: {{usuario}}\n"
     "Contraseña temporal: {{contrasena_temporal}}\n\n"
     "Por seguridad, no comparta esta contraseña y cámbiela al ingresar por primera vez.\n\n"
-    "Este es un mensaje automático del Portal de Proveedores ULTRASIST. No responda a este correo."
+    "Este es un mensaje automático del Portal de Proveedores FERROMEX. No responda a este correo."
 )
 
 

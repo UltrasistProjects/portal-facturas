@@ -37,7 +37,7 @@ test('HU-03 · Envío de credenciales al proveedor', async ({ browser }, testInf
         `Abrir el correo generado para ${proveedor.correo}`,
         'El correo va al correo del proveedor e incluye el usuario, la contraseña temporal y la dirección de inicio de sesión del portal.',
         async () => {
-          correo = buscarCorreo(proveedor.correo, 'Acceso al Portal de Proveedores ULTRASIST', desde);
+          correo = buscarCorreo(proveedor.correo, 'Acceso al Portal de Proveedores FERROMEX', desde);
           expect(correo, 'No se encontró el correo de credenciales en el outbox').not.toBeNull();
           const c = correo as Correo;
           expect(c.para).toEqual([proveedor.correo]);

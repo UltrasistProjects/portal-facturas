@@ -14,7 +14,7 @@ from scripts import build_password_blacklist
 from tests.conftest import ROOT
 
 KEYCLOAK_DIR = ROOT / "infra" / "keycloak"
-REALM = json.loads((KEYCLOAK_DIR / "realm-ultrasist-portal.json").read_text(encoding="utf-8"))
+REALM = json.loads((KEYCLOAK_DIR / "realm-ferromex-portal.json").read_text(encoding="utf-8"))
 
 
 def client(client_id: str) -> dict:
@@ -50,7 +50,7 @@ def test_lista_de_contrasenas_comunes_al_dia():
 
 def test_lista_de_contrasenas_comunes_con_variantes_decoradas():
     entries = (KEYCLOAK_DIR / "common_passwords.txt").read_text(encoding="utf-8").splitlines()
-    assert {"password", "password1!", "portal2026!", "ultrasist123!", "proveedor2026#"} <= set(entries)
+    assert {"password", "password1!", "portal2026!", "ferromex123!", "proveedor2026#"} <= set(entries)
     # La politica exige letra, digito y caracter especial: sin variantes, la lista no bloquearia ninguna contrasena.
     valid = [e for e in entries if re.search(r"[^\W\d_]", e) and re.search(r"\d", e) and re.search(r"[^\w]|_", e)]
     assert len(valid) > 20000 and all(entry == entry.lower() for entry in entries[1:])
@@ -136,7 +136,7 @@ def test_servicio_keycloak_version_fija_y_solo_local(keycloak_service):
 def test_servicio_keycloak_importa_el_realm_y_la_lista(keycloak_service):
     volumes = keycloak_service["volumes"]
     assert (
-        "./infra/keycloak/realm-ultrasist-portal.json:/opt/keycloak/data/import/realm-ultrasist-portal.json:ro"
+        "./infra/keycloak/realm-ferromex-portal.json:/opt/keycloak/data/import/realm-ferromex-portal.json:ro"
         in volumes
     )
     assert (

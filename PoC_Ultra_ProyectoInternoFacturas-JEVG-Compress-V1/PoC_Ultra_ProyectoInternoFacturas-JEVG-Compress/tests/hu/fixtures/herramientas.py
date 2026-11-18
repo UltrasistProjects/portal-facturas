@@ -89,7 +89,7 @@ def fixtures(run: str, out: str) -> None:
     shutil.copyfile(DEMO / "factura_demo.pdf", files["pdf_cfdi"])
     shutil.copyfile(DEMO / "orden_compra_demo.txt", files["orden_compra"])
     shutil.copyfile(DEMO / "vobo_demo.txt", files["vobo"])
-    # Invoice internacional: trae el identificador fiscal del proveedor demo y el codigo postal de ULTRASIST, pero no
+    # Invoice internacional: trae el identificador fiscal del proveedor demo y el codigo postal de FERROMEX, pero no
     # su razon social, para que INT-002 resulte advertencia (no bloquea el envio).
     invoice_lines = [
         f"INVOICE INV-QA-{run}",

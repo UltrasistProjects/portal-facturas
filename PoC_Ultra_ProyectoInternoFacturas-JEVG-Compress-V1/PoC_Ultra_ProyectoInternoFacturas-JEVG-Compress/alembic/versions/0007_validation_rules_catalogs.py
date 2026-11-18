@@ -1,6 +1,6 @@
 """Reglas de Validacion (HU-06) y catalogos de referencia (HU-07).
 
-- validation_settings: una fila con los datos de ULTRASIST y los parametros del CFDI, sembrada con los valores que
+- validation_settings: una fila con los datos de FERROMEX y los parametros del CFDI, sembrada con los valores que
   aplicaba el motor desde BUSINESS_RULES, con todas las comparaciones activas y la direccion vacia.
 - catalog_entries: catalogos del SAT para CFDI 4.0 (usos de CFDI, formas y metodos de pago, regimenes fiscales) y las
   monedas que aceptaba XML-007 (MXN, USD y EUR). Los valores se copian aqui y no se importan de app.
@@ -96,7 +96,7 @@ ENTRIES = {
 SETTINGS = {
     "id": 1,
     "receiver_rfc": "ULT940623AG0",
-    "receiver_name": "ULTRASIST",
+    "receiver_name": "FERROMEX",
     "receiver_address": "",
     "receiver_postal_code": "03930",
     "receiver_tax_regime": "601",

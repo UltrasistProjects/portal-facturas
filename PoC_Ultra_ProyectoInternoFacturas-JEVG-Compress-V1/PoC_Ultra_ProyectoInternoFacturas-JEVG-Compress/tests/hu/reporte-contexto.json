@@ -1,11 +1,11 @@
 {
-  "proyecto": "Portal de Proveedores ULTRASIST — Portal Interno de Recepción y Prevalidación de Facturas (Invoice Portal PoC)",
+  "proyecto": "Portal de Proveedores FERROMEX — Portal Interno de Recepción y Prevalidación de Facturas (Invoice Portal PoC)",
   "version_app": "Rama fix/ci-postgresql, commit 04ae933 (01/10/2026 20:25), más los cambios sin confirmar de los changes OpenSpec requisitos-alta-proveedor (HU-21), requisitos-alta-contrato (HU-22), editar-eliminar-requisitos-minimos (acciones Editar y Eliminar en Requisitos mínimos) y complemento-de-pago (HU-23, pago de la factura y Complemento de Pago)",
   "ambiente": [
     "Portal: http://127.0.0.1:8000 (FastAPI + uvicorn, Python 3.12 del .venv del proyecto), APP_ENV=development. Para cada corrida se detuvo el uvicorn de desarrollo (que usa el SMTP real del .env) y se arrancó uno con el correo a archivo; al terminar se volvió a lanzar el de desarrollo.",
-    "PostgreSQL 18.6 (contenedor portal-facturas-db-1) y Keycloak 26.7.4 (contenedor portal-facturas-keycloak-1, realm ultrasist-portal, http://127.0.0.1:58080), definidos en compose.yaml.",
+    "PostgreSQL 18.6 (contenedor portal-facturas-db-1) y Keycloak 26.7.4 (contenedor portal-facturas-keycloak-1, realm ferromex-portal, http://127.0.0.1:58080), definidos en compose.yaml.",
     "Los contenedores corren en el Docker Engine del sistema (contexto «default»); Docker Desktop está detenido y no se tocó.",
-    "Correo: el .env del proyecto apunta a un SMTP real (Gmail). Para no enviar correos reales a recepcionfacturas@ultrasist.com.mx ni a terceros, el portal se arrancó con MAIL_BACKEND=file y MAIL_OUTBOX_DIR=./evidencias/_correos como variables de entorno (sin modificar .env). Cada correo queda como .eml y la bitácora del portal registra el envío como «Enviado».",
+    "Correo: el .env del proyecto apunta a un SMTP real (Gmail). Para no enviar correos reales a recepcionfacturas@ferromex.com.mx ni a terceros, el portal se arrancó con MAIL_BACKEND=file y MAIL_OUTBOX_DIR=./evidencias/_correos como variables de entorno (sin modificar .env). Cada correo queda como .eml y la bitácora del portal registra el envío como «Enviado».",
     "Navegador: Chromium 153 (Playwright 1.63.0), viewport 1440×900, idioma es-MX, zona America/Mexico_City.",
     "Cuentas: admin@poc.local (Administrador), pmo@poc.local (PMO), proveedor1@poc.local (proveedor nacional) y proveedor3@poc.local (proveedor internacional) con DEMO_PASSWORD; los proveedores nuevos de HU-01/02/03/10 los crea la propia suite."
   ],

@@ -91,7 +91,7 @@ Después de confirmar la cancelación, el sistema SHALL enviar el correo `INVOIC
 
 #### Scenario: Aviso con la fecha límite
 - **WHEN** con `MAIL_BACKEND=file` el proveedor "Tecnologia Integral del Centro SA de CV" cancela la factura "A-2001" el 25/09/2026 a las 10:30 (hora de negocio)
-- **THEN** el buzón de salida tiene un correo para `recepcionfacturas@ultrasist.com.mx` con el asunto "Cancelación de la factura A-2001 de Tecnologia Integral del Centro SA de CV" y el texto "Por favor acepte la “Cancelación” antes del 28/09/2026 10:30.", y el proveedor ve "Se notificó a Recepción de Facturas"
+- **THEN** el buzón de salida tiene un correo para `recepcionfacturas@ferromex.com.mx` con el asunto "Cancelación de la factura A-2001 de Tecnologia Integral del Centro SA de CV" y el texto "Por favor acepte la “Cancelación” antes del 28/09/2026 10:30.", y el proveedor ve "Se notificó a Recepción de Facturas"
 
 #### Scenario: Servidor de correo caído
 - **WHEN** el servidor SMTP rechaza la conexión y el proveedor cancela

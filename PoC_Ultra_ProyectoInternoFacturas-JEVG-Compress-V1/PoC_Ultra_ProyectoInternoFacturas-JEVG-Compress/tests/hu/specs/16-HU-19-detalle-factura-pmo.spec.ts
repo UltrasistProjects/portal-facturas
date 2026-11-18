@@ -25,7 +25,7 @@ test('HU-19 · Visualización de detalle de factura por PMO', async ({ browser }
           await expect(pmo.locator('.page-heading .status')).toHaveText('Enviada');
           await expect(pmo.locator('.metadata-grid')).toContainText(nacional.numero);
           await expect(pmo.locator('.metadata-grid')).toContainText('$116,000.00 MXN');
-          await expect(pmo.locator('.panel').filter({ hasText: 'Datos CFDI' }).locator('dl')).toContainText('ULTRASIST · ULT940623AG0');
+          await expect(pmo.locator('.panel').filter({ hasText: 'Datos CFDI' }).locator('dl')).toContainText('FERROMEX · ULT940623AG0');
           await hu.captura(pmo, 'detalle-encabezado', `Detalle de ${nacional.numero}: estatus, score, datos principales, documentos y datos del CFDI.`);
           const proveedor = pmo.locator('#supplier');
           await expect(proveedor).toContainText('Nacional');

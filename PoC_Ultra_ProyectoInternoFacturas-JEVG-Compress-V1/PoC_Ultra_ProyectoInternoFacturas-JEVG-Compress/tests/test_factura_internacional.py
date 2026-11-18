@@ -23,7 +23,7 @@ AMOUNTS = {"invoice_date": "2026-09-15", "subtotal": "1,000.00", "tax": "0.00", 
 INVOICE_TEXT = [
     "INVOICE - Global Data Services Inc.",
     "Tax ID: 98-7654321",
-    "Bill to: ULTRASIST, S.A. de C.V.",
+    "Bill to: FERROMEX, S.A. de C.V.",
     "Av. Insurgentes Sur 1, Ciudad de Mexico, C.P. 03930",
     "Total USD 1,000.00",
 ]
@@ -429,7 +429,7 @@ def test_datos_ausentes_son_advertencias(client):
     assert post(client, f"/invoices/{created.id}/submit").status_code == 303
     by_code = results(created.id)
     assert [by_code[c].status for c in ("INT-001", "INT-002", "INT-003")] == ["WARNING"] * 3
-    assert by_code["INT-002"].message == "No se encontró la razón social de ULTRASIST en el Invoice"
+    assert by_code["INT-002"].message == "No se encontró la razón social de FERROMEX en el Invoice"
     assert invoice(created.id).status == InvoiceStatus.UNDER_REVIEW
 
 
@@ -444,7 +444,7 @@ def test_invoice_escaneado(client):
             "NOT_EVALUATED",
             "No se pudo leer el texto del Invoice",
         )
-    # INT-004 nace eliminada (sin direccion de ULTRASIST): no se evalua.
+    # INT-004 nace eliminada (sin direccion de FERROMEX): no se evalua.
     assert (by_code["INT-004"].status, by_code["INT-004"].message) == (
         "NOT_APPLICABLE",
         "Regla inactiva en Reglas de Validación",

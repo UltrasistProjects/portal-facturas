@@ -23,7 +23,7 @@ def legacy(registered_suppliers):
     [supplier] = registered_suppliers(status=SupplierStatus.ACTIVE)
     users = {
         "internal": User(
-            name="Interno previo", email=f"interno.{tag}@ultrasist.mx", password_hash="hash", role=Role.PMO
+            name="Interno previo", email=f"interno.{tag}@ferromex.mx", password_hash="hash", role=Role.PMO
         ),
         "provider": User(
             name="Proveedor previo",
@@ -34,7 +34,7 @@ def legacy(registered_suppliers):
         ),
         "inactive": User(
             name="Inactivo previo",
-            email=f"inactivo.{tag}@ultrasist.mx",
+            email=f"inactivo.{tag}@ferromex.mx",
             password_hash="hash",
             role=Role.ADMINISTRADOR,
             is_active=False,

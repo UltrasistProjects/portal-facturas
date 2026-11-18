@@ -1,6 +1,6 @@
 {
-  "realm": "ultrasist-portal",
-  "displayName": "Portal de Proveedores ULTRASIST",
+  "realm": "ferromex-portal",
+  "displayName": "Portal de Proveedores FERROMEX",
   "enabled": true,
   "sslRequired": "external",
   "registrationAllowed": false,
@@ -16,7 +16,7 @@
     "es"
   ],
   "defaultLocale": "es",
-  "loginTheme": "ultrasist",
+  "loginTheme": "ferromex",
   "passwordPolicy": "length(8) and maxLength(128) and digits(1) and specialChars(1) and regexPattern(.*\\p{L}.*) and notUsername(undefined) and notEmail(undefined) and passwordHistory(1) and passwordBlacklist(common_passwords.txt)",
   "bruteForceProtected": true,
   "permanentLockout": false,
@@ -70,7 +70,7 @@
   "clients": [
     {
       "clientId": "portal-facturas-web",
-      "name": "Portal de Proveedores ULTRASIST",
+      "name": "Portal de Proveedores FERROMEX",
       "enabled": true,
       "protocol": "openid-connect",
       "publicClient": false,
@@ -112,7 +112,7 @@
     },
     {
       "clientId": "portal-facturas-admin",
-      "name": "Portal de Proveedores ULTRASIST - administracion de usuarios",
+      "name": "Portal de Proveedores FERROMEX - administracion de usuarios",
       "enabled": true,
       "protocol": "openid-connect",
       "publicClient": false,

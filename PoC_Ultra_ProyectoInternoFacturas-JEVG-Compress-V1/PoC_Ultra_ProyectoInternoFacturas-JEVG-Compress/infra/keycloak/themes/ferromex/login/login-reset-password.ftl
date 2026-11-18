@@ -17,7 +17,7 @@
             <div class="${properties.kcFormGroupClass!}">
                 <label for="username" class="${properties.kcLabelClass!}"><#if !realm.loginWithEmailAllowed>${msg("username")}<#elseif !realm.registrationEmailAsUsername>${msg("usernameOrEmail")}<#else>${msg("email")}</#if></label>
                 <input type="text" id="username" name="username" class="${properties.kcInputClass!}" autofocus value="${(auth.attemptedUsername!'')}"
-                       placeholder="${msg("ultrasistUsernamePlaceholder")}" autocomplete="username"
+                       placeholder="${msg("ferromexUsernamePlaceholder")}" autocomplete="username"
                        aria-describedby="kc-reset-instruction"
                        aria-invalid="<#if messagesPerField.existsError('username')>true</#if>" dir="ltr"/>
                 <#if messagesPerField.existsError('username')>
@@ -28,7 +28,7 @@
             </div>
 
             <div id="kc-form-buttons" class="${properties.kcFormButtonsClass!}">
-                <input id="kc-submit" class="${properties.kcButtonClass!} ${properties.kcButtonPrimaryClass!} ${properties.kcButtonBlockClass!} ${properties.kcButtonLargeClass!}" type="submit" value="${msg("ultrasistResetSubmit")}"/>
+                <input id="kc-submit" class="${properties.kcButtonClass!} ${properties.kcButtonPrimaryClass!} ${properties.kcButtonBlockClass!} ${properties.kcButtonLargeClass!}" type="submit" value="${msg("ferromexResetSubmit")}"/>
             </div>
 
             <div id="kc-form-options" class="${properties.kcFormOptionsClass!}">

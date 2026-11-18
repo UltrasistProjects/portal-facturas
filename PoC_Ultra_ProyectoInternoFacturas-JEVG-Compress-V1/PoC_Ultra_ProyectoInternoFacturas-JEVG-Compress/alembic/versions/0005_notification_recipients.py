@@ -1,6 +1,6 @@
 """Destinatarios de notificaciones y bitacora de envios de correo (HU-08).
 
-- notification_mailboxes: buzones de destino; se siembra Recepcion de Facturas con recepcionfacturas@ultrasist.com.mx
+- notification_mailboxes: buzones de destino; se siembra Recepcion de Facturas con recepcionfacturas@ferromex.com.mx
   (minuta del 21-sep-2026).
 - notification_copies: direcciones en copia por evento; una fila vacia por cada evento de estatus de factura.
 - email_deliveries: un registro por intento de envio, sin asunto ni cuerpo.
@@ -18,7 +18,7 @@ branch_labels = None
 depends_on = None
 
 EVENTS = ("INVOICE_AUTHORIZED", "INVOICE_REJECTED", "INVOICE_OBSERVATIONS", "INVOICE_CANCELLED")
-RECEPTION_ADDRESS = "recepcionfacturas@ultrasist.com.mx"
+RECEPTION_ADDRESS = "recepcionfacturas@ferromex.com.mx"
 
 
 def event_column(nullable: bool) -> sa.Column:

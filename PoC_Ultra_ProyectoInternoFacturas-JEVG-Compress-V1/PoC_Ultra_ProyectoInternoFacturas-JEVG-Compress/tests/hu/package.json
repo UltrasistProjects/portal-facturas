@@ -1,7 +1,7 @@
 {
   "name": "portal-facturas-pruebas-hu",
   "private": true,
-  "description": "Validación funcional de las HUs del Portal de Proveedores ULTRASIST con Playwright (evidencia en ../../evidencias).",
+  "description": "Validación funcional de las HUs del Portal de Proveedores FERROMEX con Playwright (evidencia en ../../evidencias).",
   "scripts": {
     "test": "playwright test",
     "video": "playwright test -c playwright.video.config.ts",

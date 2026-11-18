@@ -19,7 +19,7 @@ DATABASE_URL_HINT = "Ejecute python scripts/create_env.py para completar el .env
 MIN_KEYCLOAK_SECRET_LENGTH = 32
 KEYCLOAK_HINT = DATABASE_URL_HINT
 # Remitente del transporte de archivo: nunca sale del equipo, no necesita un dominio real.
-DEFAULT_FILE_MAIL_FROM = "Portal de Proveedores ULTRASIST <no-reply@portal.local>"
+DEFAULT_FILE_MAIL_FROM = "Portal de Proveedores FERROMEX <no-reply@portal.local>"
 
 
 class Settings(BaseSettings):

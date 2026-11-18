@@ -52,9 +52,9 @@ services:
       KEYCLOAK_SMTP_USER: ${KEYCLOAK_SMTP_USER:-}
       KEYCLOAK_SMTP_PASSWORD: ${KEYCLOAK_SMTP_PASSWORD:-}
     volumes:
-      - ../keycloak/realm-ultrasist-portal.json:/opt/keycloak/data/import/realm-ultrasist-portal.json:ro
+      - ../keycloak/realm-ferromex-portal.json:/opt/keycloak/data/import/realm-ferromex-portal.json:ro
       - ../keycloak/common_passwords.txt:/opt/keycloak/data/password-blacklists/common_passwords.txt:ro
-      - ../keycloak/themes/ultrasist:/opt/keycloak/themes/ultrasist:ro
+      - ../keycloak/themes/ferromex:/opt/keycloak/themes/ferromex:ro
       - ../keycloak/configure-realm.sh:/opt/keycloak/scripts/configure-realm.sh:ro
     depends_on:
       db:

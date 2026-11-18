@@ -64,10 +64,10 @@ FIXED_LEVELS_CHECK = (
 FIXED_LEVELS = {"national": "OPTIONAL", "international": "NOT_APPLICABLE"}
 
 SUPPLIER_FOOTER = (
-    "Puede consultar el detalle en el Portal de Proveedores ULTRASIST. "
+    "Puede consultar el detalle en el Portal de Proveedores FERROMEX. "
     "Este es un mensaje automático; no responda a este correo."
 )
-RECEPTION_FOOTER = "Este es un mensaje automático del Portal de Proveedores ULTRASIST. No responda a este correo."
+RECEPTION_FOOTER = "Este es un mensaje automático del Portal de Proveedores FERROMEX. No responda a este correo."
 # Textos predeterminados de app/services/notification_templates.py (una prueba verifica que coinciden).
 TEMPLATES = [
     (

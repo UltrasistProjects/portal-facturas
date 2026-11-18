@@ -135,7 +135,7 @@ con `numero_factura` (número de factura), `folio_interno`, `proveedor` (razón 
 
 #### Scenario: Autorización notificada a Recepción con copia al proveedor
 - **WHEN** con `MAIL_BACKEND=file` el PMO autoriza la factura "A-1024" del proveedor "Servicios Digitales del Norte SA de CV" (correo `proveedor1@poc.local`) por `$116,000.00 MXN`
-- **THEN** el buzón de salida tiene un correo para `recepcionfacturas@ultrasist.com.mx` con copia (`Cc`) a `proveedor1@poc.local`, el asunto "Factura A-1024 autorizada para pago" y el texto "La factura número A-1024 del proveedor Servicios Digitales del Norte SA de CV por el monto $116,000.00 MXN ha sido Autorizada para su pago.", y el detalle muestra "Correo enviado a recepcionfacturas@ultrasist.com.mx con copia a proveedor1@poc.local"
+- **THEN** el buzón de salida tiene un correo para `recepcionfacturas@ferromex.com.mx` con copia (`Cc`) a `proveedor1@poc.local`, el asunto "Factura A-1024 autorizada para pago" y el texto "La factura número A-1024 del proveedor Servicios Digitales del Norte SA de CV por el monto $116,000.00 MXN ha sido Autorizada para su pago.", y el detalle muestra "Correo enviado a recepcionfacturas@ferromex.com.mx con copia a proveedor1@poc.local"
 
 #### Scenario: Rechazo notificado al proveedor
 - **WHEN** el PMO rechaza una factura con "El RFC del receptor no corresponde"

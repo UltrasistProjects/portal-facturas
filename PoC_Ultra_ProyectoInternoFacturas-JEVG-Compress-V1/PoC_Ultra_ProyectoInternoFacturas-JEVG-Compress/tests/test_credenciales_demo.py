@@ -73,11 +73,11 @@ def production_settings(**values) -> Settings:
     base = {
         "secret_key": "k" * 32,
         "app_env": "production",
-        "keycloak_server_url": "https://sso.ultrasist.example",
+        "keycloak_server_url": "https://sso.ferromex.example",
         # Correo de produccion valido (HU-08): sin el, el transporte file de las pruebas seria otro problema.
         "mail_backend": "smtp",
-        "smtp_host": "smtp.ultrasist.com.mx",
-        "mail_from": "portal@ultrasist.com.mx",
+        "smtp_host": "smtp.ferromex.com.mx",
+        "mail_from": "portal@ferromex.com.mx",
     }
     return Settings(_env_file=None, **{**base, **values})
 

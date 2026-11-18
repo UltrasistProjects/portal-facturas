@@ -50,7 +50,7 @@ Los scripts de arranque local MUST NOT ejecutar `reset_demo.py`: SHALL levantar 
 - **THEN** la base conserva esas facturas
 
 #### Scenario: Reset con datos no-demo sin terminal
-- **WHEN** se ejecuta `reset_demo.py` sin `--yes`, sin terminal interactiva y la base contiene un usuario `ana@ultrasist.com.mx`
+- **WHEN** se ejecuta `reset_demo.py` sin `--yes`, sin terminal interactiva y la base contiene un usuario `ana@ferromex.com.mx`
 - **THEN** el script aborta sin borrar nada
 
 #### Scenario: Reset confirmado

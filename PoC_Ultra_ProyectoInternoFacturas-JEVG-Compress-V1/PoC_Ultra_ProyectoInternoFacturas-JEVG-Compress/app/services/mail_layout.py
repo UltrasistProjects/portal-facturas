@@ -1,4 +1,4 @@
-"""Version HTML del correo: el cuerpo de texto plano en una tarjeta centrada con el logo de ULTRASIST.
+"""Version HTML del correo: el cuerpo de texto plano en una tarjeta centrada con el logo de FERROMEX.
 
 El HTML se deriva del texto ya compuesto, de modo que las plantillas de HU-05 siguen siendo de texto plano y el texto
 del Administrador nunca se interpreta como plantilla. Jinja2 escapa cada valor (autoescape): una razon social o unas
@@ -21,7 +21,7 @@ from pathlib import Path
 from jinja2 import Environment, FileSystemLoader
 
 APP_DIR = Path(__file__).resolve().parents[1]
-LOGO_PATH = APP_DIR / "static" / "img" / "Ultrasistlogo.png"
+LOGO_PATH = APP_DIR / "static" / "img" / "Ferromexlogo.png"
 TEMPLATE = "layout.html"
 
 PARAGRAPH_BREAK = re.compile(r"\n[ \t]*\n")

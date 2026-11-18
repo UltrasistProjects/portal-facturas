@@ -13,7 +13,7 @@ from tests.conftest import ROOT
 VALID_KEY = "k" * 32
 POSTGRES_URL = "postgresql+psycopg://portal:secreto@127.0.0.1:55432/portal"
 # En produccion Keycloak debe usarse por HTTPS; las pruebas corren contra http://keycloak.test.
-KEYCLOAK_TLS = "https://sso.ultrasist.example"
+KEYCLOAK_TLS = "https://sso.ferromex.example"
 
 
 def build(**values) -> Settings:
@@ -117,7 +117,7 @@ def test_correo_por_omision_fuera_de_produccion(no_mail_env, tmp_path, monkeypat
     settings = build(secret_key=VALID_KEY, app_env="development")
     assert settings.mail_backend == "file"
     assert settings.mail_outbox_dir == ROOT / "outbox"
-    assert settings.mail_from == "Portal de Proveedores ULTRASIST <no-reply@portal.local>"
+    assert settings.mail_from == "Portal de Proveedores FERROMEX <no-reply@portal.local>"
     assert (settings.smtp_port, settings.smtp_security, settings.smtp_timeout) == (587, "starttls", 10)
 
 
@@ -128,7 +128,7 @@ def test_correo_por_omision_en_produccion_exige_smtp(no_mail_env):
         secret_key=VALID_KEY,
         app_env="production",
         keycloak_server_url=KEYCLOAK_TLS,
-        smtp_host="smtp.ultrasist.com.mx",
+        smtp_host="smtp.ferromex.com.mx",
         mail_from="a@b.mx",
     )
     assert configured.mail_backend == "smtp"
@@ -136,7 +136,7 @@ def test_correo_por_omision_en_produccion_exige_smtp(no_mail_env):
 
 def test_smtp_sin_remitente(no_mail_env):
     with pytest.raises(ValidationError, match="MAIL_FROM es obligatoria con MAIL_BACKEND=smtp"):
-        build(secret_key=VALID_KEY, mail_backend="smtp", smtp_host="smtp.ultrasist.com.mx")
+        build(secret_key=VALID_KEY, mail_backend="smtp", smtp_host="smtp.ferromex.com.mx")
 
 
 @pytest.mark.parametrize(("field", "value"), [("smtp_security", "tls"), ("mail_backend", "sendmail")])
@@ -275,17 +275,17 @@ def test_keycloak_sin_tls_en_produccion():
 
 def test_url_de_keycloak_invalida():
     with pytest.raises(ValidationError, match="http:// o https://"):
-        build(secret_key=VALID_KEY, keycloak_server_url="keycloak.ultrasist.example")
+        build(secret_key=VALID_KEY, keycloak_server_url="keycloak.ferromex.example")
 
 
 def test_urls_derivadas_de_keycloak():
     configured = build(
-        secret_key=VALID_KEY, keycloak_server_url="https://sso.ultrasist.example:8443/", keycloak_realm="portal"
+        secret_key=VALID_KEY, keycloak_server_url="https://sso.ferromex.example:8443/", keycloak_realm="portal"
     )
-    assert configured.keycloak_issuer == "https://sso.ultrasist.example:8443/realms/portal"
+    assert configured.keycloak_issuer == "https://sso.ferromex.example:8443/realms/portal"
     assert configured.keycloak_metadata_url.endswith("/realms/portal/.well-known/openid-configuration")
-    assert configured.keycloak_admin_url == "https://sso.ultrasist.example:8443/admin/realms/portal"
-    assert configured.keycloak_origin == "https://sso.ultrasist.example:8443"
+    assert configured.keycloak_admin_url == "https://sso.ferromex.example:8443/admin/realms/portal"
+    assert configured.keycloak_origin == "https://sso.ferromex.example:8443"
     assert configured.keycloak_timeout == 10
 
 
@@ -304,7 +304,7 @@ def test_create_env_genera_la_configuracion_de_keycloak(tmp_path):
     (tmp_path / ".env.example").write_text(EXAMPLE, encoding="utf-8")
     create_env(tmp_path)
     values = env_values(tmp_path)
-    assert values["KEYCLOAK_SERVER_URL"] == "http://127.0.0.1:58080" and values["KEYCLOAK_REALM"] == "ultrasist-portal"
+    assert values["KEYCLOAK_SERVER_URL"] == "http://127.0.0.1:58080" and values["KEYCLOAK_REALM"] == "ferromex-portal"
     secrets = [
         values[name]
         for name in ("KEYCLOAK_CLIENT_SECRET", "KEYCLOAK_ADMIN_CLIENT_SECRET", "KC_BOOTSTRAP_ADMIN_PASSWORD")

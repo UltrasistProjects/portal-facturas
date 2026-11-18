@@ -2,7 +2,7 @@
 <!-- DOCUMENTO FICTICIO PARA PRUEBAS. NO ES UN CFDI TIMBRADO VALIDO. -->
 <cfdi:Comprobante xmlns:cfdi="http://www.sat.gob.mx/cfd/4" xmlns:pago20="http://www.sat.gob.mx/Pagos20" xmlns:tfd="http://www.sat.gob.mx/TimbreFiscalDigital" Version="4.0" Fecha="2026-10-02T09:00:00" SubTotal="0" Total="0" Moneda="XXX" TipoDeComprobante="P">
   <cfdi:Emisor Rfc="TIC210101ABC" Nombre="TECNOLOGIA INTEGRAL DEL CENTRO SA DE CV"/>
-  <cfdi:Receptor Rfc="ULT940623AG0" Nombre="ULTRASIST" DomicilioFiscalReceptor="03930" RegimenFiscalReceptor="601" UsoCFDI="CP01"/>
+  <cfdi:Receptor Rfc="ULT940623AG0" Nombre="FERROMEX" DomicilioFiscalReceptor="03930" RegimenFiscalReceptor="601" UsoCFDI="CP01"/>
   <cfdi:Conceptos><cfdi:Concepto Cantidad="1" ValorUnitario="0" Importe="0" Descripcion="Pago"/></cfdi:Conceptos>
   <cfdi:Complemento>
     <pago20:Pagos Version="2.0">

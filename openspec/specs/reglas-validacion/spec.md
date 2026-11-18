@@ -1,7 +1,7 @@
 # reglas-validacion Specification
 
 ## Purpose
-Reglas de Validación (HU-06, RF-11): acceso exclusivo del Administrador, datos de ULTRASIST (RFC, Razón Social, Dirección y Código Postal) y parámetros del CFDI, comparaciones activables, validación, guardado con control de edición concurrente y auditoría.
+Reglas de Validación (HU-06, RF-11): acceso exclusivo del Administrador, datos de FERROMEX (RFC, Razón Social, Dirección y Código Postal) y parámetros del CFDI, comparaciones activables, validación, guardado con control de edición concurrente y auditoría.
 ## Requirements
 ### Requirement: Configuración exclusiva del Administrador
 `GET /admin/rules/{origen}` y los `POST` de edición, eliminación y restauración de reglas SHALL estar disponibles únicamente para el rol `Administrador`; todo `POST` MUST exigir un token CSRF válido. `{origen}` SHALL ser `national` o `international`; otro valor responde HTTP 404. `GET /admin/rules` SHALL redirigir (303) a `/admin/rules/national`. El menú Administración SHALL mostrar al rol `Administrador`, bajo "Reglas de validación", las opciones "Nacionales" e "Internacionales". Las páginas MUST NOT usar scripts ni estilos en línea.
@@ -87,9 +87,9 @@ El sistema SHALL mantener un catálogo persistente de reglas de validación conf
 
 El catálogo SHALL contener exactamente estas reglas (código · nombre inicial · parámetro · severidad):
 - Nacionales: XML-002 · RFC del receptor · RFC de persona moral · `CRITICAL`; XML-003 · Método de pago · clave del catálogo de métodos de pago · `ERROR`; XML-004 · Forma de pago · clave del catálogo de formas de pago · `ERROR`; XML-005 · Usos de CFDI · una o más claves del catálogo de usos de CFDI · `ERROR`; XML-009 · Razón social del receptor · texto de hasta 254 caracteres · `ERROR`; XML-010 · Código postal del receptor · 5 dígitos · `ERROR`; XML-011 · Régimen fiscal del receptor · clave del catálogo de regímenes fiscales · `ERROR`.
-- Internacionales: INT-001 · Identificador fiscal del proveedor · sin parámetro · `WARNING`; INT-002 · Razón social de ULTRASIST · texto de hasta 254 caracteres · `WARNING`; INT-003 · Código postal de ULTRASIST · 5 dígitos · `WARNING`; INT-004 · Dirección de ULTRASIST · texto de hasta 300 caracteres · `WARNING`.
+- Internacionales: INT-001 · Identificador fiscal del proveedor · sin parámetro · `WARNING`; INT-002 · Razón social de FERROMEX · texto de hasta 254 caracteres · `WARNING`; INT-003 · Código postal de FERROMEX · 5 dígitos · `WARNING`; INT-004 · Dirección de FERROMEX · texto de hasta 300 caracteres · `WARNING`.
 
-En una instalación nueva, las reglas nacionales SHALL tener RFC `ULT940623AG0`, método `PPD`, forma `99`, usos `G03` e `I04`, Razón Social "ULTRASIST", Código Postal `03930` y régimen `601`, todas activas salvo XML-011, que nace eliminada. Las internacionales SHALL tener Razón Social "ULTRASIST" y Código Postal `03930`, activas, INT-001 activa e INT-004 eliminada y sin dirección.
+En una instalación nueva, las reglas nacionales SHALL tener RFC `ULT940623AG0`, método `PPD`, forma `99`, usos `G03` e `I04`, Razón Social "FERROMEX", Código Postal `03930` y régimen `601`, todas activas salvo XML-011, que nace eliminada. Las internacionales SHALL tener Razón Social "FERROMEX" y Código Postal `03930`, activas, INT-001 activa e INT-004 eliminada y sin dirección.
 
 La migración desde la configuración única anterior SHALL marcar sus valores como reglas `NATIONAL`, con la regla activa sólo si su comparación estaba activa, y sembrar las reglas internacionales con los valores vigentes. INT-002 e INT-003 conservan el interruptor de la Razón Social y del Código Postal, e INT-004 queda activa sólo si había una Dirección. Así, ninguna validación cambia al migrar.
 
@@ -98,8 +98,8 @@ La migración desde la configuración única anterior SHALL marcar sus valores c
 - **THEN** existen 7 reglas `NATIONAL` y 4 `INTERNATIONAL` con los valores iniciales, XML-011 e INT-004 eliminadas y las demás activas
 
 #### Scenario: Migración de una configuración modificada
-- **WHEN** se migra una base cuya configuración tiene la Razón Social "ULTRASIST SA DE CV", la comparación del Código Postal desactivada y la Dirección "Av. Insurgentes Sur 1"
-- **THEN** XML-009 e INT-002 esperan "ULTRASIST SA DE CV" y están activas, XML-010 e INT-003 están eliminadas, INT-004 está activa con "Av. Insurgentes Sur 1", y la tabla `validation_settings` ya no existe
+- **WHEN** se migra una base cuya configuración tiene la Razón Social "FERROMEX SA DE CV", la comparación del Código Postal desactivada y la Dirección "Av. Insurgentes Sur 1"
+- **THEN** XML-009 e INT-002 esperan "FERROMEX SA DE CV" y están activas, XML-010 e INT-003 están eliminadas, INT-004 está activa con "Av. Insurgentes Sur 1", y la tabla `validation_settings` ya no existe
 
 #### Scenario: Validación igual tras migrar
 - **WHEN** se valida la factura demo A-CORRECTA antes y después de la migración

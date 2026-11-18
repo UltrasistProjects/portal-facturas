@@ -17,9 +17,9 @@ branch_labels = None
 depends_on = None
 
 EVENTS = ("INVOICE_AUTHORIZED", "INVOICE_REJECTED", "INVOICE_OBSERVATIONS", "INVOICE_CANCELLED")
-RECEPTION_FOOTER = "Este es un mensaje automático del Portal de Proveedores ULTRASIST. No responda a este correo."
+RECEPTION_FOOTER = "Este es un mensaje automático del Portal de Proveedores FERROMEX. No responda a este correo."
 SUPPLIER_FOOTER = (
-    "Puede consultar el detalle en el Portal de Proveedores ULTRASIST. "
+    "Puede consultar el detalle en el Portal de Proveedores FERROMEX. "
     "Este es un mensaje automático; no responda a este correo."
 )
 SUPPLIER_DETAILS = (

@@ -5,8 +5,8 @@
 <#import "theme-resources.ftl" as themeResourceTags>
 <#macro brand extraClass="">
     <div class="brand ${extraClass}">
-        <img class="brand-logo" src="${url.resourcesPath}/img/Ultrasistlogo.png" alt="${msg("ultrasistLogoAlt")}">
-        <span>${msg("ultrasistBrandName")}<small>${msg("ultrasistBrandTagline")}</small></span>
+        <img class="brand-logo" src="${url.resourcesPath}/img/Ferromexlogo.png" alt="${msg("ferromexLogoAlt")}">
+        <span>${msg("ferromexBrandName")}<small>${msg("ferromexBrandTagline")}</small></span>
     </div>
 </#macro>
 <#macro registrationLayout bodyClass="" displayInfo=false displayMessage=true displayRequiredFields=false>
@@ -113,13 +113,13 @@
     <section class="login-panel">
         <@brand />
         <div class="login-copy">
-            <span class="eyebrow">${msg("ultrasistEyebrow")}</span>
-            <p class="login-headline">${msg("ultrasistHeadline")}</p>
-            <p class="login-description">${msg("ultrasistDescription")}</p>
+            <span class="eyebrow">${msg("ferromexEyebrow")}</span>
+            <p class="login-headline">${msg("ferromexHeadline")}</p>
+            <p class="login-description">${msg("ferromexDescription")}</p>
             <div class="principle-card">
-                <i class="bi bi-diagram-3" aria-hidden="true"></i><span>${msg("ultrasistPrincipleRules")}</span>
-                <i class="bi bi-arrow-right" aria-hidden="true"></i><span>${msg("ultrasistPrincipleEvidence")}</span>
-                <i class="bi bi-arrow-right" aria-hidden="true"></i><span>${msg("ultrasistPrincipleReview")}</span>
+                <i class="bi bi-diagram-3" aria-hidden="true"></i><span>${msg("ferromexPrincipleRules")}</span>
+                <i class="bi bi-arrow-right" aria-hidden="true"></i><span>${msg("ferromexPrincipleEvidence")}</span>
+                <i class="bi bi-arrow-right" aria-hidden="true"></i><span>${msg("ferromexPrincipleReview")}</span>
             </div>
         </div>
     </section>

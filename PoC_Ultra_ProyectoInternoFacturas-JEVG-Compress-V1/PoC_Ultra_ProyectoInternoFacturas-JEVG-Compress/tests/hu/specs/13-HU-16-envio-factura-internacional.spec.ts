@@ -12,7 +12,7 @@ test('HU-16 · Envío de factura por proveedor internacional', async ({ browser 
       await hu.paso(
         proveedor,
         `Abrir ${i1.numero} ("Cargada") y pulsar "Verificar"`,
-        'El motor evalúa el texto del Invoice contra los datos del proveedor y de ULTRASIST (INT-001 a INT-004, advertencias) y las reglas XML del CFDI resultan "No aplica a proveedores internacionales".',
+        'El motor evalúa el texto del Invoice contra los datos del proveedor y de FERROMEX (INT-001 a INT-004, advertencias) y las reglas XML del CFDI resultan "No aplica a proveedores internacionales".',
         async () => {
           await proveedor.goto(`/invoices/${i1.id}`);
           await verificar(proveedor);
@@ -25,7 +25,7 @@ test('HU-16 · Envío de factura por proveedor internacional', async ({ browser 
           const int001 = await resultadoRegla(proveedor, 'INT-001');
           expect(int001.estado, 'El Invoice contiene el identificador fiscal 98-7654321').toBe('PASS');
           const int002 = await resultadoRegla(proveedor, 'INT-002');
-          expect(int002.estado, 'El Invoice no contiene la razón social ULTRASIST').toBe('WARNING');
+          expect(int002.estado, 'El Invoice no contiene la razón social FERROMEX').toBe('WARNING');
           // Revision visual: la etiqueta del resultado vive en una columna de 95 px de la tarjeta de la regla.
           const fin004 = proveedor.locator('#validations details.rule-card').filter({ hasText: 'FIN-004' });
           const etiqueta = await fin004.locator('.rule-result').boundingBox();
@@ -38,7 +38,7 @@ test('HU-16 · Envío de factura por proveedor internacional', async ({ browser 
           const xml002 = await resultadoRegla(proveedor, 'XML-002');
           expect(xml002.estado).toBe('NOT_APPLICABLE');
           expect(xml002.mensaje).toBe('No aplica a proveedores internacionales');
-          await hu.captura(proveedor, 'reglas-int', 'Matriz de evidencia: reglas INT sobre el texto del Invoice (datos del proveedor, de ULTRASIST y dirección).', {
+          await hu.captura(proveedor, 'reglas-int', 'Matriz de evidencia: reglas INT sobre el texto del Invoice (datos del proveedor, de FERROMEX y dirección).', {
             enfocar: proveedor.locator('#validations .rule-group').filter({ has: proveedor.locator('h3', { hasText: /^INT$/ }) }),
           });
           await hu.captura(proveedor, 'reglas-xml-no-aplican', 'Reglas XML del CFDI: "No aplica a proveedores internacionales".', {

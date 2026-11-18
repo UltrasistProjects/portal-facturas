@@ -1,4 +1,4 @@
-"""Tema de login "ultrasist" de Keycloak (tema-login-keycloak; specs autenticacion-sesiones, infraestructura-local y
+"""Tema de login "ferromex" de Keycloak (tema-login-keycloak; specs autenticacion-sesiones, infraestructura-local y
 calidad-y-pruebas): plantillas que conservan el contrato de los formularios de Keycloak, textos solo en
 messages_es.properties, sin recursos externos ni credenciales, assets identicos a los del portal y el tema asignado al
 realm por el JSON versionado y por configure-realm.sh. Sin Keycloak ni red."""
@@ -15,10 +15,10 @@ from app.core.config import settings
 from tests.conftest import ROOT
 
 KEYCLOAK_DIR = ROOT / "infra" / "keycloak"
-THEME = KEYCLOAK_DIR / "themes" / "ultrasist" / "login"
+THEME = KEYCLOAK_DIR / "themes" / "ferromex" / "login"
 TEMPLATES = sorted(THEME.glob("*.ftl"))
-CSS = THEME / "resources" / "css" / "ultrasist.css"
-REALM = json.loads((KEYCLOAK_DIR / "realm-ultrasist-portal.json").read_text(encoding="utf-8"))
+CSS = THEME / "resources" / "css" / "ferromex.css"
+REALM = json.loads((KEYCLOAK_DIR / "realm-ferromex-portal.json").read_text(encoding="utf-8"))
 SERVICES = yaml.safe_load((ROOT / "compose.yaml").read_text(encoding="utf-8"))["services"]
 SCRIPT = (KEYCLOAK_DIR / "configure-realm.sh").read_text(encoding="utf-8")
 LOGIN_ACTION = 'action="${url.loginAction}"'
@@ -142,7 +142,7 @@ def test_tema_hereda_de_base_sin_estilos_de_keycloak():
     assert THEME_PROPERTIES["parent"] == "base" and THEME_PROPERTIES["locales"] == "es"
     assert "stylesCommon" not in THEME_PROPERTIES  # nada de PatternFly ni de keycloak.v2
     styles = THEME_PROPERTIES["styles"].split()
-    assert styles == ["vendor/bootstrap.min.css", "vendor/bootstrap-icons.min.css", "css/ultrasist.css"]
+    assert styles == ["vendor/bootstrap.min.css", "vendor/bootstrap-icons.min.css", "css/ferromex.css"]
     assert all((THEME / "resources" / style).is_file() for style in styles)
     assert {path.name for path in TEMPLATES} == set(CONTRACT)
 
@@ -184,9 +184,9 @@ def test_claves_propias_definidas_y_usadas():
     used = {
         key
         for template in TEMPLATES
-        for key in re.findall(r"""msg\(["'](ultrasist\w+)["']""", template.read_text(encoding="utf-8"))
+        for key in re.findall(r"""msg\(["'](ferromex\w+)["']""", template.read_text(encoding="utf-8"))
     }
-    defined = {key for key in MESSAGES if key.startswith("ultrasist")}
+    defined = {key for key in MESSAGES if key.startswith("ferromex")}
     assert used == defined, {"sin definir": used - defined, "sin usar": defined - used}
 
 
@@ -224,7 +224,7 @@ def test_sin_recursos_externos_ni_credenciales():
 
 def test_assets_identicos_a_los_del_portal():
     copies = {
-        THEME / "resources" / "img" / "Ultrasistlogo.png": ROOT / "app" / "static" / "img" / "Ultrasistlogo.png",
+        THEME / "resources" / "img" / "Ferromexlogo.png": ROOT / "app" / "static" / "img" / "Ferromexlogo.png",
         THEME / "resources" / "img" / "favicon.png": ROOT / "app" / "static" / "img" / "favicon.png",
     }
     vendor = THEME / "resources" / "vendor"
@@ -246,7 +246,7 @@ def test_diseno_movil():
 
 
 def test_realm_declara_tema_y_restablecimiento():
-    assert REALM["loginTheme"] == "ultrasist" and REALM["resetPasswordAllowed"] is True
+    assert REALM["loginTheme"] == "ferromex" and REALM["resetPasswordAllowed"] is True
     assert (REALM["defaultLocale"], REALM["supportedLocales"]) == ("es", ["es"])
     assert "smtpServer" not in REALM  # depende del entorno: lo aplica configure-realm.sh
     web = next(item for item in REALM["clients"] if item["clientId"] == settings.keycloak_client_id)
@@ -294,7 +294,7 @@ def test_script_coherente_con_el_realm_y_acotado():
 
 def test_compose_monta_el_tema_y_el_script_en_solo_lectura():
     keycloak = SERVICES["keycloak"]
-    assert "./infra/keycloak/themes/ultrasist:/opt/keycloak/themes/ultrasist:ro" in keycloak["volumes"]
+    assert "./infra/keycloak/themes/ferromex:/opt/keycloak/themes/ferromex:ro" in keycloak["volumes"]
     assert "./infra/keycloak/configure-realm.sh:/opt/keycloak/scripts/configure-realm.sh:ro" in keycloak["volumes"]
     environment = keycloak["environment"]
     assert environment["KEYCLOAK_SMTP_HOST"] == "${KEYCLOAK_SMTP_HOST:-mailpit}"

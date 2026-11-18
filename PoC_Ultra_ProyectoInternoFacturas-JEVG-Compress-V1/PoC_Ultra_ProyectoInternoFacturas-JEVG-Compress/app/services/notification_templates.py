@@ -83,7 +83,7 @@ VARIABLES = {
         Variable("usuario", "Correo con el que el proveedor inicia sesión", "contacto@serviciosdelnorte.mx"),
         Variable("contrasena_temporal", "Contraseña temporal generada al autorizar", "Ejemplo#Temporal2026"),
         Variable(
-            "url_portal", "Dirección de inicio de sesión del portal", "https://proveedores.ultrasist.com.mx/login"
+            "url_portal", "Dirección de inicio de sesión del portal", "https://proveedores.ferromex.com.mx/login"
         ),
     )
 }
@@ -146,9 +146,9 @@ def _variables(*extra: str) -> tuple[str, ...]:
 
 RECEPTION = Recipient.RECEPTION
 SUPPLIER = Recipient.SUPPLIER
-RECEPTION_FOOTER = "Este es un mensaje automático del Portal de Proveedores ULTRASIST. No responda a este correo."
+RECEPTION_FOOTER = "Este es un mensaje automático del Portal de Proveedores FERROMEX. No responda a este correo."
 SUPPLIER_FOOTER = (
-    "Puede consultar el detalle en el Portal de Proveedores ULTRASIST. "
+    "Puede consultar el detalle en el Portal de Proveedores FERROMEX. "
     "Este es un mensaje automático; no responda a este correo."
 )
 SUPPLIER_DETAILS = (
@@ -241,15 +241,15 @@ EVENTS: dict[NotificationEvent, EventSpec] = {
             SUPPLIER,
             ("proveedor", "usuario", "contrasena_temporal", "url_portal"),
             ("usuario", "contrasena_temporal", "url_portal"),
-            "Acceso al Portal de Proveedores ULTRASIST",
+            "Acceso al Portal de Proveedores FERROMEX",
             "{{proveedor}}:\n\n"
-            "Su registro como proveedor de ULTRASIST fue autorizado. Estos son sus datos para ingresar por primera vez "
+            "Su registro como proveedor de FERROMEX fue autorizado. Estos son sus datos para ingresar por primera vez "
             "al Portal de Proveedores:\n\n"
             "Portal: {{url_portal}}\n"
             "Usuario: {{usuario}}\n"
             "Contraseña temporal: {{contrasena_temporal}}\n\n"
             "Por seguridad, no comparta esta contraseña y cámbiela al ingresar por primera vez.\n\n"
-            "Este es un mensaje automático del Portal de Proveedores ULTRASIST. No responda a este correo.",
+            "Este es un mensaje automático del Portal de Proveedores FERROMEX. No responda a este correo.",
         ),
     )
 }

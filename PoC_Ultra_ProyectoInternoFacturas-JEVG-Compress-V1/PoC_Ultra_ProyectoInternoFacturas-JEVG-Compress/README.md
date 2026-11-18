@@ -1,6 +1,6 @@
 # Invoice Portal PoC
 
-Portal local de facturación y prevalidación de proveedores para ULTRASIST. Recibe expedientes, extrae CFDI 4.0, aplica reglas determinísticas, presenta una matriz de evidencia y soporta revisión administrativa con trazabilidad completa.
+Portal local de facturación y prevalidación de proveedores para FERROMEX. Recibe expedientes, extrae CFDI 4.0, aplica reglas determinísticas, presenta una matriz de evidencia y soporta revisión administrativa con trazabilidad completa.
 
 > **Datos exclusivamente DEMO.** Los RFC, XML, contratos, nombres y documentos incluidos son sintéticos, no tienen validez fiscal o legal y no representan personas reales.
 
@@ -111,15 +111,15 @@ El portal no recibe ni guarda contraseñas (RN-HU03-01). La autenticación la ha
 **Keycloak local.**
 
 - Servicio `keycloak` de `compose.yaml` (`quay.io/keycloak/keycloak:26.7.4`, modo `start-dev`), sólo en `127.0.0.1:${KEYCLOAK_PORT}` (58080 por defecto). Consola: <http://127.0.0.1:58080/admin>, con `KC_BOOTSTRAP_ADMIN_USERNAME` y `KC_BOOTSTRAP_ADMIN_PASSWORD` del `.env`.
-- Al arrancar importa el realm versionado `infra/keycloak/realm-ultrasist-portal.json` (roles `Administrador`, `Proveedor` y `PMO`; clientes `portal-facturas-web` y `portal-facturas-admin`; política de contraseñas; detección de fuerza bruta; eventos; sesión SSO de 60 min de inactividad y 8 h de máximo). El realm no contiene secretos: los de los clientes llegan como variables de entorno desde el `.env`, y sin ellas el contenedor no arranca.
+- Al arrancar importa el realm versionado `infra/keycloak/realm-ferromex-portal.json` (roles `Administrador`, `Proveedor` y `PMO`; clientes `portal-facturas-web` y `portal-facturas-admin`; política de contraseñas; detección de fuerza bruta; eventos; sesión SSO de 60 min de inactividad y 8 h de máximo). El realm no contiene secretos: los de los clientes llegan como variables de entorno desde el `.env`, y sin ellas el contenedor no arranca.
 - Los datos viven en el volumen `portal-facturas_keycloak-data`. El realm sólo se importa si no existe. El tema de login, el restablecimiento de contraseña, los eventos que se registran y el correo de Keycloak se aplican además al realm existente con `infra/keycloak/configure-realm.sh` (idempotente; `run_local.*` lo ejecuta en cada arranque), sin borrar nada. Para aplicar otros cambios del JSON: `docker compose rm -sf keycloak`, `docker volume rm portal-facturas_keycloak-data` y vuelva a levantarlo (se pierden las cuentas; `python scripts/reset_demo.py` o `python scripts/link_keycloak_users.py` las recrean).
 - Correo de Keycloak en local: el servicio `mailpit` de `compose.yaml` (`axllent/mailpit:v1.31.4`) recibe los correos de Keycloak (restablecimiento de contraseña) sin enviarlos. Se leen en <http://127.0.0.1:58025> (`MAILPIT_PORT`). Ningún correo de Keycloak local sale al SMTP real del `.env`, que es el del portal.
 
-**Pantallas de inicio de sesión (tema `ultrasist`).**
+**Pantallas de inicio de sesión (tema `ferromex`).**
 
-- Keycloak muestra el inicio de sesión, el restablecimiento, la contraseña nueva (enlace del correo, primer acceso y cambio voluntario) y sus páginas de error, información, enlace vencido, página expirada y cierre de sesión con el diseño del portal: el tema de login `ultrasist`, en `infra/keycloak/themes/ultrasist/login/`. El portal no recibe contraseñas: Keycloak sigue procesando credenciales, sesiones, política, correo, tokens y redirecciones.
+- Keycloak muestra el inicio de sesión, el restablecimiento, la contraseña nueva (enlace del correo, primer acceso y cambio voluntario) y sus páginas de error, información, enlace vencido, página expirada y cierre de sesión con el diseño del portal: el tema de login `ferromex`, en `infra/keycloak/themes/ferromex/login/`. El portal no recibe contraseñas: Keycloak sigue procesando credenciales, sesiones, política, correo, tokens y redirecciones.
 - Hereda de `base` de Keycloak (plantillas sin estilos) y sobrescribe `template.ftl` (layout), `login.ftl`, `login-reset-password.ftl` y `login-update-password.ftl`, partiendo de las de la versión de la imagen (`keycloakVersion` en `theme.properties`). Conservan el `action`, los campos y los mensajes de las originales.
-- Textos: `messages/messages_es.properties` (español de México, con "usted"); las plantillas no fijan texto. Estilos: `resources/css/ultrasist.css` sobre copias de Bootstrap 5.3.3 e Icons 1.11.3 idénticas a `app/static/vendor/`. Sin CDN.
+- Textos: `messages/messages_es.properties` (español de México, con "usted"); las plantillas no fijan texto. Estilos: `resources/css/ferromex.css` sobre copias de Bootstrap 5.3.3 e Icons 1.11.3 idénticas a `app/static/vendor/`. Sin CDN.
 - Con `start-dev`, los cambios del tema se ven al recargar la página. `tests/test_tema_keycloak.py` verifica el contrato de los formularios, los textos, la ausencia de recursos externos y de credenciales, y las copias de Bootstrap.
 - **Al actualizar Keycloak:** compare las cuatro plantillas con las de `base/login` de la versión nueva (están en `/opt/keycloak/lib/lib/main/org.keycloak.keycloak-themes-<versión>.jar`; por ejemplo, `docker compose cp keycloak:<ruta del jar> .` y `unzip`), lleve los cambios al tema, actualice `keycloakVersion` y repita `npx playwright test -c playwright.tema.config.ts` en `tests/hu/`. La prueba falla mientras `keycloakVersion` no coincida con la imagen.
 
@@ -127,7 +127,7 @@ El portal no recibe ni guarda contraseñas (RN-HU03-01). La autenticación la ha
 
 - "¿Olvidó su contraseña?" en el inicio de sesión (`resetPasswordAllowed` del realm). Lo ejecuta Keycloak con su flujo integrado: pide el correo, responde con el mismo mensaje exista o no la cuenta, envía un enlace de un solo uso y pide la contraseña nueva con la política del realm. El portal no participa.
 - El enlace vence a los 5 minutos (valor por defecto del realm, `actionTokenGeneratedByUserLifespan`). Una cuenta deshabilitada no recibe el correo.
-- **Registro:** cada solicitud e intento queda en los eventos de usuario del realm durante 30 días. Se consultan en la consola de Keycloak ("Events", realm `ultrasist-portal`) o con `GET /admin/realms/ultrasist-portal/events?type=...`; los errores salen también en el log del contenedor.
+- **Registro:** cada solicitud e intento queda en los eventos de usuario del realm durante 30 días. Se consultan en la consola de Keycloak ("Events", realm `ferromex-portal`) o con `GET /admin/realms/ferromex-portal/events?type=...`; los errores salen también en el log del contenedor.
   - Solicitud con correo enviado: `SEND_RESET_PASSWORD`, con el usuario y el correo. Si falla el envío: `SEND_RESET_PASSWORD_ERROR`.
   - Solicitud rechazada: `RESET_PASSWORD_ERROR`, con el error `user_not_found` (y el correo escrito), `user_disabled` o `expired_code` (enlace ya usado o vencido).
   - Enlace alterado: `EXECUTE_ACTION_TOKEN_ERROR` (`invalid_code`).
@@ -155,7 +155,7 @@ El portal no recibe ni guarda contraseñas (RN-HU03-01). La autenticación la ha
 - La lista `infra/keycloak/common_passwords.txt` debe instalarse en `data/password-blacklists/` del servidor (la exige la política `passwordBlacklist`).
 - *Rate limiting* por IP en el proxy inverso frente a Keycloak: Keycloak bloquea por cuenta, no por IP.
 - Correo de Keycloak (restablecimiento de contraseña): el mismo servidor y remitente SMTP del portal (`smtpServer` del realm); la contraseña SMTP se configura en Keycloak, nunca en el JSON versionado. Sin él, "¿Olvidó su contraseña?" responde "No se pudo enviar el correo".
-- Tema de login: copie `infra/keycloak/themes/ultrasist` a `/opt/keycloak/themes/` de la instancia (o empaquételo como JAR en `providers/` y ejecute `kc.sh build`) y reiníciela: en modo `start` Keycloak guarda los temas en caché. Después ejecute en el servidor `infra/keycloak/configure-realm.sh` con `KCADM_USER` y `KCADM_PASSWORD` de una cuenta administradora (`KCADM_REALM` si no es de `master`, `KEYCLOAK_SERVER` si no es `http://localhost:8080`) y, para el correo, `KEYCLOAK_SMTP_HOST`, `KEYCLOAK_SMTP_PORT`, `KEYCLOAK_SMTP_FROM`, `KEYCLOAK_SMTP_SECURITY`, `KEYCLOAK_SMTP_USER` y `KEYCLOAK_SMTP_PASSWORD`; o asigne el tema en la consola ("Realm settings › Themes › Login theme"). Para volver al tema por defecto: `kcadm.sh update realms/ultrasist-portal -s loginTheme=keycloak.v2` (un valor vacío no lo cambia).
+- Tema de login: copie `infra/keycloak/themes/ferromex` a `/opt/keycloak/themes/` de la instancia (o empaquételo como JAR en `providers/` y ejecute `kc.sh build`) y reiníciela: en modo `start` Keycloak guarda los temas en caché. Después ejecute en el servidor `infra/keycloak/configure-realm.sh` con `KCADM_USER` y `KCADM_PASSWORD` de una cuenta administradora (`KCADM_REALM` si no es de `master`, `KEYCLOAK_SERVER` si no es `http://localhost:8080`) y, para el correo, `KEYCLOAK_SMTP_HOST`, `KEYCLOAK_SMTP_PORT`, `KEYCLOAK_SMTP_FROM`, `KEYCLOAK_SMTP_SECURITY`, `KEYCLOAK_SMTP_USER` y `KEYCLOAK_SMTP_PASSWORD`; o asigne el tema en la consola ("Realm settings › Themes › Login theme"). Para volver al tema por defecto: `kcadm.sh update realms/ferromex-portal -s loginTheme=keycloak.v2` (un valor vacío no lo cambia).
 
 **Lista de contraseñas comunes.** Se mantiene a mano en `infra/keycloak/common_words.txt`. `python scripts/build_password_blacklist.py` genera `common_passwords.txt` con esas entradas y sus variantes decoradas (`password1!`, `portal2026!`): como la política exige dígito y carácter especial, sin variantes la lista no bloquearía ninguna contraseña. Una prueba verifica que el archivo generado esté al día.
 
@@ -194,7 +194,7 @@ El portal corre en Vercel como una Vercel Function (Python 3.12, `app/main.py`).
 | `DATABASE_URL` | La URL **directa** (sin `-pooler`) de Neon con el esquema `postgresql+psycopg://` y `?sslmode=require` |
 | `STORAGE_BACKEND`, `STORAGE_PATH`, `LOG_DIR`, `MAIL_OUTBOX_DIR`, `BACKUP_DIR` | `database` y rutas bajo `/tmp/portal/` |
 | `MAX_UPLOAD_MB` | `4` |
-| `KEYCLOAK_SERVER_URL`, `KEYCLOAK_REALM` | `https://<KEYCLOAK_HOSTNAME>` y `ultrasist-portal` |
+| `KEYCLOAK_SERVER_URL`, `KEYCLOAK_REALM` | `https://<KEYCLOAK_HOSTNAME>` y `ferromex-portal` |
 | `KEYCLOAK_CLIENT_SECRET`, `KEYCLOAK_ADMIN_CLIENT_SECRET` | Los del `.env` del servidor de Keycloak |
 | `MAIL_BACKEND`, `SMTP_*`, `MAIL_FROM` | `smtp` y el servidor del portal (ver "Conectar el servidor SMTP") |
 
@@ -375,7 +375,7 @@ Todos los listados de registros se paginan en la base de datos (`LIMIT/OFFSET`) 
 - `CON-001..004`: contrato, proyecto, periodo y heurística mes/tecnología.
 - `DAT-001`: recepción del día 1 al 20; advertencia no fatal.
 - `FIN-001..006`: límite autorizado, consistencia, moneda, UUID/número duplicados y diferencia absoluta/porcentual. `FIN-007`: Invoice duplicado por nombre de archivo (sólo internacional).
-- `INT-001..004`: datos del proveedor y de ULTRASIST en el texto del Invoice (sólo internacional; advertencias). Ver [Facturas de proveedores internacionales](#facturas-de-proveedores-internacionales).
+- `INT-001..004`: datos del proveedor y de FERROMEX en el texto del Invoice (sólo internacional; advertencias). Ver [Facturas de proveedores internacionales](#facturas-de-proveedores-internacionales).
 - `SEM-001`: comparación semántica mediante adaptador; el mock reconoce Power Platform/Power Automate con confianza 0.93.
 
 `SEM-002..004` quedan reservadas como extensión. Los parámetros del motor (datos del receptor, método y forma de pago, usos de CFDI e interruptores) tienen una sola fuente, la tabla `validation_settings`, que el Administrador edita en `/admin/rules` y el motor lee en cada prevalidación. Las monedas aceptadas son las activas del catálogo de monedas. Sólo los pesos del score siguen en `BUSINESS_RULES` (`app/core/constants.py`).
@@ -386,12 +386,12 @@ Cada regla evaluada aporta al denominador según severidad: `CRITICAL=35`, `ERRO
 
 ## Reglas de validación
 
-El Administrador define en **Administración › Reglas de validación** (`/admin/rules`) los datos de ULTRASIST y los parámetros del CFDI contra los que se comparan las facturas (HU-06). La migración `0007_validation_rules_catalogs` siembra los valores que antes estaban fijos en el código, y la siguiente verificación o envío usa lo que se guarde.
+El Administrador define en **Administración › Reglas de validación** (`/admin/rules`) los datos de FERROMEX y los parámetros del CFDI contra los que se comparan las facturas (HU-06). La migración `0007_validation_rules_catalogs` siembra los valores que antes estaban fijos en el código, y la siguiente verificación o envío usa lo que se guarde.
 
 | Regla | Compara | Severidad | Valor inicial |
 | --- | --- | --- | --- |
 | XML-002 | `Receptor.Rfc` con el RFC | `CRITICAL` | `ULT940623AG0` |
-| XML-009 | `Receptor.Nombre` con la razón social, sin distinguir mayúsculas, acentos ni espacios repetidos | `ERROR` | `ULTRASIST` |
+| XML-009 | `Receptor.Nombre` con la razón social, sin distinguir mayúsculas, acentos ni espacios repetidos | `ERROR` | `FERROMEX` |
 | XML-010 | `Receptor.DomicilioFiscalReceptor` con el código postal | `ERROR` | `03930` |
 | XML-003 | `MetodoPago` con el método esperado | `ERROR` | `PPD` |
 | XML-004 | `FormaPago` con la forma esperada | `ERROR` | `99` |
@@ -479,7 +479,7 @@ El proveedor extranjero (`suppliers.origin = INTERNATIONAL`) no emite CFDI: fact
 - **Datos del Invoice:** al registrar la factura captura la fecha, el subtotal, los impuestos, el total y la moneda (catálogo de monedas activas). El total debe ser igual al subtotal más impuestos (tolerancia 0.02, como `FIN-002`). Se guardan en las mismas columnas que el XML llena para el nacional. Mientras la factura es editable ("Borrador", "Cargada" u "Observaciones") los corrige desde la carga documental; cada cambio se audita como `INVOICE_AMOUNTS_UPDATED`.
 - **Duplicados por nombre de archivo:** al cargar un Invoice cuyo nombre (sin distinguir mayúsculas ni espacios de los extremos) ya tiene otra factura no cancelada del mismo proveedor, la carga responde 409 con el folio de esa factura y no escribe el archivo. Un bloqueo consultivo por proveedor serializa estas cargas y `FIN-007` (`CRITICAL`) lo verifica de nuevo al enviar.
 - **Validación:** `XML-001..010`, `FIN-004`, `SUP-004` y, mientras no tenga [requisitos de alta](#requisitos-de-alta-del-proveedor) exigibles, `SUP-003` resultan "No aplica a proveedores internacionales"; `SEM-001` no se evalúa. Las demás reglas se aplican con los importes capturados: por ejemplo, `FIN-001` bloquea un subtotal mayor al monto autorizado del contrato.
-- **Reglas del Invoice (`INT`):** buscan en el texto del PDF, sin acentos, mayúsculas, espacios ni signos: `INT-001` el identificador fiscal del proveedor, `INT-002` la razón social de ULTRASIST, `INT-003` su código postal y `INT-004` su dirección (si está configurada). `INT-002` e `INT-003` respetan los interruptores de [Reglas de validación](#reglas-de-validación). Son advertencias: no bloquean el envío. Un PDF sin texto legible (escaneado) las deja "No evaluadas".
+- **Reglas del Invoice (`INT`):** buscan en el texto del PDF, sin acentos, mayúsculas, espacios ni signos: `INT-001` el identificador fiscal del proveedor, `INT-002` la razón social de FERROMEX, `INT-003` su código postal y `INT-004` su dirección (si está configurada). `INT-002` e `INT-003` respetan los interruptores de [Reglas de validación](#reglas-de-validación). Son advertencias: no bloquean el envío. Un PDF sin texto legible (escaneado) las deja "No evaluadas".
 - **Pendiente con negocio:** se calibrarán con las tres muestras de invoices extranjeros acordadas en la minuta. El expediente del proveedor internacional (equivalente al Anexo A) está por definir; cuando se defina, el Administrador lo configura en la columna Internacional de los requisitos de alta.
 - **Demo:** `proveedor3@poc.local` es "Global Data Services Inc. (DEMO)" (US, identificador `98-7654321`), con el contrato "Analitica Global 2026" por 20,000.00 USD y la factura `INV-2026-0042` en "Cargada", lista para enviar.
 
@@ -524,7 +524,7 @@ El Administrador define en **Administración › Plantillas de correo** (`/admin
 | `aviso_complemento` | Aviso del Complemento de Pago con su fecha límite; vacío si la factura no lo requiere o ya lo adjuntó | `Es importante que adjunte su “Complemento de Pago” a dicha factura pagada antes del 28/09/2026 10:30. …` |
 | `usuario` | Correo con el que el proveedor inicia sesión | `contacto@serviciosdelnorte.mx` |
 | `contrasena_temporal` | Contraseña temporal generada al autorizar | `Ejemplo#Temporal2026` |
-| `url_portal` | Dirección de inicio de sesión del portal | `https://proveedores.ultrasist.com.mx/login` |
+| `url_portal` | Dirección de inicio de sesión del portal | `https://proveedores.ferromex.com.mx/login` |
 
 - **Texto:** plano, sin HTML. Una variable se escribe `{{numero_factura}}` (se admiten espacios interiores) y sólo se reemplaza por su valor: no hay expresiones, filtros ni condiciones, y el texto nunca pasa por Jinja2. La única variable condicional es `{{aviso_complemento}}`: obligatoria en el cuerpo de "Pagada", pero puede llegar vacía; entonces desaparece la línea que sólo la contenía y no quedan líneas en blanco repetidas. Una llave sencilla es texto normal. El asunto ocupa una línea de hasta 200 caracteres; el cuerpo, hasta 5000. Al guardar se recortan los espacios de los extremos y `CRLF` pasa a `LF`.
 - **Validación:** al guardar y en la vista previa se reportan juntos, con HTTP 400 y el formato "Campo: mensaje", los campos vacíos o demasiado largos, las variables sin cerrar, las que no son de la plantilla y las obligatorias que faltan en el cuerpo.
@@ -542,7 +542,7 @@ El Administrador define en **Administración › Plantillas de correo** (`/admin
 
 El Administrador define en **Administración › Notificaciones** (`/admin/notifications`) a qué direcciones llegan los avisos (HU-08). El destinatario principal de cada evento lo fija su regla de negocio; la pantalla configura:
 
-- **Buzón "Recepción de Facturas":** de 1 a 10 correos. La migración `0005_notification_recipients` lo siembra con `recepcionfacturas@ultrasist.com.mx`. Recibe los avisos de facturas Autorizadas y Canceladas, y el de Complemento de pago adjuntado.
+- **Buzón "Recepción de Facturas":** de 1 a 10 correos. La migración `0005_notification_recipients` lo siembra con `recepcionfacturas@ferromex.com.mx`. Recibe los avisos de facturas Autorizadas y Canceladas, y el de Complemento de pago adjuntado.
 - **Copias por evento:** de 0 a 10 correos en `Cc` para Autorizada, Rechazada, Observaciones, Cancelada, Pagada y Complemento de pago adjuntado. Se omiten las que ya están en "Para".
 - **Correo de prueba** a una dirección que indique el Administrador, con un texto fijo.
 - **Transporte** vigente en solo lectura, sin usuario ni contraseña, y la **bitácora de envíos** completa, paginada de 25 en 25, con su resultado.
@@ -568,14 +568,14 @@ notification_service.notify(
 )
 ```
 
-- Resuelve los destinatarios con la configuración vigente, compone el correo con la plantilla de HU-05 y lo envía como `multipart/alternative` UTF-8: el texto plano y una versión HTML con el logo de ULTRASIST incrustado (`cid:`) en una tarjeta centrada con estilos en línea (`app/services/mail_layout.py`, `app/email_templates/layout.html`). La versión HTML se deriva del texto: cada valor se escapa, las direcciones `http(s)` se vuelven enlaces y un párrafo de líneas `Etiqueta: valor` se muestra como bloque de datos. Las plantillas de HU-05 siguen siendo de texto plano.
+- Resuelve los destinatarios con la configuración vigente, compone el correo con la plantilla de HU-05 y lo envía como `multipart/alternative` UTF-8: el texto plano y una versión HTML con el logo de FERROMEX incrustado (`cid:`) en una tarjeta centrada con estilos en línea (`app/services/mail_layout.py`, `app/email_templates/layout.html`). La versión HTML se deriva del texto: cada valor se escapa, las direcciones `http(s)` se vuelven enlaces y un párrafo de líneas `Etiqueta: valor` se muestra como bloque de datos. Las plantillas de HU-05 siguen siendo de texto plano.
 - Registra el intento en `email_deliveries` (evento, destinatarios, resultado, error técnico, entidad y usuario, **sin asunto ni cuerpo**) y confirma ese registro.
 - Un error del servidor de correo **no** se propaga: el envío queda `FAILED` en la bitácora y en el log (`notification.failed`). No hay cola ni reintentos automáticos.
 - Lanza `NotificationDataError` si falta el correo del proveedor o una variable de la plantilla.
 
 ### Conectar el servidor SMTP
 
-El `.env` trae un bloque comentado para el servidor de ULTRASIST. Para conectarlo:
+El `.env` trae un bloque comentado para el servidor de FERROMEX. Para conectarlo:
 
 1. Pida a TI el servidor, el puerto y el tipo de conexión, la cuenta que envía (o si el servidor acepta relay por IP sin usuario) y la dirección de remitente autorizada.
 2. En `.env`, descomente y complete `MAIL_BACKEND=smtp`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURITY`, `SMTP_USERNAME`, `SMTP_PASSWORD` y `MAIL_FROM`. La contraseña sólo vive en `.env`: nunca se muestra en la pantalla ni se escribe en el log.
@@ -591,7 +591,7 @@ El `.env` trae un bloque comentado para el servidor de ULTRASIST. Para conectarl
 
 Errores frecuentes al enviar la prueba:
 - `SMTPAuthenticationError`: usuario o contraseña incorrectos, o, en Microsoft 365, SMTP AUTH deshabilitado para ese buzón.
-- `SSLCertVerificationError`: el certificado del servidor lo firmó una autoridad interna de ULTRASIST. Agregue su certificado raíz al almacén del sistema, o defina `SSL_CERT_FILE` con un archivo `.pem` que la incluya. La verificación del certificado no se desactiva.
+- `SSLCertVerificationError`: el certificado del servidor lo firmó una autoridad interna de FERROMEX. Agregue su certificado raíz al almacén del sistema, o defina `SSL_CERT_FILE` con un archivo `.pem` que la incluya. La verificación del certificado no se desactiva.
 - `SMTPRecipientsRefused` o `SMTPSenderRefused`: el servidor no permite enviar con ese `MAIL_FROM` o a ese destinatario.
 - `ConnectionRefusedError` o `TimeoutError`: servidor o puerto incorrectos, o un firewall de por medio.
 
@@ -687,14 +687,14 @@ Para producción use `APP_ENV=production`: la aplicación no arranca sin `SESSIO
 | `BACKUP_RETENTION` | `14` | Respaldos que conserva `scripts/backup.py`. |
 | `MAX_UPLOAD_MB` | `20` | Tamaño máximo por archivo. |
 | `MAIL_BACKEND` | según `APP_ENV` | `smtp` o `file`; `smtp` en `production` y `file` (no envía) en los demás. |
-| `MAIL_FROM` | *(obligatoria con `smtp`)* | Remitente, p. ej. `Portal de Proveedores ULTRASIST <no-reply@ultrasist.com.mx>`. Con `file`: `…<no-reply@portal.local>`. |
+| `MAIL_FROM` | *(obligatoria con `smtp`)* | Remitente, p. ej. `Portal de Proveedores FERROMEX <no-reply@ferromex.com.mx>`. Con `file`: `…<no-reply@portal.local>`. |
 | `MAIL_OUTBOX_DIR` | `./outbox` | Directorio de los `.eml` del transporte `file`. |
 | `SMTP_HOST`, `SMTP_PORT` | *(obligatoria con `smtp`)*, `587` | Servidor SMTP. |
 | `SMTP_SECURITY` | `starttls` | `starttls`, `ssl` o `none` (prohibido en `production`). |
 | `SMTP_USERNAME`, `SMTP_PASSWORD` | *(vacías)* | Si hay usuario, el transporte inicia sesión. La contraseña nunca se muestra ni se registra. |
 | `SMTP_TIMEOUT` | `10` | Segundos de espera del servidor SMTP (1 a 120). |
 | `KEYCLOAK_SERVER_URL` | *(obligatoria)* | URL base de Keycloak; `https://` obligatorio en `production`. `create_env.py` escribe la local (`http://127.0.0.1:58080`). |
-| `KEYCLOAK_REALM` | *(obligatoria)* | `ultrasist-portal`. |
+| `KEYCLOAK_REALM` | *(obligatoria)* | `ferromex-portal`. |
 | `KEYCLOAK_CLIENT_ID`, `KEYCLOAK_CLIENT_SECRET` | `portal-facturas-web`, *(obligatoria)* | Cliente OIDC del portal. El secreto: mínimo 32 caracteres, sin valor de ejemplo; nunca se muestra ni se registra. |
 | `KEYCLOAK_ADMIN_CLIENT_ID`, `KEYCLOAK_ADMIN_CLIENT_SECRET` | `portal-facturas-admin`, *(obligatoria)* | Cuenta de servicio del alta de usuarios (sólo `manage-users`, `view-users` y `query-users`). |
 | `KEYCLOAK_TIMEOUT` | `10` | Segundos de espera de cada llamada a Keycloak (1 a 60). |

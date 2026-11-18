@@ -22,7 +22,7 @@ from tests.test_factura_internacional import INTERNATIONAL, INVOICE_TEXT, comple
 
 pytestmark = pytest.mark.usefixtures("restore_notification_recipients")
 
-RECEPTION = "recepcionfacturas@ultrasist.com.mx"
+RECEPTION = "recepcionfacturas@ferromex.com.mx"
 PROVIDER_EMAIL = "proveedor1@poc.local"
 PROVIDER_NAME = "Tecnologia Integral del Centro SA de CV"
 PDF = b"%PDF-1.7\n1 0 obj\n<<>>\nendobj\n%%EOF\n"

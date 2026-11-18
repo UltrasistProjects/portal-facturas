@@ -154,7 +154,7 @@ El inicio de sesión SHALL exigir exactamente un rol reconocido, igual al `role`
 El aislamiento por proveedor SHALL seguir basándose en el `supplier_id` del usuario local, nunca en un claim del token.
 
 #### Scenario: Usuario sin rol reconocido
-- **WHEN** el ID token sólo trae los roles `offline_access` y `default-roles-ultrasist-portal`
+- **WHEN** el ID token sólo trae los roles `offline_access` y `default-roles-ferromex-portal`
 - **THEN** la respuesta es HTTP 403 y no se crea sesión
 
 #### Scenario: Rol distinto del local
@@ -209,7 +209,7 @@ Keycloak SHALL rechazar la contraseña nueva que no la cumpla. Las contraseñas 
 - **THEN** Keycloak la rechaza por figurar en la lista de contraseñas comunes
 
 #### Scenario: Política declarada en el realm
-- **WHEN** se inspecciona `infra/keycloak/realm-ultrasist-portal.json`
+- **WHEN** se inspecciona `infra/keycloak/realm-ferromex-portal.json`
 - **THEN** `passwordPolicy` contiene `length(8)`, `maxLength(128)`, `digits(1)`, `specialChars(1)`, una expresión que exige una letra, `notUsername`, `notEmail`, `passwordHistory(1)` y `passwordBlacklist(common_passwords.txt)`
 
 #### Scenario: Temporal generada válida
@@ -264,7 +264,7 @@ Ningún registro MUST contener tokens, códigos de autorización, `state`, `nonc
 - **THEN** `audit_logs` contiene `LOGIN_DENIED` con `reason = "role_mismatch"` y sin ningún token
 
 ### Requirement: Pantallas de Keycloak con el diseño del portal
-Las páginas de login que Keycloak muestra a los usuarios del realm `ultrasist-portal` SHALL usar el tema de login `ultrasist`, con el diseño del login anterior del portal: panel de marca con el logo de ULTRASIST y tarjeta del formulario.
+Las páginas de login que Keycloak muestra a los usuarios del realm `ferromex-portal` SHALL usar el tema de login `ferromex`, con el diseño del login anterior del portal: panel de marca con el logo de FERROMEX y tarjeta del formulario.
 
 **Páginas que cubre:**
 - inicio de sesión;
@@ -311,14 +311,14 @@ Las páginas de login que Keycloak muestra a los usuarios del realm `ultrasist-p
 
 #### Scenario: Sin diseño por defecto de Keycloak
 - **WHEN** se recorren el inicio de sesión, el restablecimiento, el primer acceso y el enlace expirado o ya usado
-- **THEN** ninguna página carga hojas de estilo de `keycloak.v2` ni de PatternFly, todas las hojas de estilo vienen del tema `ultrasist` y todas muestran el logo del portal
+- **THEN** ninguna página carga hojas de estilo de `keycloak.v2` ni de PatternFly, todas las hojas de estilo vienen del tema `ferromex` y todas muestran el logo del portal
 
 #### Scenario: Móvil y escritorio
 - **WHEN** cada página de esos flujos se muestra en una ventana de 390×844 y en una de 1440×900
 - **THEN** no hay desplazamiento horizontal y los campos, botones y mensajes son visibles y usables; en 390 px el panel de marca se reduce a un encabezado con el logo
 
 #### Scenario: Sin credenciales en las páginas del tema
-- **WHEN** se solicita cualquier página del tema `ultrasist`
+- **WHEN** se solicita cualquier página del tema `ferromex`
 - **THEN** la respuesta no contiene `data-demo` ni contraseñas
 
 ### Requirement: Restablecimiento de contraseña por correo

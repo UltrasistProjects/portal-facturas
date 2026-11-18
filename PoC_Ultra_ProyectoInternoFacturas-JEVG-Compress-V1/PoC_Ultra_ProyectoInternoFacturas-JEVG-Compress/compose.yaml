@@ -65,11 +65,11 @@ services:
       # Datos de Keycloak (base dev-file en data/h2): usuarios y sesiones sobreviven a los reinicios. Se monta data/
       # completo porque existe en la imagen con el dueno keycloak; data/h2 no existe y Docker lo crearia de root.
       - keycloak-data:/opt/keycloak/data
-      - ./infra/keycloak/realm-ultrasist-portal.json:/opt/keycloak/data/import/realm-ultrasist-portal.json:ro
+      - ./infra/keycloak/realm-ferromex-portal.json:/opt/keycloak/data/import/realm-ferromex-portal.json:ro
       - ./infra/keycloak/common_passwords.txt:/opt/keycloak/data/password-blacklists/common_passwords.txt:ro
-      # Tema de login "ultrasist" (con start-dev no hay cache: los cambios se ven al recargar) y el script que lo asigna
+      # Tema de login "ferromex" (con start-dev no hay cache: los cambios se ven al recargar) y el script que lo asigna
       # al realm existente, porque --import-realm no reimporta un realm que ya existe.
-      - ./infra/keycloak/themes/ultrasist:/opt/keycloak/themes/ultrasist:ro
+      - ./infra/keycloak/themes/ferromex:/opt/keycloak/themes/ferromex:ro
       - ./infra/keycloak/configure-realm.sh:/opt/keycloak/scripts/configure-realm.sh:ro
     # La imagen no trae curl: la sonda usa /dev/tcp de bash contra el puerto de administracion (9000).
     healthcheck:

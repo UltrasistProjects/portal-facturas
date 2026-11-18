@@ -23,7 +23,7 @@ LEVELS = ("REQUIRED", "OPTIONAL", "NOT_APPLICABLE")
 REQ, OPT, NA = LEVELS
 # (clave, nombre, descripcion, nivel, varios archivos), en el orden del catalogo.
 SYSTEM_TYPES = [
-    ("SIGNED_CONTRACT", "Contrato", "Contrato firmado con ULTRASIST", REQ, False),
+    ("SIGNED_CONTRACT", "Contrato", "Contrato firmado con FERROMEX", REQ, False),
     ("CONTRACT_PURCHASE_ORDER", "Orden de compra", "Orden de compra que respalda la contratación", OPT, True),
     ("CONTRACT_ANNEXES", "Anexos", "Anexos del contrato: técnico, económico, de alcance u otros", OPT, True),
 ]

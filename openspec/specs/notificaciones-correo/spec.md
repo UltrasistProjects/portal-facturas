@@ -23,14 +23,14 @@ Las rutas `GET /admin/notifications`, `POST /admin/notifications` y `POST /admin
 - **THEN** el menú del Administrador incluye "Notificaciones" y el del usuario `PMO` no
 
 ### Requirement: Buzón "Recepción de Facturas"
-El sistema SHALL mantener el buzón "Recepción de Facturas" (`INVOICE_RECEPTION`) con una lista de 1 a 10 direcciones de correo. Desde la instalación SHALL contener `recepcionfacturas@ultrasist.com.mx`. El Administrador SHALL poder reemplazar la lista desde `/admin/notifications`. La interfaz MUST NOT permitir crear ni eliminar buzones.
+El sistema SHALL mantener el buzón "Recepción de Facturas" (`INVOICE_RECEPTION`) con una lista de 1 a 10 direcciones de correo. Desde la instalación SHALL contener `recepcionfacturas@ferromex.com.mx`. El Administrador SHALL poder reemplazar la lista desde `/admin/notifications`. La interfaz MUST NOT permitir crear ni eliminar buzones.
 
 #### Scenario: Instalación nueva
 - **WHEN** se ejecuta `alembic upgrade head` sobre una base vacía
-- **THEN** el buzón "Recepción de Facturas" existe con la única dirección `recepcionfacturas@ultrasist.com.mx`
+- **THEN** el buzón "Recepción de Facturas" existe con la única dirección `recepcionfacturas@ferromex.com.mx`
 
 #### Scenario: Cambio del buzón
-- **WHEN** el Administrador guarda el buzón con "facturas@ultrasist.com.mx" y "cxp@ultrasist.com.mx"
+- **WHEN** el Administrador guarda el buzón con "facturas@ferromex.com.mx" y "cxp@ferromex.com.mx"
 - **THEN** la respuesta redirige a `/admin/notifications` con el aviso "Configuración guardada" y el buzón queda con esas dos direcciones en ese orden
 
 #### Scenario: Buzón vacío
@@ -45,19 +45,19 @@ Cada evento de factura (Autorizada, Rechazada, Observaciones, Cancelada, Pagada 
 - **THEN** ve los eventos Autorizada, Rechazada, Observaciones, Cancelada, Pagada y Complemento de pago adjuntado, con los destinatarios principales "Recepción de Facturas con copia al proveedor", "Proveedor (correo del catálogo)", "Proveedor (correo del catálogo)", "Recepción de Facturas", "Proveedor (correo del catálogo)" y "Recepción de Facturas", y sin copias
 
 #### Scenario: Copia agregada
-- **WHEN** el Administrador guarda "pmo@ultrasist.com.mx" como copia del evento Rechazada
+- **WHEN** el Administrador guarda "pmo@ferromex.com.mx" como copia del evento Rechazada
 - **THEN** la lista de copias de Rechazada contiene esa dirección y las de los demás eventos no cambian
 
 #### Scenario: Copia del aviso de pago
-- **WHEN** el Administrador guarda "cxp@ultrasist.com.mx" como copia del evento Pagada y el PMO marca una factura como pagada
-- **THEN** el correo "Pagada" va al correo del proveedor con "Cc" a "cxp@ultrasist.com.mx"
+- **WHEN** el Administrador guarda "cxp@ferromex.com.mx" como copia del evento Pagada y el PMO marca una factura como pagada
+- **THEN** el correo "Pagada" va al correo del proveedor con "Cc" a "cxp@ferromex.com.mx"
 
 ### Requirement: Validación de las listas de correos
 Al guardar, cada lista SHALL normalizarse: las direcciones se separan por saltos de línea, comas o punto y coma; se recortan los espacios de los extremos; se descartan las vacías; se convierten a minúsculas y se eliminan las repetidas, conservando el orden de la primera aparición. Después, cada dirección SHALL ser un correo válido de hasta 254 caracteres y cada lista SHALL respetar su número de direcciones. Si hay errores, la respuesta SHALL ser HTTP 400 con todos los errores juntos, cada uno con la forma "<Lista>: <mensaje>", y el formulario SHALL conservar lo capturado. Un guardado con errores MUST NOT cambiar ninguna lista.
 
 #### Scenario: Normalización
-- **WHEN** el Administrador guarda el buzón con " Facturas@Ultrasist.com.mx ; cxp@ultrasist.com.mx,facturas@ultrasist.com.mx "
-- **THEN** el buzón queda con "facturas@ultrasist.com.mx" y "cxp@ultrasist.com.mx"
+- **WHEN** el Administrador guarda el buzón con " Facturas@Ferromex.com.mx ; cxp@ferromex.com.mx,facturas@ferromex.com.mx "
+- **THEN** el buzón queda con "facturas@ferromex.com.mx" y "cxp@ferromex.com.mx"
 
 #### Scenario: Dirección inválida
 - **WHEN** el Administrador guarda "recepcion@" como copia del evento Autorizada
@@ -93,12 +93,12 @@ El sistema SHALL resolver los destinatarios de un correo de evento así:
 La configuración SHALL leerse de la base de datos en cada envío, sin caché.
 
 #### Scenario: Evento dirigido al buzón
-- **WHEN** el buzón contiene "facturas@ultrasist.com.mx" y "cxp@ultrasist.com.mx", las copias de Autorizada contienen "cxp@ultrasist.com.mx" y "pmo@ultrasist.com.mx", y se resuelven los destinatarios de Autorizada
-- **THEN** "Para" es "facturas@ultrasist.com.mx" y "cxp@ultrasist.com.mx", y "Cc" es sólo "pmo@ultrasist.com.mx"
+- **WHEN** el buzón contiene "facturas@ferromex.com.mx" y "cxp@ferromex.com.mx", las copias de Autorizada contienen "cxp@ferromex.com.mx" y "pmo@ferromex.com.mx", y se resuelven los destinatarios de Autorizada
+- **THEN** "Para" es "facturas@ferromex.com.mx" y "cxp@ferromex.com.mx", y "Cc" es sólo "pmo@ferromex.com.mx"
 
 #### Scenario: Autorizada con copia al proveedor
-- **WHEN** las copias de Autorizada contienen "pmo@ultrasist.com.mx" y "contacto@proveedor.mx", y se resuelven los destinatarios de Autorizada con el correo del proveedor "Contacto@Proveedor.mx"
-- **THEN** "Para" es la lista del buzón "Recepción de Facturas" y "Cc" es "contacto@proveedor.mx" y "pmo@ultrasist.com.mx", sin repetidas
+- **WHEN** las copias de Autorizada contienen "pmo@ferromex.com.mx" y "contacto@proveedor.mx", y se resuelven los destinatarios de Autorizada con el correo del proveedor "Contacto@Proveedor.mx"
+- **THEN** "Para" es la lista del buzón "Recepción de Facturas" y "Cc" es "contacto@proveedor.mx" y "pmo@ferromex.com.mx", sin repetidas
 
 #### Scenario: Cancelada sin copia al proveedor
 - **WHEN** se resuelven los destinatarios de Cancelada con el correo del proveedor "contacto@proveedor.mx" y sin copias configuradas
@@ -132,11 +132,11 @@ El sistema SHALL ofrecer un servicio de envío para las HU que notifican. El ser
 - ante un error del servidor de correo, o si rechaza a algún destinatario, SHALL registrar el envío como fallido y devolverlo sin propagar la excepción;
 - SHALL llamarse después de confirmar la transacción de negocio, de modo que un correo fallido no la revierte.
 
-La versión HTML SHALL derivarse del cuerpo compuesto, sin plantillas HTML editables: una tarjeta centrada con el logo de ULTRASIST, el asunto como título y el cuerpo en párrafos, con los estilos en línea. El logo SHALL viajar dentro del mensaje como parte relacionada referenciada por `cid:`. Cada valor del cuerpo MUST escaparse; las direcciones `http://` y `https://` SHALL mostrarse como enlaces y ningún otro esquema; un párrafo de dos o más líneas `Etiqueta: valor` SHALL mostrarse como bloque de datos.
+La versión HTML SHALL derivarse del cuerpo compuesto, sin plantillas HTML editables: una tarjeta centrada con el logo de FERROMEX, el asunto como título y el cuerpo en párrafos, con los estilos en línea. El logo SHALL viajar dentro del mensaje como parte relacionada referenciada por `cid:`. Cada valor del cuerpo MUST escaparse; las direcciones `http://` y `https://` SHALL mostrarse como enlaces y ningún otro esquema; un párrafo de dos o más líneas `Etiqueta: valor` SHALL mostrarse como bloque de datos.
 
 #### Scenario: Envío al buzón con el transporte de archivo
 - **WHEN** con `MAIL_BACKEND=file` se envía el correo de Autorizada de la factura "A-1024" del proveedor "Servicios Digitales del Norte SA de CV" por `$116,000.00 MXN`
-- **THEN** el buzón de salida contiene un archivo `.eml` `multipart/alternative` con `To: recepcionfacturas@ultrasist.com.mx`, el asunto "Factura A-1024 autorizada para pago" y una parte `text/plain; charset="utf-8"` con el cuerpo compuesto, y la bitácora registra el envío como `SENT`
+- **THEN** el buzón de salida contiene un archivo `.eml` `multipart/alternative` con `To: recepcionfacturas@ferromex.com.mx`, el asunto "Factura A-1024 autorizada para pago" y una parte `text/plain; charset="utf-8"` con el cuerpo compuesto, y la bitácora registra el envío como `SENT`
 
 #### Scenario: Versión HTML con el logo
 - **WHEN** se envía el correo de Autorizada de la factura "A-1024"
@@ -174,11 +174,11 @@ La bitácora MUST NOT guardar el asunto ni el cuerpo del correo. `/admin/notific
 - **THEN** la bitácora muestra los 25 más recientes, empezando por el último, y en la página 2 los 5 restantes
 
 ### Requirement: Correo de prueba
-El Administrador SHALL poder enviar un correo de prueba a una dirección que indica, desde `POST /admin/notifications/test`. La dirección SHALL validarse como las de las listas. El correo SHALL tener el asunto "Correo de prueba del Portal de Proveedores ULTRASIST" y un cuerpo fijo con el nombre del Administrador y la fecha y hora en la zona de negocio. El envío SHALL registrarse en la bitácora sin evento. La pantalla SHALL indicar si el correo se envió o si falló.
+El Administrador SHALL poder enviar un correo de prueba a una dirección que indica, desde `POST /admin/notifications/test`. La dirección SHALL validarse como las de las listas. El correo SHALL tener el asunto "Correo de prueba del Portal de Proveedores FERROMEX" y un cuerpo fijo con el nombre del Administrador y la fecha y hora en la zona de negocio. El envío SHALL registrarse en la bitácora sin evento. La pantalla SHALL indicar si el correo se envió o si falló.
 
 #### Scenario: Prueba exitosa
-- **WHEN** con `MAIL_BACKEND=file` el Administrador envía un correo de prueba a "admin@ultrasist.com.mx"
-- **THEN** la pantalla muestra "Correo de prueba enviado a admin@ultrasist.com.mx", el buzón de salida contiene el correo y la bitácora registra un envío `SENT` sin evento
+- **WHEN** con `MAIL_BACKEND=file` el Administrador envía un correo de prueba a "admin@ferromex.com.mx"
+- **THEN** la pantalla muestra "Correo de prueba enviado a admin@ferromex.com.mx", el buzón de salida contiene el correo y la bitácora registra un envío `SENT` sin evento
 
 #### Scenario: Prueba fallida
 - **WHEN** el servidor SMTP rechaza la conexión y el Administrador envía un correo de prueba
@@ -199,8 +199,8 @@ El Administrador SHALL poder enviar un correo de prueba a una dirección que ind
 Cada guardado que cambia la configuración SHALL generar un registro de auditoría `NOTIFICATION_RECIPIENTS_UPDATED` con el Administrador que guardó, la entidad `NotificationRecipients`, y en `old_value` y `new_value` sólo las listas que cambiaron, identificadas por `INVOICE_RECEPTION` o por el código del evento. Los guardados rechazados (HTTP 400 o 409), los guardados sin cambios y los correos de prueba MUST NOT generar registros de auditoría.
 
 #### Scenario: Auditoría de un cambio
-- **WHEN** el Administrador cambia sólo las copias de Cancelada de ninguna a "cxp@ultrasist.com.mx"
-- **THEN** `audit_logs` contiene un registro `NOTIFICATION_RECIPIENTS_UPDATED` con su `user_id`, `old_value = {"INVOICE_CANCELLED": []}` y `new_value = {"INVOICE_CANCELLED": ["cxp@ultrasist.com.mx"]}`
+- **WHEN** el Administrador cambia sólo las copias de Cancelada de ninguna a "cxp@ferromex.com.mx"
+- **THEN** `audit_logs` contiene un registro `NOTIFICATION_RECIPIENTS_UPDATED` con su `user_id`, `old_value = {"INVOICE_CANCELLED": []}` y `new_value = {"INVOICE_CANCELLED": ["cxp@ferromex.com.mx"]}`
 
 #### Scenario: Acciones sin auditoría
 - **WHEN** el Administrador recibe un HTTP 400, recibe un HTTP 409, guarda sin cambios y envía un correo de prueba

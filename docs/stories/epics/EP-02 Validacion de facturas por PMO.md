@@ -34,7 +34,7 @@ El PMO revisa en un solo lugar las facturas que envían los proveedores:
 - decide con tres botones —Autorizada, Rechazada u Observaciones— y registra sus observaciones;
 - el portal notifica automáticamente a Recepción de Facturas o al proveedor, según la decisión.
 
-**Valor:** la autorización del PMO dispara el aviso a Recepción de Facturas para el pago (minuta, sección "Notificaciones", aviso a `recepcionfacturas@ultrasist.com.mx`). La vía de corrección (Observaciones) evita que el proveedor rehaga la factura completa por un documento faltante.
+**Valor:** la autorización del PMO dispara el aviso a Recepción de Facturas para el pago (minuta, sección "Notificaciones", aviso a `recepcionfacturas@ferromex.com.mx`). La vía de corrección (Observaciones) evita que el proveedor rehaga la factura completa por un documento faltante.
 
 ## 2. Alcance
 
@@ -325,7 +325,7 @@ Recorrido de extremo a extremo que debe funcionar al cerrar la épica:
 | --- | --- | --- | --- | --- |
 | HU-18 | RF-17 | — | Rol PMO: "Consultar las facturas registradas por los proveedores" | Nueva (cierre de cobertura) |
 | HU-19 | RF-18 | — | Rol PMO: "Realizar la validación manual de las facturas cargadas" | Nueva (cierre de cobertura) |
-| HU-20 | RF-10 | RN-HU20-01, RN-HU20-02, RN-HU20-03 | Rol PMO: "Modificar el estatus de la factura: Aceptada, Rechazada o Con observaciones" y "Registrar observaciones asociadas a la revisión". Notificaciones: aviso automático a `recepcionfacturas@ultrasist.com.mx` | Dentro del MVP (era "HU1") |
+| HU-20 | RF-10 | RN-HU20-01, RN-HU20-02, RN-HU20-03 | Rol PMO: "Modificar el estatus de la factura: Aceptada, Rechazada o Con observaciones" y "Registrar observaciones asociadas a la revisión". Notificaciones: aviso automático a `recepcionfacturas@ferromex.com.mx` | Dentro del MVP (era "HU1") |
 
 **Otras referencias:**
 

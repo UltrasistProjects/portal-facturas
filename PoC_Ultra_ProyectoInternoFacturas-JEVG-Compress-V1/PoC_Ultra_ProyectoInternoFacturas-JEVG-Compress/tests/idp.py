@@ -26,7 +26,7 @@ from app.core.config import settings
 from app.services.identity_service import PORTAL_ROLES
 from app.services.keycloak_admin import UPDATE_PASSWORD, IdentityAccount, IdentityProviderError
 
-DEFAULT_ROLES = {"offline_access", "uma_authorization", "default-roles-ultrasist-portal"}
+DEFAULT_ROLES = {"offline_access", "uma_authorization", "default-roles-ferromex-portal"}
 
 
 @dataclass

@@ -305,7 +305,7 @@ NOTIFICATION_RECIPIENTS = "0005_notification_recipients"
 def test_instalacion_nueva_con_el_buzon_de_recepcion(empty_db):
     command.upgrade(alembic_config(empty_db), "head")
     assert query(empty_db, "SELECT code, name, addresses, updated_by FROM notification_mailboxes") == [
-        ("INVOICE_RECEPTION", "Recepción de Facturas", ["recepcionfacturas@ultrasist.com.mx"], None)
+        ("INVOICE_RECEPTION", "Recepción de Facturas", ["recepcionfacturas@ferromex.com.mx"], None)
     ]
     copies = query(empty_db, "SELECT event, addresses, updated_by FROM notification_copies ORDER BY id")
     events = [
@@ -331,7 +331,7 @@ def test_downgrade_de_destinatarios_sin_cambios(empty_db):
 
 ADMIN_ROW = (
     "INSERT INTO users (id, name, email, password_hash, role, is_active, created_at)"
-    " VALUES (1, 'Admin', 'admin@ultrasist.com.mx', 'x', 'ADMIN', true, now())"
+    " VALUES (1, 'Admin', 'admin@ferromex.com.mx', 'x', 'ADMIN', true, now())"
 )
 
 
@@ -411,11 +411,11 @@ def test_instalacion_nueva_con_reglas_y_catalogos(empty_db):
         ("NATIONAL", "XML-003", "PPD", True, 1, None),
         ("NATIONAL", "XML-004", "99", True, 1, None),
         ("NATIONAL", "XML-005", ["G03", "I04"], True, 1, None),
-        ("NATIONAL", "XML-009", "ULTRASIST", True, 1, None),
+        ("NATIONAL", "XML-009", "FERROMEX", True, 1, None),
         ("NATIONAL", "XML-010", "03930", True, 1, None),
         ("NATIONAL", "XML-011", "601", False, 1, None),
         ("INTERNATIONAL", "INT-001", None, True, 1, None),
-        ("INTERNATIONAL", "INT-002", "ULTRASIST", True, 1, None),
+        ("INTERNATIONAL", "INT-002", "FERROMEX", True, 1, None),
         ("INTERNATIONAL", "INT-003", "03930", True, 1, None),
         ("INTERNATIONAL", "INT-004", "", False, 1, None),
     ]
@@ -772,11 +772,11 @@ def test_usuarios_proveedor_sin_proveedor_se_deshabilitan(empty_db):
     execute(
         empty_db, "UPDATE users SET supplier_id = (SELECT id FROM suppliers) WHERE email = 'vinculado@proveedor.mx'"
     )
-    insert_user(empty_db, "interno@ultrasist.mx", audited=False)
+    insert_user(empty_db, "interno@ferromex.mx", audited=False)
     execute(
         empty_db,
         "UPDATE users SET role = 'INTERNAL', supplier_id = (SELECT id FROM suppliers)"
-        " WHERE email = 'interno@ultrasist.mx'",
+        " WHERE email = 'interno@ferromex.mx'",
     )
     execute(
         empty_db,
@@ -791,7 +791,7 @@ def test_usuarios_proveedor_sin_proveedor_se_deshabilitan(empty_db):
     assert users == {
         "huerfano@proveedor.mx": (False, False),
         "vinculado@proveedor.mx": (True, True),
-        "interno@ultrasist.mx": (True, False),
+        "interno@ferromex.mx": (True, False),
     }
     assert query(empty_db, "SELECT revoked_at IS NOT NULL FROM user_sessions") == [(True,)]
     audited = query(
@@ -801,7 +801,7 @@ def test_usuarios_proveedor_sin_proveedor_se_deshabilitan(empty_db):
     )
     assert audited == [
         ("huerfano@proveedor.mx", "USER_DEACTIVATED_WITHOUT_SUPPLIER"),
-        ("interno@ultrasist.mx", "USER_SUPPLIER_CLEARED"),
+        ("interno@ferromex.mx", "USER_SUPPLIER_CLEARED"),
     ]
     with pytest.raises(IntegrityError, match="ck_users_provider_supplier"):
         execute(empty_db, "UPDATE users SET is_active = true WHERE email = 'huerfano@proveedor.mx'")
@@ -826,8 +826,8 @@ def test_roles_con_los_nombres_del_negocio(empty_db):
     insert_supplier(empty_db, NATIONAL_COLUMNS, NATIONAL_VALUES)
     for email, role, supplier in (
         ("proveedor@proveedor.mx", "PROVIDER", "(SELECT id FROM suppliers)"),
-        ("pmo@ultrasist.mx", "INTERNAL", "NULL"),
-        ("admin@ultrasist.mx", "ADMIN", "NULL"),
+        ("pmo@ferromex.mx", "INTERNAL", "NULL"),
+        ("admin@ferromex.mx", "ADMIN", "NULL"),
     ):
         execute(
             empty_db,
@@ -837,11 +837,11 @@ def test_roles_con_los_nombres_del_negocio(empty_db):
     command.upgrade(config, BUSINESS_ROLE_NAMES)
     assert dict(query(empty_db, "SELECT email, role FROM users")) == {
         "proveedor@proveedor.mx": "Proveedor",
-        "pmo@ultrasist.mx": "PMO",
-        "admin@ultrasist.mx": "Administrador",
+        "pmo@ferromex.mx": "PMO",
+        "admin@ferromex.mx": "Administrador",
     }
     with pytest.raises(IntegrityError, match="role"):
-        execute(empty_db, "UPDATE users SET role = 'ADMIN' WHERE email = 'admin@ultrasist.mx'")
+        execute(empty_db, "UPDATE users SET role = 'ADMIN' WHERE email = 'admin@ferromex.mx'")
     with pytest.raises(IntegrityError, match="ck_users_provider_supplier"):
         execute(empty_db, "UPDATE users SET supplier_id = NULL WHERE email = 'proveedor@proveedor.mx'")
     command.downgrade(config, PROVIDER_USER_SUPPLIER)
@@ -859,7 +859,7 @@ def test_identidad_en_keycloak_en_el_esquema(empty_db):
     execute(
         empty_db,
         "INSERT INTO users (name, email, password_hash, role, is_active, created_at)"
-        " VALUES ('Previo', 'previo@ultrasist.mx', 'hash', 'PMO', true, now())",
+        " VALUES ('Previo', 'previo@ferromex.mx', 'hash', 'PMO', true, now())",
     )
     command.upgrade(config, KEYCLOAK_IDENTITY)
     assert "login_attempts" not in tables(empty_db)
@@ -869,10 +869,10 @@ def test_identidad_en_keycloak_en_el_esquema(empty_db):
     execute(
         empty_db,
         "INSERT INTO users (name, email, role, is_active, created_at, keycloak_sub)"
-        " VALUES ('Nuevo', 'nuevo@ultrasist.mx', 'PMO', true, now(), 'sub-2')",
+        " VALUES ('Nuevo', 'nuevo@ferromex.mx', 'PMO', true, now(), 'sub-2')",
     )
     with pytest.raises(IntegrityError, match="ix_users_keycloak_sub"):
-        execute(empty_db, "UPDATE users SET keycloak_sub = 'sub-1' WHERE email = 'nuevo@ultrasist.mx'")
+        execute(empty_db, "UPDATE users SET keycloak_sub = 'sub-1' WHERE email = 'nuevo@ferromex.mx'")
     columns = {
         name
         for (name,) in query(
@@ -890,7 +890,7 @@ def test_downgrade_de_la_identidad_con_usuarios_sin_hash(empty_db):
     execute(
         empty_db,
         "INSERT INTO users (name, email, role, is_active, created_at, keycloak_sub)"
-        " VALUES ('Enlazado', 'enlazado@ultrasist.mx', 'PMO', true, now(), 'sub-1')",
+        " VALUES ('Enlazado', 'enlazado@ferromex.mx', 'PMO', true, now(), 'sub-1')",
     )
     with pytest.raises(NotImplementedError, match="Restaure un respaldo"):
         command.downgrade(config, BUSINESS_ROLE_NAMES)
@@ -905,7 +905,7 @@ def test_downgrade_de_la_identidad_sin_usuarios_enlazados(empty_db):
     execute(
         empty_db,
         "INSERT INTO users (name, email, password_hash, role, is_active, created_at)"
-        " VALUES ('Previo', 'previo@ultrasist.mx', 'hash', 'PMO', true, now())",
+        " VALUES ('Previo', 'previo@ferromex.mx', 'hash', 'PMO', true, now())",
     )
     command.downgrade(config, BUSINESS_ROLE_NAMES)
     assert "login_attempts" in tables(empty_db)
@@ -1232,7 +1232,7 @@ def test_reglas_desde_una_configuracion_modificada(empty_db):
     command.upgrade(config, SOFT_DELETE)
     execute(
         empty_db,
-        "UPDATE validation_settings SET receiver_name = 'ULTRASIST SA DE CV', check_receiver_postal_code = false,"
+        "UPDATE validation_settings SET receiver_name = 'FERROMEX SA DE CV', check_receiver_postal_code = false,"
         " receiver_address = 'Av. Insurgentes Sur 1'",
     )
     command.upgrade(config, RULES_BY_ORIGIN)
@@ -1242,7 +1242,7 @@ def test_reglas_desde_una_configuracion_modificada(empty_db):
             empty_db, "SELECT origin, rule_code, parameter, is_active FROM validation_rules"
         )
     }
-    assert rules["NATIONAL", "XML-009"] == rules["INTERNATIONAL", "INT-002"] == ("ULTRASIST SA DE CV", True)
+    assert rules["NATIONAL", "XML-009"] == rules["INTERNATIONAL", "INT-002"] == ("FERROMEX SA DE CV", True)
     assert rules["NATIONAL", "XML-010"] == rules["INTERNATIONAL", "INT-003"] == ("03930", False)
     assert rules["INTERNATIONAL", "INT-004"] == ("Av. Insurgentes Sur 1", True)
     assert "validation_settings" not in tables(empty_db)
@@ -1250,7 +1250,7 @@ def test_reglas_desde_una_configuracion_modificada(empty_db):
     command.downgrade(config, SOFT_DELETE)
     assert query(
         empty_db, "SELECT receiver_name, receiver_address, check_receiver_postal_code FROM validation_settings"
-    ) == [("ULTRASIST SA DE CV", "Av. Insurgentes Sur 1", False)]
+    ) == [("FERROMEX SA DE CV", "Av. Insurgentes Sur 1", False)]
     command.upgrade(config, "head")
     command.check(config)
 

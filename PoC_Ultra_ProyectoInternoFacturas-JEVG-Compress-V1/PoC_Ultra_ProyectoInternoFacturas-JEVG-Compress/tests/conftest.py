@@ -46,7 +46,7 @@ os.environ.update(
         "MAIL_OUTBOX_DIR": str(TEST_ROOT / "outbox"),
         # Keycloak simulado (tests/idp.py): el host no existe y ninguna prueba sale a la red.
         "KEYCLOAK_SERVER_URL": "http://keycloak.test",
-        "KEYCLOAK_REALM": "ultrasist-portal",
+        "KEYCLOAK_REALM": "ferromex-portal",
         "KEYCLOAK_CLIENT_ID": "portal-facturas-web",
         "KEYCLOAK_CLIENT_SECRET": secrets.token_urlsafe(48),
         "KEYCLOAK_ADMIN_CLIENT_ID": "portal-facturas-admin",
@@ -265,7 +265,7 @@ def restore_notification_templates():
         db.commit()
 
 
-RECEPTION_SEED = ["recepcionfacturas@ultrasist.com.mx"]
+RECEPTION_SEED = ["recepcionfacturas@ferromex.com.mx"]
 
 
 @pytest.fixture()

@@ -43,7 +43,7 @@ La contraseña temporal SHALL mostrarse al Administrador una única vez, en la r
 Si el correo pertenece en Keycloak a un usuario con otro rol reconocido, la respuesta SHALL ser HTTP 409. Si Keycloak no responde, SHALL ser HTTP 503 y no se crea nada.
 
 #### Scenario: Alta de un usuario PMO
-- **WHEN** el Administrador da de alta `analista@ultrasist.com.mx` con rol PMO
+- **WHEN** el Administrador da de alta `analista@ferromex.com.mx` con rol PMO
 - **THEN** existe el usuario local con `keycloak_sub` y sin `password_hash`, y en Keycloak un usuario con el rol `PMO` y la acción `UPDATE_PASSWORD`; la contraseña temporal se muestra una vez con `Cache-Control: no-store`
 
 #### Scenario: Correo con otro rol en Keycloak

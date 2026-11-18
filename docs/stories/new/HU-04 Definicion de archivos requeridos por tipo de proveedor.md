@@ -170,7 +170,7 @@ La clave es el valor que ya guarda `documents.document_type`, así que los docum
 | `FOREIGN_INVOICE` (nuevo) | Invoice (PDF) | Factura del proveedor extranjero | PDF | No aplica 🔒 | Obligatorio 🔒 | DOC-008 (`CRITICAL`) |
 | `PURCHASE_ORDER` | Orden de compra | Orden de compra que ampara el servicio facturado | PDF, PNG, JPEG, TXT | Obligatorio | Obligatorio | DOC-003 (`ERROR`) |
 | `APPROVAL` | Vo.Bo. del líder de proyecto | Visto bueno del líder de proyecto sobre los entregables del periodo facturado | PDF, PNG, JPEG, TXT | Obligatorio | Obligatorio | DOC-004 (`ERROR`) |
-| `CONTRACT` | Contrato | Contrato firmado con ULTRASIST | PDF, PNG, JPEG, TXT | Opcional | Opcional | DOC-009 (`ERROR`) |
+| `CONTRACT` | Contrato | Contrato firmado con FERROMEX | PDF, PNG, JPEG, TXT | Opcional | Opcional | DOC-009 (`ERROR`) |
 | `CONTRACT_ANNEX` | Anexo del contrato | Anexo firmado del contrato | PDF, PNG, JPEG, TXT | Opcional | Opcional | DOC-009 (`ERROR`) |
 | `PAYMENT_COMPLEMENT_XML` | Complemento de pago (XML) | XML de complementos de pago previos, cuando aplique | XML | Opcional | No aplica | DOC-009 (`ERROR`) |
 | `PAYMENT_COMPLEMENT_PDF` | Complemento de pago (PDF) | PDF de complementos de pago previos, cuando aplique | PDF | Opcional | No aplica | DOC-009 (`ERROR`) |

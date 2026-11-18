@@ -320,7 +320,7 @@ def test_vista_previa_como_el_correo(client):
     assert '<iframe class="email-preview" title="Vista previa del correo" sandbox="allow-same-origin"' in response.text
     email = preview_email(response.text)
     body = html.unescape(preview_block(response.text))
-    assert email == mail_layout.render_preview("Acceso al Portal de Proveedores ULTRASIST", body)
+    assert email == mail_layout.render_preview("Acceso al Portal de Proveedores FERROMEX", body)
     assert f'src="{mail_layout.logo_data_uri()}"' in email
     assert ">Contraseña temporal</div>" in email and ">Ejemplo#Temporal2026</div>" in email
     # La pagina admite exactamente los atributos style del correo; la CSP del resto no cambia.
@@ -451,7 +451,7 @@ def test_textos_predeterminados_conforme_a_las_reglas_de_negocio():
         CANCELLED: "Cancelación de la factura {{numero_factura}} de {{proveedor}}",
         PAID: "Factura {{numero_factura}} pagada",
         COMPLEMENT: "Complemento de pago de la factura {{numero_factura}}",
-        CREDENTIALS: "Acceso al Portal de Proveedores ULTRASIST",
+        CREDENTIALS: "Acceso al Portal de Proveedores FERROMEX",
     }
     assert "Su factura número {{numero_factura}} ha sido pagada.\n\n{{aviso_complemento}}\n\n" in default_body(PAID)
     assert (
@@ -613,7 +613,7 @@ CREDENTIAL_VALUES = {
     "proveedor": SUPPLIER_NAME,
     "usuario": "contacto@serviciosdelnorte.mx",
     "contrasena_temporal": "Clave#Temporal#Real1",
-    "url_portal": "https://portal.ultrasist.local/login",
+    "url_portal": "https://portal.ferromex.local/login",
 }
 
 
@@ -649,16 +649,16 @@ def test_vista_previa_de_las_credenciales(client):
     block = preview_block(response.text)
     assert "Usuario: contacto@serviciosdelnorte.mx" in block
     assert "Contraseña temporal: Ejemplo#Temporal2026" in block
-    assert "Portal: https://proveedores.ultrasist.com.mx/login" in block
+    assert "Portal: https://proveedores.ferromex.com.mx/login" in block
 
 
 def test_composicion_de_las_credenciales():
     with SessionLocal() as db:
         email = nt.compose(db, CREDENTIALS, **CREDENTIAL_VALUES)
-        assert email.subject == "Acceso al Portal de Proveedores ULTRASIST"
+        assert email.subject == "Acceso al Portal de Proveedores FERROMEX"
         assert email.body.startswith(f"{SUPPLIER_NAME}:\n\n")
         for line in (
-            "Portal: https://portal.ultrasist.local/login",
+            "Portal: https://portal.ferromex.local/login",
             "Usuario: contacto@serviciosdelnorte.mx",
             "Contraseña temporal: Clave#Temporal#Real1",
         ):

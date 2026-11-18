@@ -44,9 +44,9 @@ NATIONAL = {
 }
 INTERNATIONAL = {
     "INT-001": ("Identificador fiscal del proveedor", None, None),
-    "INT-002": ("Razón social de ULTRASIST", "receiver_name", "check_receiver_name"),
-    "INT-003": ("Código postal de ULTRASIST", "receiver_postal_code", "check_receiver_postal_code"),
-    "INT-004": ("Dirección de ULTRASIST", "receiver_address", None),
+    "INT-002": ("Razón social de FERROMEX", "receiver_name", "check_receiver_name"),
+    "INT-003": ("Código postal de FERROMEX", "receiver_postal_code", "check_receiver_postal_code"),
+    "INT-004": ("Dirección de FERROMEX", "receiver_address", None),
 }
 
 

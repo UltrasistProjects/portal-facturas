@@ -17,8 +17,8 @@ Las monedas aceptadas SHALL ser las claves activas del catálogo de monedas (HU-
 - **THEN** la regla XML-004 de la siguiente prevalidación nacional espera `03` y la vista muestra `03`, sin editar ningún archivo ni reiniciar la aplicación
 
 #### Scenario: Factura internacional con reglas internacionales
-- **WHEN** la Razón Social de XML-009 (nacional) es "ULTRASIST" y la de INT-002 (internacional) es "ULTRASIST SA DE CV", y se valida una factura internacional cuyo Invoice dice "ULTRASIST SA DE CV"
-- **THEN** INT-002 resulta `PASS` con el valor esperado "ULTRASIST SA DE CV", y ninguna regla de la factura usa los valores de las reglas nacionales
+- **WHEN** la Razón Social de XML-009 (nacional) es "FERROMEX" y la de INT-002 (internacional) es "FERROMEX SA DE CV", y se valida una factura internacional cuyo Invoice dice "FERROMEX SA DE CV"
+- **THEN** INT-002 resulta `PASS` con el valor esperado "FERROMEX SA DE CV", y ninguna regla de la factura usa los valores de las reglas nacionales
 
 #### Scenario: Factura nacional con reglas nacionales
 - **WHEN** INT-003 (internacional) espera `06600`, XML-010 (nacional) espera `03930` y se valida una factura nacional cuyo XML trae `DomicilioFiscalReceptor="03930"`
@@ -115,7 +115,7 @@ Cuando su regla está eliminada, XML-002, XML-003, XML-004, XML-005, XML-009, XM
 Si el XML del CFDI no está activo y Obligatorio para Nacional en Archivos mínimos y la factura no tiene un XML vigente, XML-001 a XML-011 SHALL resultar `NOT_APPLICABLE` con "El XML del CFDI no se exige en Archivos mínimos", sin intentar leer un XML. Si la factura sí tiene un XML vigente, las reglas se evalúan.
 
 #### Scenario: Razón social con otro formato
-- **WHEN** la Razón Social de XML-009 es "ULTRASIST" y el XML trae `Nombre="Ultrasist "`
+- **WHEN** la Razón Social de XML-009 es "FERROMEX" y el XML trae `Nombre="Ferromex "`
 - **THEN** XML-009 es `PASS`
 
 #### Scenario: Código postal distinto

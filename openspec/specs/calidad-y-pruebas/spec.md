@@ -91,12 +91,12 @@ El helper de inicio de sesión de `tests/conftest.py` SHALL recorrer el flujo re
 - **THEN** la suite pasa y ninguna prueba intenta conectarse a `KEYCLOAK_SERVER_URL`
 
 ### Requirement: Verificación del tema de login
-El tema `ultrasist` SHALL verificarse de dos formas.
+El tema `ferromex` SHALL verificarse de dos formas.
 
 **Con pytest, sin Keycloak ni red** (`tests/test_tema_keycloak.py`), que comprueba:
 - que el tema hereda de `base`;
 - que cada plantilla sobrescrita conserva el `action` de su formulario (`url.loginAction`), sus nombres de campo, sus campos ocultos y el manejo de `message` y `messagesPerField`;
-- que las plantillas no fijan texto visible, y que toda clave propia `ultrasist…` que usan existe en `messages_es.properties`;
+- que las plantillas no fijan texto visible, y que toda clave propia `ferromex…` que usan existe en `messages_es.properties`;
 - que las plantillas y el CSS propio no referencian URLs externas ni `data-demo`;
 - que las copias de `resources/vendor/` son idénticas a las de `app/static/vendor/`;
 - que la versión de Keycloak anotada en el tema es la misma que la imagen de `compose.yaml`;

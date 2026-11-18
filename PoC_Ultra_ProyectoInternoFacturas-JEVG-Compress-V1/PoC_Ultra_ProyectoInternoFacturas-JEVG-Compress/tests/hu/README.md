@@ -13,7 +13,7 @@ Es un paquete Node aislado: el portal sigue sin requerir Node para operar.
    los `.eml`:
 
    ```bash
-   MAIL_BACKEND=file MAIL_FROM="Portal de Proveedores ULTRASIST <no-reply@portal.local>" \
+   MAIL_BACKEND=file MAIL_FROM="Portal de Proveedores FERROMEX <no-reply@portal.local>" \
    MAIL_OUTBOX_DIR=./evidencias/_correos .venv/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
    ```
 

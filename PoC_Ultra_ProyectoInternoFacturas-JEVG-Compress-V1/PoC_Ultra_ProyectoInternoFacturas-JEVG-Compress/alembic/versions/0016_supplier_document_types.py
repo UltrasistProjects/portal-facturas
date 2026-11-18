@@ -76,14 +76,14 @@ SYSTEM_TYPES = [
     (
         "ECONOMIC_PROPOSAL",
         "Propuesta económica",
-        "Propuesta económica autorizada por el líder de ULTRASIST",
+        "Propuesta económica autorizada por el líder de FERROMEX",
         OPT,
         OPT,
         NA,
     ),
     ("DUE_DILIGENCE", "Debida diligencia", "Formato de debida diligencia requisitado", OPT, NA, NA),
     ("LOCATION", "Ubicación", "Liga de Google Maps o coordenadas geográficas", OPT, OPT, NA),
-    ("SUPPLIER_CONTRACT", "Contrato", "Contrato firmado con ULTRASIST", OPT, OPT, NA),
+    ("SUPPLIER_CONTRACT", "Contrato", "Contrato firmado con FERROMEX", OPT, OPT, NA),
 ]
 
 

@@ -181,7 +181,7 @@ La factura número {{numero_factura}} del proveedor {{proveedor}} por el monto {
 Folio interno: {{folio_interno}}
 Fecha de autorización: {{fecha_estatus}}
 
-Este es un mensaje automático del Portal de Proveedores ULTRASIST. No responda a este correo.
+Este es un mensaje automático del Portal de Proveedores FERROMEX. No responda a este correo.
 ```
 
 **Rechazada** (`INVOICE_REJECTED`). Asunto: `Factura {{numero_factura}} rechazada`
@@ -196,7 +196,7 @@ La factura número {{numero_factura}} ha sido “Rechazada” por la siguiente c
 Folio interno: {{folio_interno}}
 Fecha: {{fecha_estatus}}
 
-Puede consultar el detalle en el Portal de Proveedores ULTRASIST. Este es un mensaje automático; no responda a este correo.
+Puede consultar el detalle en el Portal de Proveedores FERROMEX. Este es un mensaje automático; no responda a este correo.
 ```
 
 **Observaciones** (`INVOICE_OBSERVATIONS`). Asunto: `Factura {{numero_factura}} con observaciones`
@@ -211,7 +211,7 @@ La factura número {{numero_factura}} tiene “Observaciones” por la siguiente
 Folio interno: {{folio_interno}}
 Fecha: {{fecha_estatus}}
 
-Puede consultar el detalle en el Portal de Proveedores ULTRASIST. Este es un mensaje automático; no responda a este correo.
+Puede consultar el detalle en el Portal de Proveedores FERROMEX. Este es un mensaje automático; no responda a este correo.
 ```
 
 **Cancelada** (`INVOICE_CANCELLED`). Asunto: `Cancelación de la factura {{numero_factura}} de {{proveedor}}`
@@ -225,7 +225,7 @@ Folio interno: {{folio_interno}}
 Monto: {{monto}}
 Fecha de la solicitud: {{fecha_estatus}}
 
-Este es un mensaje automático del Portal de Proveedores ULTRASIST. No responda a este correo.
+Este es un mensaje automático del Portal de Proveedores FERROMEX. No responda a este correo.
 ```
 
 ### 6.5 Datos de ejemplo de la vista previa

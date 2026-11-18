@@ -198,10 +198,10 @@ La clave es el valor que ya guarda `documents.document_type`, así que los docum
 | Estado de Cuenta Bancario | `BANK_STATEMENT` | **Estado de cuenta bancario** | Carátula del último estado de cuenta con la CLABE | Obligatorio | Obligatorio | No aplica |
 | — | `OFFICIAL_ID` | Identificación oficial | Identificación oficial (INE o pasaporte) de la persona física | No aplica | Obligatorio | No aplica |
 | — | `SAT_OPINION` | Opinión de cumplimiento | Opinión de cumplimiento de obligaciones fiscales del SAT | Opcional (P-01) | Opcional (P-01) | No aplica |
-| — | `ECONOMIC_PROPOSAL` | Propuesta económica | Propuesta económica autorizada por el líder de ULTRASIST | Opcional ¹ | Opcional ¹ | No aplica |
+| — | `ECONOMIC_PROPOSAL` | Propuesta económica | Propuesta económica autorizada por el líder de FERROMEX | Opcional ¹ | Opcional ¹ | No aplica |
 | — | `DUE_DILIGENCE` | Debida diligencia | Formato de debida diligencia requisitado | Opcional | No aplica | No aplica |
 | — | `LOCATION` | Ubicación | Liga de Google Maps o coordenadas geográficas | Opcional | Opcional | No aplica |
-| — | `SUPPLIER_CONTRACT` | Contrato | Contrato firmado con ULTRASIST | Opcional | Opcional | No aplica |
+| — | `SUPPLIER_CONTRACT` | Contrato | Contrato firmado con FERROMEX | Opcional | Opcional | No aplica |
 
 ¹ Exigible cuando el alta es por cotización o licitación (RD-04).
 
