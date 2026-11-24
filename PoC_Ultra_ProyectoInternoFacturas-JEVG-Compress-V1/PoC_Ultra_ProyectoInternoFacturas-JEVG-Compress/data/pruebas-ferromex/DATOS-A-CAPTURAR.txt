@@ -1,0 +1,116 @@
+DATOS A CAPTURAR - PRUEBAS FERROMEX (RECORRIDO COMPLETO)
+http://127.0.0.1:8000  (portal de la rama ferromex)
+(en el orden de los formularios del portal)
+
+==================================================================
+1. ALTA DEL PROVEEDOR  (Administrador > Proveedores > Nuevo)
+==================================================================
+Origen ......................... Nacional
+Razon social / nombre .......... Héctor Garza Villarreal
+RFC (nacional) ................. GAVH810417Q42
+Tipo de persona ................ Persona física
+Email .......................... <TU BUZON DE PRUEBA>   (recibe credenciales y avisos;
+                                 en local quedan como .eml en outbox/)
+
+--- Datos del proveedor ---
+Teléfono ....................... 8183456712
+Clasificación .................. Externo
+Actividad principal ............ 54  (servicios profesionales, científicos y técnicos)
+Fecha de constitución .......... (no aplica a persona física; dejar vacío)
+Página web ..................... https://www.hgarzavillarreal.example
+Nombre del contacto ............ Héctor Garza Villarreal
+Teléfono del contacto .......... 8183456712
+Nombre del representante legal . (no aplica a persona física; dejar vacío)
+Teléfono del representante ..... (no aplica a persona física; dejar vacío)
+Información bancaria ........... Banco Demo, S.A. - Cuenta 0457812396 - CLABE 000580004578123964
+Convenio de confidencialidad ... Marcado
+Alta por cotización/licitación . Marcado
+
+--- Expediente (carpeta 1-proveedor) ---                       Fecha del documento
+Cédula fiscal .................. Constancia-Situacion-Fiscal-GAVH810417Q42.pdf   2026-11-17
+Comprobante de domicilio ....... Comprobante-Domicilio-GAVH810417Q42.pdf         2026-11-04
+Estado de cuenta bancario ...... Estado-Cuenta-Bancario-GAVH810417Q42.pdf        2026-10-31
+Identificación oficial ......... Identificacion-Oficial-GAVH810417Q42.pdf        2025-03-12
+Opinión de cumplimiento (opc.) . Opinion-Cumplimiento-GAVH810417Q42.pdf          2026-11-17
+Propuesta económica (opc.) ..... Propuesta-Economica-GAVH810417Q42.pdf           2026-09-15
+
+(Las fechas son las impresas en cada PDF. Las de cédula, domicilio, estado de
+ cuenta y opinión deben tener menos de 3 meses para que no salga la advertencia
+ de vigencia; la fecha es opcional en la identificación y la propuesta.)
+
+Autorizar proveedor  >  Autorizar y enviar credenciales.
+
+==================================================================
+2. CONTRATO  (Administrador > Contratos > Nuevo)
+==================================================================
+Proveedor ...................... Héctor Garza Villarreal
+Proyecto ....................... Monitoreo de Flota Ferroviaria FERROMEX
+Lider .......................... Mariana Cortés Elizondo
+Tecnologia ..................... React + Python Fast API
+Monto .......................... 45000.00
+Moneda ......................... MXN
+Inicio ......................... 2026-10-01
+Fin ............................ 2027-03-31
+Contrato firmado ............... 2-contrato/Contrato-4-MonitoreoFlota-GAVH810417Q42.pdf
+
+Activar contrato.
+
+==================================================================
+3. FACTURA A-1001: OBSERVACIONES Y LUEGO AUTORIZADA  (Proveedor)
+   carpeta 3-factura-observaciones-autorizada
+==================================================================
+Contrato activo ................ Monitoreo de Flota Ferroviaria FERROMEX · $45,000.00 MXN
+Numero de factura .............. A-1001
+Periodo de servicio ............ 10/2026
+Proyecto ....................... Monitoreo de Flota Ferroviaria FERROMEX
+Lider de proyecto .............. Mariana Cortés Elizondo
+Orden de compra ................ OC-2026-0451
+
+CFDI: subtotal $45,000.00 + IVA $7,200.00 = total $52,200.00 MXN
+      UUID 8E21EC7A-43E0-4C56-8644-D1E9325DE2EE
+
+Documentos (primer envío):
+  XML del CFDI ................. CFDI-A1001-GAVH810417Q42.xml   (único obligatorio)
+  PDF del CFDI ................. CFDI-A1001-GAVH810417Q42.pdf
+  Orden de compra .............. OrdenCompra-OC-2026-0451.pdf
+  Vo.Bo. del líder ............. VoBo-A1001-v1-con-error-periodo-09-2026.pdf
+
+PMO > Observaciones:
+  "El Vo.Bo. corresponde al periodo 09/2026; adjunte el Vo.Bo. del periodo 10/2026."
+
+Proveedor corrige (reemplaza el Vo.Bo.) y reenvía:
+  Vo.Bo. del líder ............. VoBo-A1001-v2-corregido.pdf
+
+PMO > Autorizar.
+
+Happy path directo: cargar desde el inicio VoBo-A1001-v2-corregido.pdf y autorizar.
+
+Pago (Administrador > Marcar como pagada; luego el proveedor carga):
+  Complemento de pago (XML) .... REP-P1001-GAVH810417Q42.xml
+  Complemento de pago (PDF) .... REP-P1001-GAVH810417Q42.pdf
+
+==================================================================
+4. FACTURA A-1002: RECHAZO DIRECTO  (Proveedor)
+   carpeta 4-factura-rechazada
+==================================================================
+Contrato activo ................ Monitoreo de Flota Ferroviaria FERROMEX · $45,000.00 MXN
+Numero de factura .............. A-1002
+Periodo de servicio ............ 11/2026
+Proyecto ....................... Monitoreo de Flota Ferroviaria FERROMEX
+Lider de proyecto .............. Mariana Cortés Elizondo
+Orden de compra ................ OC-2026-0452
+
+CFDI: subtotal $52,000.00 + IVA $8,320.00 = total $60,320.00 MXN
+      UUID 4CCE1C44-89B6-4EB9-9B0F-657760BAEE08
+
+Documentos:
+  XML del CFDI ................. CFDI-A1002-GAVH810417Q42.xml
+  PDF del CFDI ................. CFDI-A1002-GAVH810417Q42.pdf
+  Orden de compra .............. OrdenCompra-OC-2026-0452.pdf
+  Vo.Bo. del líder ............. VoBo-A1002.pdf
+
+El portal marcará FIN-001 y FIN-006 (subtotal $52,000 > autorizado $45,000).
+
+PMO > Rechazar:
+  "El importe facturado ($52,000.00 + IVA) excede el monto autorizado del contrato
+   y de la orden de compra OC-2026-0452 ($45,000.00 + IVA)."
