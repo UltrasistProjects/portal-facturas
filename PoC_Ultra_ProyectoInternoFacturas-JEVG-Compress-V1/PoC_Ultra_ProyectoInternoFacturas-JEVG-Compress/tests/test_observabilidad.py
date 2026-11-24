@@ -258,7 +258,7 @@ def test_envio_de_correo_registrado(restore_notification_recipients):
     assert sent["event_code"] == "INVOICE_AUTHORIZED" and sent["delivery_id"] == delivery.id
     assert sent["transport"] == "file" and sent["recipients"] == 1 and "duration_ms" in sent
     content = json.dumps(events, ensure_ascii=False)
-    for value in ("recepcionfacturas@ferromex.com.mx", "LOG-MAIL-1", "autorizada para pago", "Proveedor del log"):
+    for value in ("recepcionfacturas@example.com", "LOG-MAIL-1", "autorizada para pago", "Proveedor del log"):
         assert value not in content, value
 
 

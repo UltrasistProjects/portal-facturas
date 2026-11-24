@@ -305,7 +305,7 @@ NOTIFICATION_RECIPIENTS = "0005_notification_recipients"
 def test_instalacion_nueva_con_el_buzon_de_recepcion(empty_db):
     command.upgrade(alembic_config(empty_db), "head")
     assert query(empty_db, "SELECT code, name, addresses, updated_by FROM notification_mailboxes") == [
-        ("INVOICE_RECEPTION", "Recepción de Facturas", ["recepcionfacturas@ferromex.com.mx"], None)
+        ("INVOICE_RECEPTION", "Recepción de Facturas", ["recepcionfacturas@example.com"], None)
     ]
     copies = query(empty_db, "SELECT event, addresses, updated_by FROM notification_copies ORDER BY id")
     events = [

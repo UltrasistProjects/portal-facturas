@@ -3,7 +3,7 @@ import { buscarCorreo, guardarDato, leerEstado, type Correo } from '../lib/estad
 import { ejecutarHU } from '../lib/hu';
 import { clicNavegando, enviarAlta, llenarAltaFactura, texto } from '../lib/portal';
 
-const BUZON = 'recepcionfacturas@ferromex.com.mx';
+const BUZON = 'recepcionfacturas@example.com';
 
 test('HU-08 · Configuración de correos de notificación', async ({ browser }, testInfo) => {
   await ejecutarHU('HU-08', browser, testInfo, async (hu) => {
@@ -19,7 +19,7 @@ test('HU-08 · Configuración de correos de notificación', async ({ browser }, 
       await hu.paso(
         admin,
         'Abrir Administración › Notificaciones',
-        'Se muestra el buzón "Recepción de Facturas" (recepcionfacturas@ferromex.com.mx), las copias por evento (Autorizada, Rechazada, Observaciones, Cancelada) y el transporte vigente.',
+        'Se muestra el buzón "Recepción de Facturas" (recepcionfacturas@example.com), las copias por evento (Autorizada, Rechazada, Observaciones, Cancelada) y el transporte vigente.',
         async () => {
           await admin.goto('/admin/notifications');
           await expect(admin.locator('h1')).toHaveText('Notificaciones');

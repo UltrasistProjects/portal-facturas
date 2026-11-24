@@ -542,7 +542,7 @@ El Administrador define en **Administración › Plantillas de correo** (`/admin
 
 El Administrador define en **Administración › Notificaciones** (`/admin/notifications`) a qué direcciones llegan los avisos (HU-08). El destinatario principal de cada evento lo fija su regla de negocio; la pantalla configura:
 
-- **Buzón "Recepción de Facturas":** de 1 a 10 correos. La migración `0005_notification_recipients` lo siembra con `recepcionfacturas@ferromex.com.mx`. Recibe los avisos de facturas Autorizadas y Canceladas, y el de Complemento de pago adjuntado.
+- **Buzón "Recepción de Facturas":** de 1 a 10 correos. La migración `0005_notification_recipients` lo siembra con `recepcionfacturas@example.com`. Recibe los avisos de facturas Autorizadas y Canceladas, y el de Complemento de pago adjuntado.
 - **Copias por evento:** de 0 a 10 correos en `Cc` para Autorizada, Rechazada, Observaciones, Cancelada, Pagada y Complemento de pago adjuntado. Se omiten las que ya están en "Para".
 - **Correo de prueba** a una dirección que indique el Administrador, con un texto fijo.
 - **Transporte** vigente en solo lectura, sin usuario ni contraseña, y la **bitácora de envíos** completa, paginada de 25 en 25, con su resultado.

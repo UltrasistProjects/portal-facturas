@@ -388,7 +388,7 @@ def test_envio_al_buzon_con_el_transporte_de_archivo():
     delivery = notify(AUTHORIZED, entity="Invoice", entity_id=42)
     assert delivery.status == DeliveryStatus.SENT and delivery.transport == "file"
     [message] = outbox_messages()
-    assert message["To"] == "recepcionfacturas@ferromex.com.mx"
+    assert message["To"] == "recepcionfacturas@example.com"
     assert message["Cc"] is None
     assert message["From"] == settings.mail_from
     assert message["Subject"] == "Factura A-1024 autorizada para pago"

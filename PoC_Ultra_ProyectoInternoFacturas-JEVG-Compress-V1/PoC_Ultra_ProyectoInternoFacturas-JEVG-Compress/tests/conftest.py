@@ -265,7 +265,7 @@ def restore_notification_templates():
         db.commit()
 
 
-RECEPTION_SEED = ["recepcionfacturas@ferromex.com.mx"]
+RECEPTION_SEED = ["recepcionfacturas@example.com"]
 
 
 @pytest.fixture()
