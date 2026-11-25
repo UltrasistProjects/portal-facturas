@@ -1,8 +1,9 @@
 """Reporte resumen de facturas en PDF (Ferromex): totales por estatus y por origen y un grafico de pie por estatus.
 
-Usa los mismos filtros y el mismo alcance que el listado (invoice_repository.filter_invoices): el proveedor solo ve sus
-facturas. Los agregados se calculan en SQL; el PDF se dibuja con PyMuPDF, ya dependencia del portal, sin servicios
-externos ni archivos temporales.
+Siempre cubre todos los estatus (el pie compara unos con otros); de los filtros del listado conserva la busqueda y el
+origen, con el mismo alcance (invoice_repository.filter_invoices): el proveedor solo ve sus facturas. Los agregados
+se calculan en SQL; el PDF se dibuja con PyMuPDF, ya dependencia del portal, sin servicios externos ni archivos
+temporales.
 """
 
 from __future__ import annotations
@@ -85,12 +86,12 @@ def _share(count: int, total: int) -> float:
     return count / total if total else 0.0
 
 
-def summary(db: Session, user, q: str = "", status: str = "", origin: str = "") -> ReportData:
-    """Facturas por estatus y moneda, y por origen, con los filtros del listado."""
+def summary(db: Session, user, q: str = "", origin: str = "") -> ReportData:
+    """Facturas de todos los estatus por estatus y moneda, y por origen, con la busqueda y el origen del listado."""
     base = select(Invoice.status, Invoice.currency, func.count(Invoice.id), func.sum(Invoice.total)).join(
         Invoice.supplier
     )
-    grouped = filter_invoices(base, user, q, status, origin).group_by(Invoice.status, Invoice.currency)
+    grouped = filter_invoices(base, user, q, "", origin).group_by(Invoice.status, Invoice.currency)
     counts: dict[InvoiceStatus, int] = {}
     amounts: dict[InvoiceStatus, dict[str, Decimal]] = {}
     totals: dict[str, Decimal] = {}
@@ -107,7 +108,7 @@ def summary(db: Session, user, q: str = "", status: str = "", origin: str = "") 
         if counts.get(state)
     ]
     by_origin = filter_invoices(
-        select(Supplier.origin, func.count(Invoice.id)).join(Invoice.supplier), user, q, status, origin
+        select(Supplier.origin, func.count(Invoice.id)).join(Invoice.supplier), user, q, "", origin
     ).group_by(Supplier.origin)
     origin_counts = {SupplierOrigin(value): count for value, count in db.execute(by_origin)}
     origins = [
@@ -116,7 +117,7 @@ def summary(db: Session, user, q: str = "", status: str = "", origin: str = "") 
         if origin_counts.get(value)
     ]
     filters = [
-        ("Estatus", STATUS_LABELS.get(status, "Todos") if status else "Todos"),
+        ("Estatus", "Todos"),
         ("Origen", SUPPLIER_ORIGIN_LABELS.get(origin, "Todos") if origin else "Todos"),
         ("Búsqueda", q.strip() or "-"),
     ]

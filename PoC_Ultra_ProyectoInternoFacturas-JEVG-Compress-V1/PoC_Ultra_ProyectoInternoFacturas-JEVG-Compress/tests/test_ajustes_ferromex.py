@@ -9,11 +9,11 @@ from uuid import uuid4
 import fitz
 import pytest
 from alembic import command
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 
-from app.core.constants import InvoiceStatus
+from app.core.constants import InvoiceStatus, SupplierOrigin
 from app.core.database import SessionLocal
-from app.models import AuditLog, Invoice, PurchaseOrder, User
+from app.models import AuditLog, Invoice, PurchaseOrder, Supplier, User
 from scripts import pgtools
 from tests.cfdi import EXAMPLE_RFC, MORAL_EMAIL, MORAL_RFC, PHYSICAL_EMAIL, item, new_convenio
 from tests.conftest import alembic_config, csrf, login, supplier_by_email
@@ -366,7 +366,18 @@ def pdf_text(response) -> str:
 def test_boton_del_reporte_con_los_filtros(client):
     login(client, PMO)
     page = client.get("/invoices", params={"status": "", "origin": "NATIONAL", "q": "FAC"}).text
-    assert 'href="/invoices/report.pdf?q=FAC&amp;status=&amp;origin=NATIONAL"' in page
+    # Solo con "Todos los estados": lleva la busqueda y el origen, no el estatus.
+    button = 'class="btn btn-outline-danger report-link" id="invoice-report"'
+    assert f'{button} href="/invoices/report.pdf?q=FAC&amp;origin=NATIONAL"' in page
+
+
+@pytest.mark.parametrize("params", [{}, {"status": "REJECTED"}], ids=["bandeja-enviadas", "un-estatus"])
+def test_boton_del_reporte_inactivo_con_un_estatus(client, params):
+    login(client, ADMIN)
+    page = client.get("/invoices", params=params).text
+    button = re.search(r'<a class="btn btn-outline-danger report-link disabled"[^>]*>', page).group(0)
+    assert 'aria-disabled="true"' in button and "href=" not in button
+    assert 'title="Disponible con &quot;Todos los estados&quot;"' in page
 
 
 def test_reporte_resumen_en_pdf(client):
@@ -383,11 +394,16 @@ def test_reporte_resumen_en_pdf(client):
     assert re.search(rf"Total\s+{total}\s+100\.0 %", text)
 
 
-def test_reporte_con_filtro_de_estatus(client):
+def test_reporte_siempre_con_todos_los_estatus(client):
+    """Un estatus en la direccion se ignora: el pie compara todos; el origen si se aplica."""
     login(client, ADMIN)
     text = pdf_text(client.get("/invoices/report.pdf", params={"status": "REJECTED", "origin": "NATIONAL"}))
-    assert "Estatus: Rechazada" in text and "Origen: Nacional" in text
-    assert "Autorizada" not in text.split("Resumen por estatus")[1]
+    assert "Estatus: Todos" in text and "Origen: Nacional" in text
+    with SessionLocal() as db:
+        national = db.scalar(
+            select(func.count(Invoice.id)).join(Invoice.supplier).where(Supplier.origin == SupplierOrigin.NATIONAL)
+        )
+    assert re.search(rf"Total\s+{national}\s+100\.0 %", text)
 
 
 def test_reporte_del_proveedor_solo_con_sus_facturas(client):

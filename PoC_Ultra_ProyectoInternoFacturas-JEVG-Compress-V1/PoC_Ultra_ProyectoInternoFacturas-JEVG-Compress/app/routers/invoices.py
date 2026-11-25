@@ -110,6 +110,8 @@ def invoice_list(
         "invoices": result.items,
         "page": result,
         "base_query": urlencode({"q": q, "status": effective, "origin": origin}),
+        # Reporte PDF (Ferromex): solo con "Todos los estados"; lleva la busqueda y el origen.
+        "report_query": urlencode({"q": q, "origin": origin}) if not effective else None,
         "q": q,
         "selected_status": effective,
         "selected_origin": origin,
@@ -123,16 +125,11 @@ def invoice_list(
 
 
 @router.get("/report.pdf")
-def invoice_report(
-    q: str = "",
-    status: str | None = None,
-    origin: str = "",
-    db: Session = Depends(get_db),
-    user=Depends(get_current_user),
-):
-    """Reporte resumen en PDF (Ferromex): totales por estatus y origen con grafico de pie, con los filtros y el alcance
-    del listado. Se declara antes de /{invoice_id} para que "report.pdf" no se lea como id."""
-    data = report.summary(db, user, q.strip(), inbox_status(user, status), origin)
+def invoice_report(q: str = "", origin: str = "", db: Session = Depends(get_db), user=Depends(get_current_user)):
+    """Reporte resumen en PDF (Ferromex): totales por estatus y origen con grafico de pie. Siempre de todos los
+    estatus (el listado solo lo ofrece con "Todos los estados"); conserva la busqueda, el origen y el alcance del
+    listado. Se declara antes de /{invoice_id} para que "report.pdf" no se lea como id."""
+    data = report.summary(db, user, q.strip(), origin)
     headers = {"Content-Disposition": f'attachment; filename="{report.filename(data)}"'}
     return Response(report.render(data), media_type="application/pdf", headers=headers)
 
