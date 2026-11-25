@@ -49,10 +49,12 @@ def _rows(db: Session, origin: SupplierOrigin) -> list[ValidationRule]:
 
 
 def rule_set(db: Session, origin: SupplierOrigin) -> RuleSet:
-    """Reglas del origen que aplica una prevalidacion: activas o no, con su valor esperado, y las monedas activas."""
+    """Reglas del origen que aplica una prevalidacion: activas o no, con su valor esperado, las monedas activas
+    (XML-007) y los regimenes fiscales activos (PRV-003, HU-24)."""
     return RuleSet(
         rules={row.rule_code: ConfiguredRule(row.is_active, row.parameter) for row in _rows(db, origin)},
         currencies=frozenset(catalog_service.active_codes(db, CatalogType.CURRENCY)),
+        tax_regimes=frozenset(catalog_service.active_codes(db, CatalogType.TAX_REGIME)),
     )
 
 

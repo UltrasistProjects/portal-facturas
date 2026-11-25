@@ -155,7 +155,7 @@ def test_listado_inicial(client):
         ("Rechazada", supplier),
         ("Observaciones", supplier),
         ("Cancelada", reception),
-        ("Pagada", supplier),
+        ("Programado para pago", supplier),
         ("Complemento de pago adjuntado", reception),
         ("Credenciales de acceso", supplier),
     ]
@@ -449,11 +449,14 @@ def test_textos_predeterminados_conforme_a_las_reglas_de_negocio():
         REJECTED: "Factura {{numero_factura}} rechazada",
         OBSERVATIONS: "Factura {{numero_factura}} con observaciones",
         CANCELLED: "Cancelación de la factura {{numero_factura}} de {{proveedor}}",
-        PAID: "Factura {{numero_factura}} pagada",
+        PAID: "Factura {{numero_factura}} programada para pago",
         COMPLEMENT: "Complemento de pago de la factura {{numero_factura}}",
         CREDENTIALS: "Acceso al Portal de Proveedores FERROMEX",
     }
-    assert "Su factura número {{numero_factura}} ha sido pagada.\n\n{{aviso_complemento}}\n\n" in default_body(PAID)
+    assert (
+        "Su factura número {{numero_factura}} ha sido programada para pago.\n\n{{aviso_complemento}}\n\n"
+        in default_body(PAID)
+    )
     assert (
         "El Complemento de Pago ha sido adjuntado a la factura {{numero_factura}} del proveedor {{proveedor}}."
         in default_body(COMPLEMENT)
@@ -701,23 +704,23 @@ def test_vista_previa_de_pagada(client):
     response = preview(client, PAID)
     assert response.status_code == 200
     block = html.unescape(preview_block(response.text))
-    assert "Factura A-1024 pagada" in response.text
-    assert "Su factura número A-1024 ha sido pagada." in block
-    notice = "Es importante que adjunte su “Complemento de Pago” a dicha factura pagada antes del 28/09/2026 10:30."
+    assert "Factura A-1024 programada para pago" in response.text
+    assert "Su factura número A-1024 ha sido programada para pago." in block
+    notice = "Es importante que adjunte su “Complemento de Pago” a dicha factura antes del 28/09/2026 10:30."
     assert notice in block
 
 
 def test_aviso_del_complemento_vacio():
     email = compose(PAID, aviso_complemento="")
-    assert email.subject == "Factura A-1024 pagada"
-    assert "Su factura número A-1024 ha sido pagada.\n\nFolio interno: FAC-2026-00042" in email.body
+    assert email.subject == "Factura A-1024 programada para pago"
+    assert "Su factura número A-1024 ha sido programada para pago.\n\nFolio interno: FAC-2026-00042" in email.body
     assert "Complemento de Pago" not in email.body
     assert "\n\n\n" not in email.body
 
 
 def test_aviso_del_complemento_con_valor():
     email = compose(PAID)
-    assert "ha sido pagada.\n\nEs importante que adjunte su “Complemento de Pago”" in email.body
+    assert "ha sido programada para pago.\n\nEs importante que adjunte su “Complemento de Pago”" in email.body
 
 
 def test_aviso_del_complemento_ausente_falla():

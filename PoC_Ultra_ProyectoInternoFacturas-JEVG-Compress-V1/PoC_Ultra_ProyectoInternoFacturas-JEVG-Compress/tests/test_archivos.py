@@ -88,7 +88,7 @@ def test_xml_con_bom(storage):
     assert stored.mime_type == "application/xml"
     from app.services.xml_service import parse_cfdi
 
-    assert parse_cfdi(stored.path)["receiver_rfc"] == "ULT940623AG0"
+    assert parse_cfdi(stored.path)["receiver_rfc"] == "IME010718PU3"
 
 
 @pytest.mark.parametrize("filename", ["script.html", "archivo.exe", "sin_extension"])

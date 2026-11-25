@@ -4,6 +4,7 @@ from pathlib import Path
 from fastapi.templating import Jinja2Templates
 
 from app.core.constants import (
+    ROLE_LABELS,
     STATUS_LABELS,
     SUPPLIER_CLASSIFICATION_LABELS,
     SUPPLIER_ORIGIN_LABELS,
@@ -16,6 +17,7 @@ from app.core.timeutils import to_business
 templates = Jinja2Templates(directory=str(Path(__file__).parents[1] / "templates"))
 templates.env.globals.update(
     status_labels=STATUS_LABELS,
+    role_labels=ROLE_LABELS,
     supplier_status_labels=SUPPLIER_STATUS_LABELS,
     supplier_origin_labels=SUPPLIER_ORIGIN_LABELS,
     supplier_classification_labels=SUPPLIER_CLASSIFICATION_LABELS,

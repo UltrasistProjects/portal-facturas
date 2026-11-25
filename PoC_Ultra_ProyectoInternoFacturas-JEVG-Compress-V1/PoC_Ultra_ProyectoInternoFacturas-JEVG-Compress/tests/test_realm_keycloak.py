@@ -136,8 +136,7 @@ def test_servicio_keycloak_version_fija_y_solo_local(keycloak_service):
 def test_servicio_keycloak_importa_el_realm_y_la_lista(keycloak_service):
     volumes = keycloak_service["volumes"]
     assert (
-        "./infra/keycloak/realm-ferromex-portal.json:/opt/keycloak/data/import/realm-ferromex-portal.json:ro"
-        in volumes
+        "./infra/keycloak/realm-ferromex-portal.json:/opt/keycloak/data/import/realm-ferromex-portal.json:ro" in volumes
     )
     assert (
         "./infra/keycloak/common_passwords.txt:/opt/keycloak/data/password-blacklists/common_passwords.txt:ro"

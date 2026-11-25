@@ -7,26 +7,18 @@ from sqlalchemy import select
 from app.core.constants import BUSINESS_RULES, SupplierOrigin
 from app.core.database import SessionLocal
 from app.core.timeutils import to_business
-from app.models import Contract, ValidationRule
+from app.models import ValidationRule
 from app.rules.xml_rules import xml_rules
 from app.services.invoice_service import internal_folio
 from app.services.validation_rules_service import rule_set
-from tests.conftest import csrf, invoice_by_number, login, supplier_by_email
+from tests.cfdi import PLAIN_PDF, moral_cfdi, register, xml_of
+from tests.conftest import csrf, invoice_by_number, login
 
 
 def create_invoice(client, invoice_number: str):
-    supplier = supplier_by_email("proveedor1@poc.local")
-    with SessionLocal() as db:
-        contract = db.scalar(select(Contract).where(Contract.supplier_id == supplier.id))
-    data = {
-        "supplier_id": supplier.id,
-        "contract_id": contract.id,
-        "invoice_number": invoice_number,
-        "service_period": "09/2026",
-        "project_name": contract.project_name,
-        "csrf_token": csrf(client, "/invoices/new"),
-    }
-    return client.post("/invoices/new", data=data, follow_redirects=False)
+    """Registro por archivos de una factura del proveedor 1 cuyo folio es `invoice_number` (sin serie)."""
+    data = moral_cfdi(series=None, folio=invoice_number)
+    return register(client, PLAIN_PDF, xml_of(data))
 
 
 def test_folio_derivado_del_id(client):

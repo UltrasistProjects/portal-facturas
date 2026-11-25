@@ -1,5 +1,5 @@
-"""Factura del proveedor internacional (HU-15 y HU-16): datos del Invoice capturados por el proveedor, duplicado por
-nombre de archivo y texto del Invoice para las reglas INT.
+"""Factura del proveedor internacional (HU-15 y HU-16): datos del Invoice capturados por el proveedor (con su orden de
+compra, HU-24), duplicado por nombre de archivo y texto del Invoice para las reglas INT.
 
 Sin commit: el endpoint confirma la transaccion (y con ella libera el bloqueo consultivo por proveedor).
 """
@@ -18,6 +18,7 @@ from app.core.constants import CatalogType, DocumentType, InvoiceStatus, Supplie
 from app.core.errors import BusinessRuleError
 from app.core.types import to_money
 from app.models import Document, Invoice
+from app.rules.purchase_order_rules import order_numbers
 from app.schemas import ForeignInvoiceData, validation_messages
 from app.services import catalog_service
 from app.services.file_service import LocalFileStorage
@@ -27,9 +28,12 @@ from app.services.pdf_service import analyze_pdf
 # que dos cargas concurrentes con el mismo nombre de archivo no pasen ambas el control de duplicados.
 FOREIGN_INVOICE_LOCK_KEY = 15_1500_0001
 # El total no se recibe: lo calcula ForeignInvoiceData (subtotal + impuestos).
-FIELDS = ("invoice_date", "subtotal", "tax", "currency")
+FIELDS = ("invoice_date", "subtotal", "tax", "currency", "purchase_order_number")
 MSG_NOT_INTERNATIONAL = "La factura no es de un proveedor internacional"
+MSG_PURCHASE_ORDER = "Capture el número de orden de compra"
 CURRENCY_CODE = re.compile(r"[A-Z]{3}")
+# Numero de orden de compra del Invoice: de 6 a 10 digitos (HU-24, seccion 6.7).
+PURCHASE_ORDER_NUMBER = re.compile(r"\d{6,10}")
 
 
 def is_international(invoice: Invoice) -> bool:
@@ -47,7 +51,17 @@ def form_values(invoice: Invoice) -> dict[str, str]:
         "tax": f"{invoice.tax:.2f}",
         "total": f"{invoice.total:.2f}",
         "currency": invoice.currency,
+        "purchase_order_number": invoice.purchase_order_number or proposed_order_number(invoice),
     }
+
+
+def proposed_order_number(invoice: Invoice) -> str:
+    """Numero de orden citado como OC/<numero> en el texto del Invoice cargado, para proponerlo si la factura aun no
+    tiene uno (HU-24)."""
+    if current_invoice_document(invoice) is None:
+        return ""
+    numbers = order_numbers(invoice_text(invoice).text)
+    return numbers[0] if numbers else ""
 
 
 def parse_data(db: Session, values: Mapping[str, str]) -> tuple[ForeignInvoiceData | None, list[str]]:
@@ -60,6 +74,11 @@ def parse_data(db: Session, values: Mapping[str, str]) -> tuple[ForeignInvoiceDa
     currency = str(values.get("currency") or "").strip().upper()
     if CURRENCY_CODE.fullmatch(currency) and currency not in catalog_service.active_codes(db, CatalogType.CURRENCY):
         errors.append(catalog_service.MSG_INACTIVE_CURRENCY)
+    number = str(values.get("purchase_order_number") or "").strip()
+    if not PURCHASE_ORDER_NUMBER.fullmatch(number):
+        errors.append(MSG_PURCHASE_ORDER)
+    elif data is not None:
+        data.purchase_order_number = number
     return (None if errors else data), errors
 
 
@@ -79,6 +98,7 @@ def apply_data(invoice: Invoice, data: ForeignInvoiceData) -> tuple[dict, dict]:
         "tax": to_money(data.tax),
         "total": data.total,
         "currency": data.currency,
+        "purchase_order_number": data.purchase_order_number,
     }
     old, new = {}, {}
     for field, value in values.items():

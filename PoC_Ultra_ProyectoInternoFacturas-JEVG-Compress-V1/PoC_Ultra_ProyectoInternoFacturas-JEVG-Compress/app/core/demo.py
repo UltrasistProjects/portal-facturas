@@ -17,7 +17,7 @@ class DemoAccount:
 
 DEMO_ACCOUNTS = (
     DemoAccount("Administrador", "admin@poc.local", Role.ADMINISTRADOR),
-    DemoAccount("PMO", "pmo@poc.local", Role.PMO),
+    DemoAccount("Analista de cuentas por pagar", "pmo@poc.local", Role.PMO),
     DemoAccount("Proveedor", "proveedor1@poc.local", Role.PROVEEDOR),
     DemoAccount("Proveedor fisico", "proveedor2@poc.local", Role.PROVEEDOR),
     # Proveedor internacional (HU-15/16): factura con Invoice en PDF, sin CFDI.

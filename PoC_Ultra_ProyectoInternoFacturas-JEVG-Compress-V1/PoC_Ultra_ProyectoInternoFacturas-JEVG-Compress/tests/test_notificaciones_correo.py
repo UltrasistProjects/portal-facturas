@@ -242,7 +242,7 @@ def test_copias_iniciales(client):
         ("Rechazada", "Proveedor (correo del catálogo)"),
         ("Observaciones", "Proveedor (correo del catálogo)"),
         ("Cancelada", "Recepción de Facturas"),
-        ("Pagada", "Proveedor (correo del catálogo)"),
+        ("Programado para pago", "Proveedor (correo del catálogo)"),
         ("Complemento de pago adjuntado", "Recepción de Facturas"),
     ]
     for event in (AUTHORIZED, REJECTED, OBSERVATIONS, CANCELLED, PAID, COMPLEMENT):
@@ -439,9 +439,7 @@ def test_version_html_enlaces_y_datos():
     assert first.lines == [
         [
             mail_layout.Segment("Ingrese a "),
-            mail_layout.Segment(
-                "https://portal.ferromex.mx/login?a=1&b=2", "https://portal.ferromex.mx/login?a=1&b=2"
-            ),
+            mail_layout.Segment("https://portal.ferromex.mx/login?a=1&b=2", "https://portal.ferromex.mx/login?a=1&b=2"),
             mail_layout.Segment(". Ignore javascript:alert(1)."),
         ]
     ]

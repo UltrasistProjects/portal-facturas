@@ -1,5 +1,5 @@
 from app.core.config import settings
-from app.services.ai.base import DocumentAnalyzer
+from app.services.ai.base import AnalyzerUnavailable, DocumentAnalyzer
 from app.services.ai.content_understanding import AzureContentUnderstandingAnalyzer
 from app.services.ai.document_intelligence import AzureDocumentIntelligenceAnalyzer
 from app.services.ai.foundry import AzureFoundryAnalyzer
@@ -18,4 +18,4 @@ def get_document_analyzer() -> DocumentAnalyzer:
     return mapping.get(provider, LocalMockAnalyzer)()
 
 
-__all__ = ["get_document_analyzer", "DocumentAnalyzer"]
+__all__ = ["get_document_analyzer", "AnalyzerUnavailable", "DocumentAnalyzer"]

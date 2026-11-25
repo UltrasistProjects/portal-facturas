@@ -2,7 +2,7 @@ from pathlib import Path
 from typing import Any
 
 from app.core.config import settings
-from app.services.ai.base import DocumentAnalyzer
+from app.services.ai.base import AnalyzerUnavailable, DocumentAnalyzer
 
 
 class AzureDocumentIntelligenceAnalyzer(DocumentAnalyzer):
@@ -15,13 +15,10 @@ class AzureDocumentIntelligenceAnalyzer(DocumentAnalyzer):
         return {"available": self._ready(), "provider": "azure_document_intelligence"}
 
     def _unavailable(self):
-        raise RuntimeError("Azure Document Intelligence no esta configurado")
+        raise AnalyzerUnavailable("Azure Document Intelligence no esta configurado")
 
     def analyze_document(self, path: Path) -> dict[str, Any]:
         self._unavailable()
 
-    def extract_fields(self, path: Path, fields: list[str]) -> dict[str, Any]:
-        self._unavailable()
-
-    def semantic_compare(self, expected: str, detected: str) -> dict[str, Any]:
+    def extract_invoice(self, path: Path) -> dict[str, Any]:
         self._unavailable()

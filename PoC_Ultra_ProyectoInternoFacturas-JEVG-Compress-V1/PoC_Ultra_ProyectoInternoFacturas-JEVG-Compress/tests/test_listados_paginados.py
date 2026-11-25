@@ -5,7 +5,6 @@ Cada prueba crea sus registros con un prefijo unico, los busca por ese prefijo (
 compartida) y los borra al terminar.
 """
 
-import html
 import re
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
@@ -16,9 +15,10 @@ from sqlalchemy import delete, select
 
 from app.core.constants import CatalogType, DeliveryStatus, Role, SupplierOrigin, SupplierStatus, SupplierType
 from app.core.database import SessionLocal
-from app.models import CatalogEntry, Contract, EmailDelivery, Supplier, User
+from app.models import CatalogEntry, EmailDelivery, PurchaseOrder, Supplier, User
 from app.repositories.pagination import back_to
-from tests.conftest import csrf, login, supplier_by_email
+from tests.cfdi import item, new_convenio
+from tests.conftest import csrf, login
 from tests.test_flujo import count_queries
 
 TOTAL = 30  # 25 en la primera pagina y 5 en la segunda
@@ -84,27 +84,27 @@ def many_suppliers():
 
 
 @pytest.fixture()
-def many_contracts():
+def many_orders():
+    """Ordenes de compra con un nombre de proveedor unico (HU-24): la fecha crece con el numero."""
     tag = prefix()
-    supplier = supplier_by_email("proveedor1@poc.local")
+    base = new_convenio()
     with SessionLocal() as db:
         db.add_all(
-            Contract(
-                supplier_id=supplier.id,
-                project_name=f"{tag} Proyecto {index:02d}",
-                project_leader="Lider",
-                authorized_technology="Power Platform",
-                authorized_amount=Decimal("1000.00"),
-                currency="MXN",
-                start_date=date(2026, 1, 1),
-                end_date=date(2026, 12, 31),
+            PurchaseOrder(
+                convenio=base + index,
+                rfc="TIC210101ABC",
+                supplier_name=f"{tag} Proveedor {index:02d}",
+                order_date=date(2026, 1, 1) + timedelta(days=index),
+                total=Decimal("1000.00"),
+                taxes=Decimal("160.00"),
+                data={"items": [item()]},
             )
             for index in range(TOTAL)
         )
         db.commit()
     yield tag
     with SessionLocal() as db:
-        db.execute(delete(Contract).where(Contract.project_name.startswith(tag)))
+        db.execute(delete(PurchaseOrder).where(PurchaseOrder.supplier_name.startswith(tag)))
         db.commit()
 
 
@@ -142,17 +142,17 @@ def test_segunda_pagina_de_usuarios(client, many_users):
     assert names == [f"{many_users} Usuario {index:02d}" for index in range(25, TOTAL)]
 
 
-def test_pagina_fuera_de_rango(client, many_contracts):
+def test_pagina_fuera_de_rango(client, many_orders):
     login(client)
-    page = client.get("/contracts", params={"q": many_contracts, "page": 99}).text
+    page = client.get("/purchase-orders", params={"q": many_orders, "page": 99}).text
     assert page_info(page) == f"Página 2 de 2 · {TOTAL} registros"
 
 
-def test_contratos_del_mas_reciente_al_mas_antiguo(client, many_contracts):
+def test_ordenes_de_compra_de_la_mas_reciente_a_la_mas_antigua(client, many_orders):
     login(client)
-    page = client.get("/contracts", params={"q": many_contracts.lower()}).text
-    projects = re.findall(rf"<strong>({many_contracts} Proyecto \d+)</strong>", page)
-    assert projects[0] == f"{many_contracts} Proyecto {TOTAL - 1:02d}" and len(projects) == 25
+    page = client.get("/purchase-orders", params={"q": many_orders.lower()}).text
+    names = re.findall(rf"<td>({many_orders} Proveedor \d+)</td>", page)
+    assert names[0] == f"{many_orders} Proveedor {TOTAL - 1:02d}" and len(names) == 25
 
 
 def test_proveedores_con_filtro_y_busqueda(client, many_suppliers):
@@ -240,30 +240,6 @@ def test_alta_de_usuario_visible(client, many_users):
         with SessionLocal() as db:
             db.execute(delete(User).where(User.email == email))
             db.commit()
-
-
-def test_alta_de_contrato_visible(client, many_contracts):
-    login(client)
-    supplier = supplier_by_email("proveedor1@poc.local")
-    project = f"{many_contracts} Nuevo"
-    data = {
-        "supplier_id": supplier.id,
-        "project_name": project,
-        "project_leader": "Lider",
-        "authorized_technology": "Power Platform",
-        "authorized_amount": "1000.00",
-        "currency": "MXN",
-        "start_date": "2026-01-01",
-        "end_date": "2026-12-31",
-        "csrf_token": csrf(client, "/contracts"),
-    }
-    response = client.post("/contracts", data=data, follow_redirects=False)
-    # El alta lleva al expediente del contrato, que pide sus requisitos (HU-22).
-    with SessionLocal() as db:
-        created = db.scalar(select(Contract).where(Contract.project_name == project))
-    assert response.headers["location"] == f"/contracts/{created.id}?ok=created"
-    page = html.unescape(client.get(response.headers["location"]).text)
-    assert "Contrato creado. Cargue sus requisitos para activarlo." in page and f"<h1>{project}</h1>" in page
 
 
 def test_alta_de_clave_visible(client, many_entries):

@@ -15,6 +15,7 @@ from app.rules.xml_rules import DISABLED, XML_NOT_REQUIRED, normalize_name, xml_
 from app.services import validation_rules_service as rules_service
 from app.services.validation_engine import run_validation
 from app.services.xml_service import parse_cfdi
+from tests.cfdi import register
 from tests.conftest import ROOT, csrf, invoice_by_number, login, migration_module, supplier_by_email
 
 pytestmark = pytest.mark.usefixtures("restore_validation_rules")
@@ -85,33 +86,17 @@ def results_for(xml: str) -> dict:
 
 
 def validate_invoice(client, xml: str) -> Invoice:
-    """Alta, carga de XML y PDF y prevalidacion de una factura nueva del proveedor 1."""
-    number = f"REGLAS-{secrets.token_hex(4).upper()}"
+    """Registro por archivos (PDF y XML, con UUID y folio nuevos) y prevalidacion de una factura del proveedor 1."""
+    folio = secrets.token_hex(4).upper()
     uuid = f"{secrets.token_hex(4)}-0000-4000-8000-{secrets.token_hex(6)}".upper()
-    supplier = supplier_by_email("proveedor1@poc.local")
-    login(client, "proveedor1@poc.local")
-    data = {
-        "supplier_id": supplier.id,
-        "contract_id": invoice_by_number("A-CORRECTA").contract_id,
-        "invoice_number": number,
-        "service_period": "08/2026",
-        "project_name": "Automatizacion Operativa 2026",
-        "csrf_token": csrf(client, "/invoices/new"),
-    }
-    assert client.post("/invoices/new", data=data, follow_redirects=False).status_code == 303
-    invoice = invoice_by_number(number)
     xml = re.sub(r'UUID="[^"]*"', f'UUID="{uuid}"', xml)
-    for doc_type, filename, content in (("INVOICE_XML", "cfdi.xml", xml.encode()), ("INVOICE_PDF", "f.pdf", PDF)):
-        response = client.post(
-            f"/invoices/{invoice.id}/documents",
-            data={"document_type": doc_type, "csrf_token": csrf(client, f"/invoices/{invoice.id}")},
-            files={"upload": (filename, content, "application/octet-stream")},
-            follow_redirects=False,
-        )
-        assert response.status_code == 303
+    xml = re.sub(r'Folio="[^"]*"', f'Folio="{folio}"', xml)
+    login(client, "proveedor1@poc.local")
+    assert register(client, PDF, xml.encode()).status_code == 303
+    invoice = invoice_by_number(f"A-{folio}")
     token = csrf(client, f"/invoices/{invoice.id}")
     assert client.post(f"/invoices/{invoice.id}/validation", data={"csrf_token": token}).status_code == 200
-    return invoice_by_number(number)
+    return invoice_by_number(f"A-{folio}")
 
 
 def stored_results(invoice_id: int) -> dict:
@@ -152,7 +137,7 @@ def test_guardado_sin_token_csrf(client):
     assert edit(client, NATIONAL, "XML-009", "OTRA RAZON", token=False).status_code == 403
     target = rule(NATIONAL, "XML-010")
     assert client.post(f"{URL}/national/{target.id}/delete", data={"csrf_token": "x"}).status_code == 403
-    assert rule(NATIONAL, "XML-009").parameter == "FERROMEX" and rule(NATIONAL, "XML-010").is_active
+    assert rule(NATIONAL, "XML-009").parameter == "INTERMODAL MEXICO" and rule(NATIONAL, "XML-010").is_active
 
 
 def test_rutas(client):
@@ -187,11 +172,17 @@ def test_catalogo_inicial():
         "XML-005": True,
         "XML-009": True,
         "XML-010": True,
-        "XML-011": False,
+        # Activa con el regimen de INTERMODAL MEXICO desde 0023 (HU-24, P-01).
+        "XML-011": True,
     }
     assert international == {"INT-001": True, "INT-002": True, "INT-003": True, "INT-004": False}
     assert (rule(NATIONAL, "XML-005").parameter, rule(NATIONAL, "XML-011").parameter) == (["G03", "I04"], "601")
-    assert rule(NATIONAL, "XML-011").deleted_at is not None and rule(INTERNATIONAL, "INT-004").parameter == ""
+    assert rule(NATIONAL, "XML-011").deleted_at is None and rule(INTERNATIONAL, "INT-004").parameter == ""
+    assert (rule(NATIONAL, "XML-002").parameter, rule(NATIONAL, "XML-009").parameter) == (
+        "IME010718PU3",
+        "INTERMODAL MEXICO",
+    )
+    assert (rule(NATIONAL, "XML-010").parameter, rule(INTERNATIONAL, "INT-003").parameter) == ("11700", "11700")
 
 
 def test_migracion_de_una_configuracion_modificada():
@@ -212,10 +203,10 @@ def test_migracion_de_una_configuracion_modificada():
 def test_pagina_nacional(client):
     login(client)
     page = html.unescape(client.get(f"{URL}/national").text)
-    for code in ("XML-002", "XML-003", "XML-004", "XML-005", "XML-009", "XML-010"):
+    for code in ("XML-002", "XML-003", "XML-004", "XML-005", "XML-009", "XML-010", "XML-011"):
         assert f'<td class="mono">{code}</td>' in page
-    assert "<td>ULT940623AG0</td>" in page and "<td>G03, I04</td>" in page and "<td>03930</td>" in page
-    assert '<td class="mono">XML-011</td>' not in page and "Mostrar eliminados (1)" in page
+    assert "<td>IME010718PU3</td>" in page and "<td>G03, I04</td>" in page and "<td>11700</td>" in page
+    assert "Mostrar eliminados (0)" in page
     assert "XML-007 compara la moneda del CFDI con las monedas activas del catálogo" in page
     assert "INT-00" not in page
     for severity, weight in (("CRITICAL", 35), ("ERROR", 18), ("WARNING", 6), ("INFO", 0)):
@@ -233,6 +224,7 @@ def test_pagina_internacional(client):
 
 def test_mostrar_eliminados(client):
     login(client)
+    assert change(client, NATIONAL, "XML-011", "delete").status_code == 303
     page = client.get(f"{URL}/national?eliminados=1").text
     xml011 = rule(NATIONAL, "XML-011")
     assert "Reglas eliminadas" in page and f'action="{URL}/national/{xml011.id}/restore"' in page
@@ -257,7 +249,7 @@ def test_regla_de_otro_origen(client):
     int002 = rule(INTERNATIONAL, "INT-002")
     data = {"name": "Otra", "parameter": "OTRA", "version": 1, "csrf_token": csrf(client, "/")}
     assert client.post(f"{URL}/national/{int002.id}", data=data).status_code == 404
-    assert rule(INTERNATIONAL, "INT-002").parameter == "FERROMEX"
+    assert rule(INTERNATIONAL, "INT-002").parameter == "INTERMODAL MEXICO"
 
 
 def test_editar_una_regla_eliminada(client):
@@ -364,6 +356,8 @@ def test_restaurar_sin_parametro_valido(client):
 
 
 def test_restaurar_con_una_clave_desactivada(client):
+    login(client)
+    assert change(client, NATIONAL, "XML-011", "delete").status_code == 303
     with SessionLocal() as db:
         db.execute(
             update(CatalogEntry)
@@ -387,7 +381,7 @@ def test_accion_desconocida(client):
 
 
 def test_razon_social_con_otro_formato():
-    assert results_for(demo_xml(Nombre="Férromex  "))["XML-009"].status == "PASS"
+    assert results_for(demo_xml(Nombre="Intermodal  México "))["XML-009"].status == "PASS"
     assert normalize_name(" Férro   MEX ") == "ferro mex"
 
 
@@ -395,8 +389,8 @@ def test_codigo_postal_distinto_en_una_factura(client):
     invoice = validate_invoice(client, demo_xml(DomicilioFiscalReceptor="06600"))
     xml010 = stored_results(invoice.id)["XML-010"]
     assert (xml010.status, xml010.severity) == ("FAIL", "ERROR")
-    assert (xml010.expected_value, xml010.detected_value) == ("03930", "06600")
-    # Verificar no cambia el estatus: la factura sin orden de compra ni Vo.Bo. sigue en "Borrador".
+    assert (xml010.expected_value, xml010.detected_value) == ("11700", "06600")
+    # Verificar no cambia el estatus: la factura sin Vo.Bo. sigue en "Borrador".
     assert invoice.status.value == "DRAFT"
 
 
@@ -404,12 +398,14 @@ def test_factura_demo_correcta(client):
     invoice = validate_invoice(client, CFDI)
     results = stored_results(invoice.id)
     assert (results["XML-009"].status, results["XML-010"].status) == ("PASS", "PASS")
-    assert (results["XML-011"].status, results["XML-011"].message) == ("NOT_APPLICABLE", DISABLED)
+    assert results["XML-011"].status == "PASS"
     assert results["XML-009"].source_reference == "Receptor.Nombre"
 
 
 def test_regimen_fiscal_restaurado(client):
     login(client)
+    assert change(client, NATIONAL, "XML-011", "delete").status_code == 303
+    assert results_for(demo_xml(RegimenFiscalReceptor="603"))["XML-011"].message == DISABLED
     assert change(client, NATIONAL, "XML-011", "restore").status_code == 303
     result = results_for(demo_xml(RegimenFiscalReceptor="603"))["XML-011"]
     assert (result.status, result.expected_value, result.detected_value) == ("FAIL", "601", "603")
@@ -424,7 +420,7 @@ def test_mensajes_con_el_valor_esperado(client):
 
 def test_todas_las_reglas_eliminables(client):
     login(client)
-    for code in ("XML-002", "XML-003", "XML-004", "XML-005", "XML-009", "XML-010"):
+    for code in ("XML-002", "XML-003", "XML-004", "XML-005", "XML-009", "XML-010", "XML-011"):
         assert change(client, NATIONAL, code, "delete").status_code == 303
     wrong = demo_xml(Rfc="XXX010101XXX", Nombre="OTRA", DomicilioFiscalReceptor="06600", UsoCFDI="S01")
     results = results_for(wrong)
@@ -451,7 +447,7 @@ def test_factura_internacional_con_reglas_internacionales(client):
     assert (results["INT-002"].status, results["INT-002"].expected_value) == ("PASS", "FERROMEX SA DE CV")
     assert (results["INT-003"].status, results["INT-003"].expected_value) == ("WARNING", "06600")
     national = engine_results("A-CORRECTA")
-    assert (national["XML-009"].expected_value, national["XML-010"].expected_value) == ("FERROMEX", "03930")
+    assert (national["XML-009"].expected_value, national["XML-010"].expected_value) == ("INTERMODAL MEXICO", "11700")
     assert not any(code.startswith("INT-") for code in national)
     international = engine_results("INV-2026-0042")
     assert (international["INT-002"].expected_value, international["INT-003"].expected_value) == (

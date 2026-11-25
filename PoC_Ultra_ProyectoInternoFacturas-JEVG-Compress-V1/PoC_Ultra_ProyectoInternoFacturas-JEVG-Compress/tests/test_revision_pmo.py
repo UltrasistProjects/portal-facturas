@@ -15,6 +15,7 @@ from app.core.database import SessionLocal
 from app.models import AuditLog, Document, Invoice, Review, Supplier, User, ValidationResult
 from app.repositories.invoice_repository import search_invoices
 from app.services import document_view_service
+from tests.cfdi import moral_cfdi, register_cfdi
 from tests.conftest import csrf, invoice_by_number, login
 from tests.test_flujo import count_queries
 
@@ -54,7 +55,6 @@ def queue():
                         uploaded_by=admin,
                         invoice_number=f"BND-{day}",
                         service_period="01/2001",
-                        project_name="Proyecto Bandeja",
                         status=status,
                         submitted_at=datetime(2001, 1, day, 12, tzinfo=timezone.utc)
                         if status == InvoiceStatus.UNDER_REVIEW
@@ -80,7 +80,7 @@ def new_invoice_for(supplier_email: str, **values) -> Invoice:
             uploaded_by=user_id("admin@poc.local"),
             invoice_number=f"RPMO-{uuid4().hex[:8]}",
             service_period="09/2026",
-            **{"project_name": "Proyecto de prueba", **values},
+            **values,
         )
         db.add(invoice)
         db.commit()
@@ -136,10 +136,10 @@ def test_proveedor_sin_bandeja(client):
 
 @pytest.mark.parametrize("origin", ["INTERNATIONAL", "NATIONAL"])
 def test_filtro_por_origen(client, origin):
-    # Dos facturas con el mismo proyecto unico, una por origen: la busqueda las aisla del resto de la base.
-    project = f"Origen {uuid4().hex[:8]}"
-    national = new_invoice_for("proveedor1@poc.local", project_name=project)
-    international = new_invoice_for("proveedor3@poc.local", project_name=project)
+    # Dos facturas con la misma orden de compra unica, una por origen: la busqueda las aisla del resto de la base.
+    project = f"OC{uuid4().hex[:8]}"
+    national = new_invoice_for("proveedor1@poc.local", purchase_order_number=project)
+    international = new_invoice_for("proveedor3@poc.local", purchase_order_number=project)
     present, absent = (international, national) if origin == "INTERNATIONAL" else (national, international)
     login(client, "pmo@poc.local")
     page = client.get("/invoices", params={"status": "", "origin": origin, "q": project}).text
@@ -236,7 +236,7 @@ def test_xml_escapado(client):
 
 def test_texto_truncado(client, monkeypatch):
     monkeypatch.setattr(document_view_service, "TEXT_LIMIT", 10)
-    invoice_id, document_id = document_of("A-CORRECTA", "PURCHASE_ORDER")
+    invoice_id, document_id = document_of("A-CORRECTA", "APPROVAL")
     login(client, "pmo@poc.local")
     page = client.get(f"/invoices/{invoice_id}/documents/{document_id}/view").text
     assert "Se muestran los primeros 10 caracteres." in page
@@ -244,25 +244,17 @@ def test_texto_truncado(client, monkeypatch):
 
 def test_imagen_inline(client):
     login(client, "proveedor1@poc.local")
-    base = invoice_by_number("A-CORRECTA")
-    number = f"IMG-{uuid4().hex[:8]}"
-    data = {
-        "contract_id": base.contract_id,
-        "invoice_number": number,
-        "service_period": "08/2026",
-        "project_name": base.project_name,
-        "csrf_token": csrf(client, "/invoices/new"),
-    }
-    assert client.post("/invoices/new", data=data, follow_redirects=False).status_code == 303
-    invoice = invoice_by_number(number)
+    data = moral_cfdi()
+    _, invoice = register_cfdi(client, data)
+    number = invoice.invoice_number
     upload = client.post(
         f"/invoices/{invoice.id}/documents",
-        data={"document_type": "PURCHASE_ORDER", "csrf_token": csrf(client, f"/invoices/{invoice.id}")},
-        files={"upload": ("orden.png", PNG, "application/octet-stream")},
+        data={"document_type": "APPROVAL", "csrf_token": csrf(client, f"/invoices/{invoice.id}")},
+        files={"upload": ("vobo.png", PNG, "application/octet-stream")},
         follow_redirects=False,
     )
     assert upload.status_code == 303
-    _, document_id = document_of(number, "PURCHASE_ORDER")
+    _, document_id = document_of(number, "APPROVAL")
     base_url = f"/invoices/{invoice.id}/documents/{document_id}"
     assert f'src="{base_url}/image"' in client.get(f"{base_url}/view").text
     image = client.get(f"{base_url}/image")

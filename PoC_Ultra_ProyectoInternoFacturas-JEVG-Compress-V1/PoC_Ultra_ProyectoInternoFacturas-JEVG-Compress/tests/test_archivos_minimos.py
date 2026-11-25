@@ -1,8 +1,6 @@
 """Archivos minimos por tipo de proveedor (HU-04): specs archivos-minimos-factura y motor-validacion."""
 
 import re
-from datetime import date
-from decimal import Decimal
 from types import SimpleNamespace
 from uuid import uuid4
 
@@ -12,11 +10,12 @@ from sqlalchemy import delete, select
 from app.core.config import settings
 from app.core.constants import FORMAT_EXTENSIONS, Role, SupplierOrigin, SupplierStatus, SupplierType
 from app.core.database import SessionLocal
-from app.models import AuditLog, Contract, Document, Invoice, InvoiceDocumentType, Supplier, User, ValidationResult
+from app.models import AuditLog, Document, Invoice, InvoiceDocumentType, Supplier, User, ValidationResult
 from app.rules.document_rules import document_rules
 from app.services.file_service import ALLOWED_EXTENSIONS
 from app.services.validation_score_service import calculate_score
-from tests.conftest import ROOT, active_contract, csrf, identity_account, invoice_by_number, login, supplier_by_email
+from tests.cfdi import PLAIN_PDF, moral_cfdi, number_of, register, xml_of
+from tests.conftest import csrf, identity_account, invoice_by_number, login
 
 NATIONAL, INTERNATIONAL = SupplierOrigin.NATIONAL, SupplierOrigin.INTERNATIONAL
 
@@ -48,7 +47,7 @@ def by_code(results) -> dict:
 
 def test_reglas_de_proveedor_nacional_sin_vobo():
     present = {"INVOICE_XML", "INVOICE_PDF", "PURCHASE_ORDER"}
-    results = by_code(document_rules(present, REQUIRED_NATIONAL, NATIONAL, True, []))
+    results = by_code(document_rules(present, REQUIRED_NATIONAL, NATIONAL, True))
     assert [results[c].status for c in ("DOC-001", "DOC-002", "DOC-003")] == ["PASS"] * 3
     assert (results["DOC-004"].status, results["DOC-004"].severity) == ("FAIL", "ERROR")
     assert results["DOC-004"].message == "Falta Vo.Bo. del líder de proyecto"
@@ -60,7 +59,7 @@ def test_reglas_de_proveedor_nacional_sin_vobo():
 
 
 def test_reglas_de_proveedor_internacional_sin_invoice():
-    results = by_code(document_rules({"PURCHASE_ORDER", "APPROVAL"}, REQUIRED_INTERNATIONAL, INTERNATIONAL, True, []))
+    results = by_code(document_rules({"PURCHASE_ORDER", "APPROVAL"}, REQUIRED_INTERNATIONAL, INTERNATIONAL, True))
     assert (results["DOC-008"].status, results["DOC-008"].severity, results["DOC-008"].message) == (
         "FAIL",
         "CRITICAL",
@@ -76,19 +75,20 @@ def test_reglas_de_proveedor_internacional_sin_invoice():
 def test_orden_de_compra_opcional_no_descuenta_del_score():
     required = [CFDI_XML, CFDI_PDF, APPROVAL]
     present = {"INVOICE_XML", "INVOICE_PDF", "APPROVAL"}
-    results = document_rules(present, required, NATIONAL, True, [])
+    results = document_rules(present, required, NATIONAL, True)
     assert by_code(results)["DOC-003"].status == "NOT_APPLICABLE"
     assert calculate_score(results)["score"] == 100
 
 
 def test_tipo_soporte_obligatorio_genera_doc_009():
     hours = doc("SOPORTE_12", "Reporte de horas")
-    results = document_rules({"FOREIGN_INVOICE"}, [FOREIGN, hours], INTERNATIONAL, True, [])
+    results = document_rules({"FOREIGN_INVOICE"}, [FOREIGN, hours], INTERNATIONAL, True)
     doc_009 = [r for r in results if r.rule_code == "DOC-009"]
     assert [(r.status, r.severity, r.source_document, r.message) for r in doc_009] == [
         ("FAIL", "ERROR", "SOPORTE_12", "Falta Reporte de horas")
     ]
-    assert [r.rule_code for r in results] == [f"DOC-00{n}" for n in range(1, 10)]
+    # DOC-005 (contrato) se retiro con HU-24.
+    assert [r.rule_code for r in results] == [f"DOC-00{n}" for n in (1, 2, 3, 4, 6, 7, 8, 9)]
 
 
 def test_factura_demo_sin_vobo_con_la_configuracion_inicial():
@@ -100,7 +100,12 @@ def test_factura_demo_sin_vobo_con_la_configuracion_inicial():
             if r.category == "DOC"
         }
     assert invoice.status == "DRAFT"
-    assert [results[c].status for c in ("DOC-001", "DOC-002", "DOC-003")] == ["PASS"] * 3
+    # Configuracion inicial de la rama ferromex: XML Opcional y orden de compra No aplica (HU-24).
+    assert [results[c].status for c in ("DOC-001", "DOC-002", "DOC-003")] == [
+        "NOT_APPLICABLE",
+        "PASS",
+        "NOT_APPLICABLE",
+    ]
     assert (results["DOC-004"].status, results["DOC-004"].message) == ("FAIL", "Falta Vo.Bo. del líder de proyecto")
     assert results["DOC-008"].status == "NOT_APPLICABLE"
     assert "DOC-009" not in results
@@ -111,7 +116,6 @@ def test_factura_demo_sin_vobo_con_la_configuracion_inicial():
 PDF = b"%PDF-1.7\n1 0 obj\n<<>>\nendobj\n%%EOF\n"
 PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 16
 TXT = b"Documento de prueba"
-XML = (ROOT / "data" / "demo_documents" / "cfdi_demo_correcto.xml").read_bytes()
 INTERNATIONAL_EMAIL = "internacional@poc.local"
 
 
@@ -157,7 +161,7 @@ def set_level(code: str, origin: SupplierOrigin, level: str) -> None:
 
 @pytest.fixture(scope="module")
 def international():
-    """Proveedor internacional activo, con contrato y usuario Proveedor (la interfaz aun no permite autorizarlo)."""
+    """Proveedor internacional activo con usuario Proveedor (la interfaz aun no permite autorizarlo)."""
     with SessionLocal() as db:
         user = db.scalar(select(User).where(User.email == INTERNATIONAL_EMAIL))
         if user is None:
@@ -173,17 +177,6 @@ def international():
             )
             db.add(supplier)
             db.flush()
-            active_contract(
-                db,
-                supplier.id,
-                project_name="Consultoria internacional",
-                project_leader="Lider Demo",
-                authorized_technology="Power Platform",
-                authorized_amount=Decimal("100000.00"),
-                currency="USD",
-                start_date=date(2026, 1, 1),
-                end_date=date(2026, 12, 31),
-            )
             user = User(
                 name="Proveedor internacional",
                 email=INTERNATIONAL_EMAIL,
@@ -193,16 +186,16 @@ def international():
             )
             db.add(user)
             db.commit()
-        contract_id = db.scalar(select(Contract.id).where(Contract.supplier_id == user.supplier_id))
-        return SimpleNamespace(supplier_id=user.supplier_id, contract_id=contract_id)
+        return SimpleNamespace(supplier_id=user.supplier_id)
 
 
 def login_international(client) -> None:
     login(client, INTERNATIONAL_EMAIL)
 
 
-# Datos del Invoice que el alta exige al proveedor internacional (HU-15).
+# Datos del Invoice que el alta exige al proveedor internacional (HU-15), con su orden de compra (HU-24).
 FOREIGN_INVOICE_DATA = {
+    "purchase_order_number": "45009042",
     "invoice_date": "2026-08-31",
     "subtotal": "1000.00",
     "tax": "0.00",
@@ -211,33 +204,21 @@ FOREIGN_INVOICE_DATA = {
 }
 
 
-def create_invoice(client, supplier_id: int, contract_id: int, project_name: str, extra: dict | None = None):
-    number = f"HU04-{uuid4().hex[:10]}"
-    data = {
-        "supplier_id": supplier_id,
-        "contract_id": contract_id,
-        "invoice_number": number,
-        "service_period": "08/2026",
-        "project_name": project_name,
-        **(extra or {}),
-        "csrf_token": csrf(client, "/invoices/new"),
-    }
-    assert client.post("/invoices/new", data=data, follow_redirects=False).status_code == 303
-    return invoice_by_number(number)
-
-
-def national_invoice(client):
-    """Factura nueva del proveedor 1 (nacional), con la sesion de ese proveedor abierta."""
+def national_invoice(client, order=None):
+    """Factura nueva del proveedor 1 (nacional) registrada con su PDF y su XML (HU-24), con la sesion de ese proveedor
+    abierta; cita la orden de compra `order` si se indica."""
     login(client, "proveedor1@poc.local")
-    base = invoice_by_number("A-CORRECTA")
-    return create_invoice(client, supplier_by_email("proveedor1@poc.local").id, base.contract_id, base.project_name)
+    data = moral_cfdi(order.convenio if order else None)
+    assert register(client, PLAIN_PDF, xml_of(data)).status_code == 303
+    return invoice_by_number(number_of(data))
 
 
 def international_invoice(client, international):
     login_international(client)
-    return create_invoice(
-        client, international.supplier_id, international.contract_id, "Consultoria internacional", FOREIGN_INVOICE_DATA
-    )
+    number = f"HU04-{uuid4().hex[:10]}"
+    data = {"invoice_number": number, **FOREIGN_INVOICE_DATA, "csrf_token": csrf(client, "/invoices/new")}
+    assert client.post("/invoices/new", data=data, follow_redirects=False).status_code == 303
+    return invoice_by_number(number)
 
 
 def upload(client, invoice_id: int, document_type: str, filename: str, content: bytes):
@@ -267,18 +248,16 @@ def checklist_row(page: str, name: str) -> str | None:
 
 # --- Carga documental segun el origen del proveedor -----------------------------------------------------------------
 
+# Configuracion inicial de la rama ferromex (HU-24): orden de compra, contrato y anexo No aplica; XML Opcional.
 NATIONAL_OFFERED = [
-    "INVOICE_XML",
     "INVOICE_PDF",
-    "PURCHASE_ORDER",
     "APPROVAL",
-    "CONTRACT",
-    "CONTRACT_ANNEX",
+    "INVOICE_XML",
     "PAYMENT_COMPLEMENT_XML",
     "PAYMENT_COMPLEMENT_PDF",
     "ADDITIONAL",
 ]
-INTERNATIONAL_OFFERED = ["FOREIGN_INVOICE", "PURCHASE_ORDER", "APPROVAL", "CONTRACT", "CONTRACT_ANNEX", "ADDITIONAL"]
+INTERNATIONAL_OFFERED = ["FOREIGN_INVOICE", "APPROVAL", "ADDITIONAL"]
 
 
 def test_tipos_ofrecidos_a_proveedor_nacional(client):
@@ -286,9 +265,9 @@ def test_tipos_ofrecidos_a_proveedor_nacional(client):
     page = client.get(f"/invoices/{invoice.id}/documents").text
     # Obligatorios primero y despues opcionales, cada grupo en el orden del catalogo.
     assert offered(page) == NATIONAL_OFFERED
-    for name in ("Orden de compra (PDF, PNG, JPEG, TXT)", "Vo.Bo. del líder de proyecto", "PDF del CFDI (PDF)"):
+    for name in ("Vo.Bo. del líder de proyecto", "PDF del CFDI (PDF)", "XML del CFDI (XML)"):
         assert name in page
-    assert "FOREIGN_INVOICE" not in page and "Purchase Order" not in page
+    assert "FOREIGN_INVOICE" not in page and "Orden de compra (PDF" not in page and "Contrato (PDF" not in page
 
 
 def test_tipos_ofrecidos_a_proveedor_internacional(client, international):
@@ -302,7 +281,7 @@ def test_tipos_ofrecidos_a_proveedor_internacional(client, international):
 def test_nombres_en_el_detalle_de_la_factura(client):
     login(client, "proveedor1@poc.local")
     page = client.get(f"/invoices/{invoice_by_number('A-CORRECTA').id}").text
-    for name in ("XML del CFDI", "PDF del CFDI", "Orden de compra", "Vo.Bo. del líder de proyecto"):
+    for name in ("XML del CFDI", "PDF del CFDI", "Vo.Bo. del líder de proyecto"):
         assert f"<strong>{name}</strong>" in page
     assert "Invoice Xml" not in page
 
@@ -318,10 +297,11 @@ def test_tipo_que_no_aplica_o_inexistente(client, international, document_type):
 
 def test_formato_no_admitido_por_el_tipo(client):
     invoice = national_invoice(client)
+    before = stored_files(invoice.id)
     response = upload(client, invoice.id, "INVOICE_PDF", "factura.png", PNG)
     assert response.status_code == 400
     assert "Formato no admitido para PDF del CFDI. Formatos admitidos: PDF" in response.text
-    assert stored_files(invoice.id) == []
+    assert stored_files(invoice.id) == before
 
 
 def test_formato_admitido_se_carga(client, international):
@@ -332,32 +312,28 @@ def test_formato_admitido_se_carga(client, international):
 
 def test_checklist_de_obligatorios(client):
     invoice = national_invoice(client)
-    for document_type, filename, content in (("INVOICE_XML", "cfdi.xml", XML), ("INVOICE_PDF", "cfdi.pdf", PDF)):
-        assert upload(client, invoice.id, document_type, filename, content).status_code == 303
     page = client.get(f"/invoices/{invoice.id}/documents").text
-    assert checklist_row(page, "Orden de compra") == "Obligatorio · Pendiente"
     assert checklist_row(page, "Vo.Bo. del líder de proyecto") == "Obligatorio · Pendiente"
-    assert checklist_row(page, "XML del CFDI").startswith("Obligatorio · cfdi.xml")
-    assert checklist_row(page, "Contrato") == "Opcional · Pendiente"
-    assert "Faltan 2 archivos obligatorios" in page
-    upload(client, invoice.id, "PURCHASE_ORDER", "oc.txt", TXT)
-    assert "Falta 1 archivo obligatorio" in client.get(f"/invoices/{invoice.id}/documents").text
+    assert checklist_row(page, "PDF del CFDI").startswith("Obligatorio · factura.pdf")
+    assert checklist_row(page, "XML del CFDI").startswith("Opcional · cfdi.xml")
+    assert checklist_row(page, "Orden de compra") is None and checklist_row(page, "Contrato") is None
+    assert "Falta 1 archivo obligatorio" in page
     upload(client, invoice.id, "APPROVAL", "vobo.png", PNG)
     assert "Archivos obligatorios completos" in client.get(f"/invoices/{invoice.id}/documents").text
 
 
 def test_documento_de_un_tipo_que_dejo_de_aplicar(client, restore_catalog):
     invoice = national_invoice(client)
-    assert upload(client, invoice.id, "PURCHASE_ORDER", "oc.pdf", PDF).status_code == 303
-    set_level("PURCHASE_ORDER", NATIONAL, "NOT_APPLICABLE")
+    assert upload(client, invoice.id, "ADDITIONAL", "anexo.pdf", PDF).status_code == 303
+    set_level("ADDITIONAL", NATIONAL, "NOT_APPLICABLE")
     page = client.get(f"/invoices/{invoice.id}/documents").text
-    assert "PURCHASE_ORDER" not in offered(page)
-    assert checklist_row(page, "Orden de compra") is None
-    assert "Faltan 3 archivos obligatorios" in page
+    assert "ADDITIONAL" not in offered(page)
+    assert checklist_row(page, "Documentación adicional") is None
+    assert "Falta 1 archivo obligatorio" in page
     detail = client.get(f"/invoices/{invoice.id}").text
-    assert "<strong>Orden de compra</strong>" in detail
-    link = re.search(rf'href="(/invoices/{invoice.id}/documents/\d+/download)"', detail).group(1)
-    assert client.get(link).content == PDF
+    assert "<strong>Documentación adicional</strong>" in detail
+    links = re.findall(rf'href="(/invoices/{invoice.id}/documents/\d+/download)"', detail)
+    assert PDF in [client.get(link).content for link in links]
 
 
 # --- Pantalla de configuracion: acceso ------------------------------------------------------------------------------
@@ -497,11 +473,11 @@ def test_niveles_de_los_tipos_del_sistema_editables(client, restore_catalog):
     row = re.search(r"<tr><td><strong>XML del CFDI</strong>.*?</tr>", page, re.S).group(0)
     assert row.count("<select") == 2 and "bi-lock-fill" not in page
     assert 'name="national__PAYMENT_COMPLEMENT_XML"' in page
-    response = save_matrix(client, {"national__INVOICE_XML": "OPTIONAL"})
+    response = save_matrix(client, {"national__INVOICE_XML": "REQUIRED"})
     assert response.status_code == 303
     invoice = national_invoice(client)
     page = client.get(f"/invoices/{invoice.id}/documents").text
-    assert checklist_row(page, "XML del CFDI") == "Opcional · Pendiente"
+    assert checklist_row(page, "XML del CFDI").startswith("Obligatorio · cfdi.xml")
 
 
 def test_dos_administradores_editan_a_la_vez(client, restore_catalog):
@@ -543,7 +519,7 @@ def test_cambio_de_nivel_auditado(client, restore_catalog):
     assert save_matrix(client, {"international__PURCHASE_ORDER": "OPTIONAL"}).status_code == 303
     entry = last_audit("INVOICE_DOCUMENT_REQUIREMENTS_UPDATED")
     assert entry.user_id == admin_id()
-    assert entry.old_value == {"PURCHASE_ORDER": {"international": "REQUIRED"}}
+    assert entry.old_value == {"PURCHASE_ORDER": {"international": "NOT_APPLICABLE"}}
     assert entry.new_value == {"PURCHASE_ORDER": {"international": "OPTIONAL"}}
 
 
@@ -784,8 +760,6 @@ def test_eliminacion_por_otro_rol(client, restore_catalog):
 
 # --- Motor de validacion con la configuracion vigente ---------------------------------------------------------------
 
-DEMO_PDF = (ROOT / "data" / "demo_documents" / "factura_demo.pdf").read_bytes()
-
 
 def validate(client, invoice):
     token = csrf(client, f"/invoices/{invoice.id}")
@@ -808,15 +782,10 @@ def invoice_status(invoice_id: int) -> str:
         return db.get(Invoice, invoice_id).status
 
 
-def national_with_cfdi(client, *extra: tuple[str, str, bytes]):
-    """Factura nacional nueva con XML (UUID unico) y PDF del CFDI, mas los documentos indicados."""
-    invoice = national_invoice(client)
-    xml = re.sub(r'UUID="[^"]*"', f'UUID="{str(uuid4()).upper()}"', XML.decode()).encode()
-    for document_type, filename, content in (
-        ("INVOICE_XML", "cfdi.xml", xml),
-        ("INVOICE_PDF", "cfdi.pdf", DEMO_PDF),
-        *extra,
-    ):
+def national_with_cfdi(client, order=None, *extra: tuple[str, str, bytes]):
+    """Factura nacional nueva registrada con su XML (UUID unico) y su PDF, mas los documentos indicados."""
+    invoice = national_invoice(client, order)
+    for document_type, filename, content in extra:
         assert upload(client, invoice.id, document_type, filename, content).status_code == 303
     return invoice
 
@@ -826,12 +795,13 @@ def submit(client, invoice):
     return client.post(f"/invoices/{invoice.id}/submit", data={"csrf_token": token}, follow_redirects=False)
 
 
-def complete_national(client):
-    return national_with_cfdi(client, ("PURCHASE_ORDER", "oc.txt", TXT), ("APPROVAL", "vobo.txt", TXT))
+def complete_national(client, purchase_orders):
+    """Factura nacional "Cargada" contra una orden de compra propia que cuadra: su envio procede."""
+    return national_with_cfdi(client, purchase_orders(), ("APPROVAL", "vobo.txt", TXT))
 
 
-def test_factura_ya_enviada_conserva_sus_resultados(client, restore_catalog):
-    invoice = complete_national(client)
+def test_factura_ya_enviada_conserva_sus_resultados(client, restore_catalog, purchase_orders):
+    invoice = complete_national(client, purchase_orders)
     assert invoice_status(invoice.id) == "UPLOADED"
     assert submit(client, invoice).status_code == 303
     assert invoice_status(invoice.id) == "UNDER_REVIEW"
@@ -842,8 +812,8 @@ def test_factura_ya_enviada_conserva_sus_resultados(client, restore_catalog):
     assert invoice_status(invoice.id) == "UNDER_REVIEW"
 
 
-def test_factura_en_observaciones_enviada_de_nuevo(client, restore_catalog):
-    invoice = complete_national(client)
+def test_factura_en_observaciones_enviada_de_nuevo(client, restore_catalog, purchase_orders):
+    invoice = complete_national(client, purchase_orders)
     assert submit(client, invoice).status_code == 303
     login(client, "pmo@poc.local")
     data = {"decision": "REQUIRES_CORRECTION", "comments": "Falta el contrato", "csrf_token": csrf(client, "/invoices")}

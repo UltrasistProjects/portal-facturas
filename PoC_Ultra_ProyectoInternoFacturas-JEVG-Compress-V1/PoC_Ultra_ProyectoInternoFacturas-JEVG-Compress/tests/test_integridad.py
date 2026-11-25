@@ -10,9 +10,8 @@ from sqlalchemy.exc import DataError, IntegrityError, StatementError
 from app.core.constants import SupplierOrigin, SupplierType
 from app.core.database import SessionLocal
 from app.core.errors import BusinessRuleError
-from app.models import Contract, Document, Invoice, Supplier
-from app.services.reconciliation_service import reconcile_amount
-from tests.conftest import active_contract, csrf, invoice_by_number, login, supplier_by_email
+from app.models import Document, Invoice, Supplier
+from tests.conftest import invoice_by_number, login, supplier_by_email
 
 
 @pytest.fixture()
@@ -29,10 +28,8 @@ def new_invoice(db, **overrides) -> Invoice:
         "internal_folio": f"TST-{uuid4().hex[:20]}",
         "supplier_id": base.supplier_id,
         "uploaded_by": base.uploaded_by,
-        "contract_id": base.contract_id,
         "invoice_number": f"TST-{uuid4().hex[:12]}",
         "service_period": "08/2026",
-        "project_name": "Proyecto",
         "subtotal": Decimal("0"),
         "tax": Decimal("0"),
         "total": Decimal("0"),
@@ -103,21 +100,43 @@ def test_suma_exacta_en_sql(db):
     assert db.scalar(select(func.sum(Invoice.total)).where(Invoice.id.in_(ids))) == Decimal("0.60")
 
 
-def test_limite_exacto_de_fin_001(db):
-    supplier = supplier_by_email("proveedor1@poc.local")
-    contract = Contract(
-        supplier_id=supplier.id,
-        project_name="Limite",
-        project_leader="L",
-        authorized_technology="T",
-        authorized_amount=Decimal("100000.10"),
-        start_date=date(2026, 1, 1),
-        end_date=date(2026, 12, 31),
+def insert_contract(db, **values) -> int:
+    """Contrato insertado por SQL en la transaccion de la prueba: el portal ya no los crea (HU-24, P-02), pero sus
+    tablas y restricciones se conservan."""
+    row = {
+        "project_name": "Contrato conservado",
+        "authorized_amount": Decimal("1000.00"),
+        "start_date": date(2026, 1, 1),
+        "end_date": date(2026, 12, 31),
+        **values,
+    }
+    return db.scalar(
+        text(
+            "INSERT INTO contracts (supplier_id, project_name, project_leader, authorized_technology, "
+            "authorized_amount, currency, start_date, end_date, status, created_at, updated_at) "
+            "SELECT id, :project_name, 'Lider', 'T', :authorized_amount, 'MXN', :start_date, :end_date, 'ACTIVE', "
+            "now(), now() FROM suppliers ORDER BY id LIMIT 1 RETURNING id"
+        ),
+        row,
     )
-    db.add(contract)
-    db.flush()
-    db.expire(contract)
-    assert reconcile_amount(contract.authorized_amount, Decimal("100000.10")).result == "PASS"
+
+
+def insert_contract_document(db, contract_id: int) -> int:
+    return db.scalar(
+        text(
+            "INSERT INTO documents (contract_id, document_type, original_filename, stored_filename, path, mime_type, "
+            "file_size, sha256, uploaded_at, uploaded_by, processing_status, is_current) "
+            "SELECT :contract_id, 'SIGNED_CONTRACT', 'c.pdf', 'c.pdf', 'contracts/0/c.pdf', 'application/pdf', 1, "
+            "repeat('0', 64), now(), id, 'PROCESSED', true FROM users ORDER BY id LIMIT 1 RETURNING id"
+        ),
+        {"contract_id": contract_id},
+    )
+
+
+def test_tablas_de_contratos_conservadas(db):
+    contract_id = insert_contract(db)
+    assert insert_contract_document(db, contract_id)
+    assert db.scalar(text("SELECT count(*) FROM contracts WHERE id = :id"), {"id": contract_id}) == 1
 
 
 def test_uuid_unico_y_multiples_nulos(db):
@@ -135,7 +154,7 @@ def test_numero_unico_por_proveedor(db):
     new_invoice(db, invoice_number="NUMERO-X")
     db.flush()
     other = supplier_by_email("proveedor2@poc.local")
-    new_invoice(db, invoice_number="NUMERO-X", supplier_id=other.id, contract_id=None)
+    new_invoice(db, invoice_number="NUMERO-X", supplier_id=other.id)
     db.flush()  # otro proveedor: permitido
     new_invoice(db, invoice_number="NUMERO-X")
     with pytest.raises(IntegrityError, match='violates unique constraint "uq_invoices_supplier_number"'):
@@ -171,8 +190,15 @@ def test_numero_unico_por_proveedor(db):
     ],
 )
 def test_check_rechaza_valores_invalidos_por_sql_directo(db, sql):
+    # Las tablas de contratos se conservan sin uso (P-02): la prueba inserta el contrato que actualiza.
+    insert_contract(db)
     with pytest.raises(IntegrityError, match="violates check constraint"):
         db.execute(text(sql))
+
+
+def test_contrato_con_vigencia_invertida_rechazado(db):
+    with pytest.raises(IntegrityError, match='violates check constraint "ck_contracts_valid_period"'):
+        insert_contract(db, start_date=date(2026, 12, 31), end_date=date(2026, 1, 1))
 
 
 def test_estatus_de_clickbalance_retirado(db):
@@ -238,6 +264,7 @@ def test_cancelada_con_sus_datos(db):
 
 
 def test_enmienda_con_monto_no_positivo_rechazada(db):
+    insert_contract(db)
     with pytest.raises(IntegrityError, match='violates check constraint "ck_contract_amendments_new_amount_positive"'):
         db.execute(
             text(
@@ -307,27 +334,6 @@ def test_rutas_relativas_en_documentos():
     for path in paths:
         assert not path.startswith("/") and "\\" not in path and ":" not in path
         assert path.split("/")[0] in {"invoices", "suppliers", "contracts"}
-
-
-def test_contrato_con_vigencia_invertida_muestra_error(client):
-    supplier = supplier_by_email("proveedor1@poc.local")
-    login(client)
-    data = {
-        "supplier_id": supplier.id,
-        "project_name": "Vigencia invertida",
-        "project_leader": "Lider",
-        "authorized_technology": "Python",
-        "authorized_amount": "1000.00",
-        "currency": "MXN",
-        "start_date": "2026-12-31",
-        "end_date": "2026-01-01",
-        "csrf_token": csrf(client, "/contracts"),
-    }
-    response = client.post("/contracts", data=data)
-    assert response.status_code == 400
-    assert "la fecha de fin no puede ser anterior" in response.text
-    with SessionLocal() as session:
-        assert session.scalar(select(Contract).where(Contract.project_name == "Vigencia invertida")) is None
 
 
 def international(db, tax_id: str = "12-3456789", country: str = "US", **overrides) -> Supplier:
@@ -513,6 +519,7 @@ def test_requisito_del_contrato_con_clave_repetida(db):
 
 @pytest.mark.parametrize("owner", ["invoice_id", "supplier_id"])
 def test_documento_de_contrato_con_otro_dueno(db, owner):
+    insert_contract_document(db, insert_contract(db))
     invoice = invoice_by_number("A-CORRECTA")
     owner_id = invoice.id if owner == "invoice_id" else invoice.supplier_id
     with pytest.raises(IntegrityError, match='violates check constraint "ck_documents_contract_owner"'):
@@ -521,20 +528,12 @@ def test_documento_de_contrato_con_otro_dueno(db, owner):
 
 def test_borrado_sql_de_contrato_con_documentos(db):
     # Contrato sin facturas: solo su contrato firmado lo referencia.
-    contract = active_contract(
-        db,
-        supplier_by_email("proveedor1@poc.local").id,
-        project_name="Contrato con documentos",
-        project_leader="L",
-        authorized_technology="T",
-        authorized_amount=Decimal("1000.00"),
-        start_date=date(2026, 1, 1),
-        end_date=date(2026, 12, 31),
-    )
+    contract_id = insert_contract(db, project_name="Contrato con documentos")
+    insert_contract_document(db, contract_id)
     with pytest.raises(
         IntegrityError, match='violates RESTRICT setting of foreign key constraint "fk_documents_contract_id_contracts"'
     ):
-        db.execute(text("DELETE FROM contracts WHERE id = :id"), {"id": contract.id})
+        db.execute(text("DELETE FROM contracts WHERE id = :id"), {"id": contract_id})
 
 
 # Plantillas de correo (HU-05). updated_by con ON DELETE RESTRICT lo cubre la prueba general de pg_constraint.

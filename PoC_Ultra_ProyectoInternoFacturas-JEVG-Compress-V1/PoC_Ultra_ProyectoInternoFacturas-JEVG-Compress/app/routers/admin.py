@@ -32,7 +32,6 @@ from app.repositories.pagination import back_to, list_query, paginate, search
 from app.routers.common import templates
 from app.schemas import UserCreate, validation_message
 from app.services import catalog_service as catalogs
-from app.services import contract_requirements_service as contract_requirements
 from app.services import document_requirements_service as requirements
 from app.services import identity_service as identity
 from app.services import mail_layout, session_service
@@ -374,7 +373,6 @@ async def change_rule_status(
 # redirige con ?ok=<clave>. Por omision se listan solo los tipos activos; ?eliminados=1 agrega los eliminados.
 REQUIRED_DOCUMENTS_URL = "/admin/required-documents"
 SUPPLIER_REQUIREMENTS_URL = "/admin/supplier-requirements"
-CONTRACT_REQUIREMENTS_URL = "/admin/contract-requirements"
 REQUIRED_DOCUMENTS_NOTICES = {
     "saved": "Configuración guardada",
     "unchanged": "Sin cambios",
@@ -445,21 +443,6 @@ def _supplier_requirements_page(
     return templates.TemplateResponse(request, "admin/supplier_requirements.html", context, status_code=status_code)
 
 
-def _contract_requirements_page(
-    request: Request, db: Session, user, error: str | None = None, status_code: int = 200, notice: str | None = None
-):
-    types = contract_requirements.catalog(db)
-    context = {
-        "user": user,
-        **_type_lists(request, types),
-        "config_version": contract_requirements.config_version(types),
-        "levels": DOCUMENT_REQUIREMENT_LABELS,
-        "error": error,
-        "notice": notice,
-    }
-    return templates.TemplateResponse(request, "admin/contract_requirements.html", context, status_code=status_code)
-
-
 @dataclass(frozen=True)
 class RequirementScreen:
     """Una pantalla de Requisitos minimos: su URL, su servicio y como se pinta."""
@@ -471,11 +454,9 @@ class RequirementScreen:
 
 REQUIRED_DOCUMENTS = RequirementScreen(REQUIRED_DOCUMENTS_URL, requirements, _required_documents_page)
 SUPPLIER_REQUIREMENTS = RequirementScreen(SUPPLIER_REQUIREMENTS_URL, supplier_requirements, _supplier_requirements_page)
-CONTRACT_REQUIREMENTS = RequirementScreen(CONTRACT_REQUIREMENTS_URL, contract_requirements, _contract_requirements_page)
 REQUIREMENT_SCREENS = {
     "required-documents": REQUIRED_DOCUMENTS,
     "supplier-requirements": SUPPLIER_REQUIREMENTS,
-    "contract-requirements": CONTRACT_REQUIREMENTS,
 }
 TYPE_ACTIONS = {"delete": ("delete_type", "deleted"), "restore": ("restore_type", "restored")}
 
@@ -503,13 +484,6 @@ def supplier_requirements_page(
     return _supplier_requirements_page(request, db, user, notice=REQUIREMENT_NOTICES.get(ok))
 
 
-@router.get("/contract-requirements")
-def contract_requirements_page(
-    request: Request, ok: str = "", db: Session = Depends(get_db), user=Depends(require_roles(Role.ADMINISTRADOR))
-):
-    return _contract_requirements_page(request, db, user, notice=REQUIREMENT_NOTICES.get(ok))
-
-
 async def _save_levels(screen: RequirementScreen, request: Request, db: Session, user):
     await validate_csrf(request)
     form = {key: value for key, value in (await request.form()).items() if isinstance(value, str)}
@@ -533,13 +507,6 @@ async def save_supplier_requirements(
     request: Request, db: Session = Depends(get_db), user=Depends(require_roles(Role.ADMINISTRADOR))
 ):
     return await _save_levels(SUPPLIER_REQUIREMENTS, request, db, user)
-
-
-@router.post("/contract-requirements")
-async def save_contract_requirements(
-    request: Request, db: Session = Depends(get_db), user=Depends(require_roles(Role.ADMINISTRADOR))
-):
-    return await _save_levels(CONTRACT_REQUIREMENTS, request, db, user)
 
 
 async def _write_type(
@@ -632,40 +599,6 @@ async def update_supplier_requirement(
     return await _write_type(SUPPLIER_REQUIREMENTS, request, db, user, write, "updated")
 
 
-@router.post("/contract-requirements/types")
-async def create_contract_requirement(
-    request: Request,
-    name: str = Form(""),
-    description: str = Form(""),
-    requirement: str = Form("NOT_APPLICABLE"),
-    allows_multiple: str = Form(""),
-    db: Session = Depends(get_db),
-    user=Depends(require_roles(Role.ADMINISTRADOR)),
-):
-    def write() -> bool:
-        contract_requirements.create_type(
-            db, user.id, name, description, requirement=requirement, allows_multiple=allows_multiple == "true"
-        )
-        return True
-
-    return await _write_type(CONTRACT_REQUIREMENTS, request, db, user, write, "created")
-
-
-@router.post("/contract-requirements/types/{type_id}")
-async def update_contract_requirement(
-    type_id: int,
-    request: Request,
-    name: str = Form(""),
-    description: str = Form(""),
-    db: Session = Depends(get_db),
-    user=Depends(require_roles(Role.ADMINISTRADOR)),
-):
-    def write() -> bool:
-        return contract_requirements.update_type(db, type_id, user.id, name, description)
-
-    return await _write_type(CONTRACT_REQUIREMENTS, request, db, user, write, "updated")
-
-
 @router.post("/{screen_code}/types/{type_id}/{action}")
 async def change_type_status(
     screen_code: str,
@@ -675,7 +608,7 @@ async def change_type_status(
     db: Session = Depends(get_db),
     user=Depends(require_roles(Role.ADMINISTRADOR)),
 ):
-    """Eliminar (baja logica) o Restaurar un tipo de cualquiera de las tres pantallas de Requisitos minimos."""
+    """Eliminar (baja logica) o Restaurar un tipo de cualquiera de las pantallas de Requisitos minimos."""
     await validate_csrf(request)
     screen = REQUIREMENT_SCREENS.get(screen_code)
     if screen is None or action not in TYPE_ACTIONS:

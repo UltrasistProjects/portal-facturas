@@ -5,7 +5,7 @@ import { cargarDocumento, clicNavegando, enviarAValidacion, registrarFacturaNaci
 
 const PROVEEDOR = 'Tecnologia Integral del Centro SA de CV';
 const CORREO_PROVEEDOR = 'proveedor1@poc.local';
-const AVISO = 'Es importante que adjunte su “Complemento de Pago” a dicha factura pagada antes del';
+const AVISO = 'Es importante que adjunte su “Complemento de Pago” a dicha factura antes del';
 
 /** Fecha limite que muestra el bloque "Complemento de pago" ("… antes del dd/mm/aaaa HH:MM"). */
 async function fechaLimite(pagina: Page): Promise<string> {
@@ -90,16 +90,18 @@ test('HU-23 · Complemento de pagos', async ({ browser }, testInfo) => {
       'El PMO marca la factura como "Pagada"',
       async () => {
         const pmo = await hu.sesion('pmo');
-        await hu.paso(pmo, 'Marcar la casilla de confirmación y pulsar "Marcar como pagada"', `La factura pasa a "Pagada", se informa "Correo enviado a ${CORREO_PROVEEDOR}" y el complemento queda pendiente con su fecha límite.`, async () => {
+        await hu.paso(pmo, 'Pulsar "Programar pago", revisar la solicitud en JSON y confirmar', `La factura pasa a "Programado para pago", se informa "Correo enviado a ${CORREO_PROVEEDOR}" y el complemento queda pendiente con su fecha límite.`, async () => {
           await pmo.goto(`/invoices/${factura.id}`);
+          await pmo.locator('.page-heading').getByRole('button', { name: /Programar pago/ }).click();
           const panel = pmo.locator('#payment');
-          await expect(panel).toContainText(`Confirmo que la factura ${factura.numero} fue pagada. Se notificará al proveedor.`);
-          await panel.locator('#payment-confirm').check();
-          await hu.captura(pmo, 'confirmacion-de-pago', 'Panel "Pago" con la confirmación marcada.', { enfocar: panel });
-          await clicNavegando(pmo, panel.getByRole('button', { name: /Marcar como pagada/ }));
-          await expect(pmo.locator('.page-heading .status')).toHaveText('Pagada');
-          await expect(pmo.locator('#decision-result')).toHaveText(`Pagada. Correo enviado a ${CORREO_PROVEEDOR}`);
-          await expect(pmo.locator('#paid')).toContainText('Pagada el');
+          await expect(panel).toBeVisible();
+          await expect(panel).toContainText('"tipo": "PROGRAMACION_PAGO"');
+          await expect(panel).toContainText(`"numero": "${factura.numero}"`);
+          await hu.captura(pmo, 'confirmacion-de-pago', 'Ventana "Programar pago" con la solicitud en JSON.', { enfocar: panel.locator('.modal-content') });
+          await clicNavegando(pmo, panel.getByRole('button', { name: /Confirmar y programar pago/ }));
+          await expect(pmo.locator('.page-heading .status')).toHaveText('Programado para pago');
+          await expect(pmo.locator('#decision-result')).toHaveText(`Programado para pago. Correo enviado a ${CORREO_PROVEEDOR}`);
+          await expect(pmo.locator('#paid')).toContainText('Programado para pago el');
           await expect(pmo.locator('#complement')).toContainText('Pendiente: adjúntelo antes del');
           await expect(pmo.locator('#payment')).toHaveCount(0);
           factura.limite = await fechaLimite(pmo);
@@ -118,10 +120,10 @@ test('HU-23 · Complemento de pagos', async ({ browser }, testInfo) => {
       'Correo "Pagada" al proveedor con el aviso del Complemento de Pago (nacional PPD)',
       async () => {
         await hu.paso(null, 'Abrir el correo "Pagada" generado', `Va al correo del proveedor, indica que la factura ${factura.numero} ha sido pagada y pide adjuntar el Complemento de Pago antes de la fecha límite.`, async () => {
-          const correo = buscarCorreo(CORREO_PROVEEDOR, `Factura ${factura.numero} pagada`) as Correo;
+          const correo = buscarCorreo(CORREO_PROVEEDOR, `Factura ${factura.numero} programada para pago`) as Correo;
           expect(correo, 'No se encontró el correo "Pagada"').not.toBeNull();
           expect(correo.para).toEqual([CORREO_PROVEEDOR]);
-          expect(correo.texto).toContain(`Su factura número ${factura.numero} ha sido pagada.`);
+          expect(correo.texto).toContain(`Su factura número ${factura.numero} ha sido programada para pago.`);
           expect(correo.texto).toContain(`${AVISO} ${factura.limite}.`);
           await hu.capturaCorreo(correo, 'correo-pagada', `Correo "Pagada" al proveedor con el aviso del Complemento de Pago de ${factura.numero}.`);
           return `Para ${correo.para.join(', ')}; asunto "${correo.asunto}"; incluye "${AVISO} ${factura.limite}."`;
@@ -144,7 +146,7 @@ test('HU-23 · Complemento de pagos', async ({ browser }, testInfo) => {
         });
         await hu.paso(proveedor, `Abrir el detalle de ${factura.numero}`, 'Muestra "Pagada", el complemento pendiente, el enlace "Adjuntar Complemento de Pago" y ya no ofrece "Cancelar factura".', async () => {
           await proveedor.goto(`/invoices/${factura.id}`);
-          await expect(proveedor.locator('.page-heading .status')).toHaveText('Pagada');
+          await expect(proveedor.locator('.page-heading .status')).toHaveText('Programado para pago');
           await expect(proveedor.locator('#complement')).toContainText(`Pendiente: adjúntelo antes del ${factura.limite}`);
           await expect(proveedor.getByRole('link', { name: /Adjuntar Complemento de Pago/ })).toBeVisible();
           await expect(proveedor.locator('#cancellation')).toHaveCount(0);
@@ -221,7 +223,7 @@ test('HU-23 · Complemento de pagos', async ({ browser }, testInfo) => {
         await hu.paso(pmo, `Abrir el detalle de ${factura.numero} como PMO`, 'El historial registra "Pagada" con la fecha límite del complemento y "Complemento de pago adjuntado"; el bloque muestra "Adjuntado el …".', async () => {
           await pmo.goto(`/invoices/${factura.id}`);
           const historial = pmo.locator('#history');
-          await expect(historial).toContainText('Pagada');
+          await expect(historial).toContainText('Programado para pago');
           await expect(historial).toContainText(`Fecha límite del complemento: ${factura.limite}`);
           await expect(historial).toContainText('Complemento de pago adjuntado');
           await expect(pmo.locator('#complement')).toContainText('Adjuntado el');

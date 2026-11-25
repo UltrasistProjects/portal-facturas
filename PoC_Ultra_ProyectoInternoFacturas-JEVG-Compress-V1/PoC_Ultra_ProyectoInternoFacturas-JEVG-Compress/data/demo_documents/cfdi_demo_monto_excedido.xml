@@ -1,4 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- DOCUMENTO FICTICIO PARA PRUEBAS. NO ES UN CFDI TIMBRADO VALIDO. -->
-<cfdi:Comprobante xmlns:cfdi="http://www.sat.gob.mx/cfd/4" xmlns:tfd="http://www.sat.gob.mx/TimbreFiscalDigital" Version="4.0" Fecha="2026-08-17T10:30:00" SubTotal="118000.00" Total="136880.00" Moneda="MXN" FormaPago="99" MetodoPago="PPD" TipoDeComprobante="I"><cfdi:Emisor Rfc="TIC210101ABC" Nombre="PROVEEDOR DEMO"/><cfdi:Receptor Rfc="ULT940623AG0" Nombre="FERROMEX" DomicilioFiscalReceptor="03930" RegimenFiscalReceptor="601" UsoCFDI="G03"/><cfdi:Conceptos><cfdi:Concepto Cantidad="1" ValorUnitario="118000.00" Importe="118000.00" Descripcion="08 Servicios desarrollo Power Automate"/></cfdi:Conceptos><cfdi:Impuestos TotalImpuestosTrasladados="18880.00"/><cfdi:Complemento><tfd:TimbreFiscalDigital UUID="DEMO0003-0000-4000-8000-000000000003"/></cfdi:Complemento></cfdi:Comprobante>
-
+<cfdi:Comprobante xmlns:cfdi="http://www.sat.gob.mx/cfd/4" xmlns:tfd="http://www.sat.gob.mx/TimbreFiscalDigital" Version="4.0" Serie="A" Folio="1003" Fecha="2026-08-17T10:30:00" FormaPago="99" SubTotal="118000.00" Moneda="MXN" Total="136880.00" TipoDeComprobante="I" Exportacion="01" MetodoPago="PPD" LugarExpedicion="76000">
+  <cfdi:Emisor Rfc="TIC210101ABC" Nombre="TECNOLOGIA INTEGRAL DEL CENTRO SA DE CV" RegimenFiscal="601"/>
+  <cfdi:Receptor Rfc="IME010718PU3" Nombre="INTERMODAL MEXICO" DomicilioFiscalReceptor="11700" RegimenFiscalReceptor="601" UsoCFDI="G03"/>
+  <cfdi:Conceptos>
+    <cfdi:Concepto ClaveProdServ="81111500" Cantidad="1" ClaveUnidad="E48" Unidad="Servicio" Descripcion="08 Servicios desarrollo Power Automate (OC/45001001)" ValorUnitario="118000.00" Importe="118000.00" ObjetoImp="02"><cfdi:Impuestos><cfdi:Traslados><cfdi:Traslado Base="118000.00" Impuesto="002" TipoFactor="Tasa" TasaOCuota="0.160000" Importe="18880.00"/></cfdi:Traslados></cfdi:Impuestos></cfdi:Concepto>
+  </cfdi:Conceptos>
+  <cfdi:Impuestos TotalImpuestosTrasladados="18880.00"/>
+  <cfdi:Complemento><tfd:TimbreFiscalDigital Version="1.1" UUID="DEMO0003-0000-4000-8000-000000000003"/></cfdi:Complemento>
+</cfdi:Comprobante>

@@ -1,3 +1,4 @@
+import pytest
 from sqlalchemy import select
 
 from app.core.database import SessionLocal
@@ -16,7 +17,7 @@ def test_paginas_principales_renderizan(client):
         f"/invoices/{invoice.id}",
         "/suppliers",
         f"/suppliers/{supplier.id}",
-        "/contracts",
+        "/purchase-orders",
         "/admin/users",
         "/admin/rules",
         "/admin/audit",
@@ -27,26 +28,27 @@ def test_paginas_principales_renderizan(client):
         assert "Invoice Portal" in response.text
 
 
+def rule_status(db, invoice_id: int, code: str) -> str:
+    return db.scalar(
+        select(ValidationResult.status).where(
+            ValidationResult.invoice_id == invoice_id, ValidationResult.rule_code == code
+        )
+    )
+
+
 def test_seed_contiene_caso_pass_fail_y_audit():
+    """A-CORRECTA cuadra con su orden de compra; B-EXCEDE factura mas que su orden (HU-24)."""
     with SessionLocal() as db:
         correct = db.scalar(select(Invoice).where(Invoice.invoice_number == "A-CORRECTA"))
         exceeded = db.scalar(select(Invoice).where(Invoice.invoice_number == "B-EXCEDE"))
-        assert (
-            db.scalar(
-                select(ValidationResult).where(
-                    ValidationResult.invoice_id == correct.id, ValidationResult.rule_code == "FIN-001"
-                )
-            ).status
-            == "PASS"
-        )
-        assert (
-            db.scalar(
-                select(ValidationResult).where(
-                    ValidationResult.invoice_id == exceeded.id, ValidationResult.rule_code == "FIN-001"
-                )
-            ).status
-            == "FAIL"
-        )
+        assert [rule_status(db, correct.id, code) for code in ("OC-001", "OC-002", "OC-005", "OC-009")] == ["PASS"] * 4
+        assert [rule_status(db, exceeded.id, code) for code in ("OC-005", "OC-006", "OC-009")] == ["FAIL"] * 3
+        failures = db.scalars(
+            select(ValidationResult.rule_code).where(
+                ValidationResult.invoice_id == correct.id, ValidationResult.status == "FAIL"
+            )
+        ).all()
+        assert failures == []
         assert db.scalar(select(AuditLog.id).limit(1)) is not None
 
 
@@ -71,9 +73,10 @@ def test_seed_con_el_modelo_de_estatus_del_ers():
         assert (invoice.submitted_at is not None) == (status not in {"DRAFT", "UPLOADED"}), number
 
 
-def test_ai_mock_semantico_sin_red():
+def test_ai_mock_sin_red_ni_datos_inventados(tmp_path):
+    from app.services.ai import AnalyzerUnavailable
+
     analyzer = LocalMockAnalyzer()
-    result = analyzer.semantic_compare("Microsoft Power Platform", "08 Servicios desarrollo Power Automate")
     assert analyzer.health_check()["external_calls"] is False
-    assert result["result"] == "MATCH"
-    assert result["confidence"] == 0.93
+    with pytest.raises(AnalyzerUnavailable):
+        analyzer.extract_invoice(tmp_path / "escaneado.pdf")

@@ -1,5 +1,5 @@
-"""Factura del proveedor internacional: datos del Invoice, duplicados por nombre de archivo y validacion (HU-15 y
-HU-16, specs factura-internacional y motor-validacion)."""
+"""Factura del proveedor internacional: datos del Invoice con su orden de compra, duplicados por nombre de archivo y
+validacion (HU-15, HU-16 y HU-24, specs factura-internacional, motor-validacion y orden-compra)."""
 
 import re
 from datetime import date, datetime, timedelta, timezone
@@ -14,17 +14,27 @@ from app.core.config import settings
 from app.core.constants import InvoiceStatus, Role, SupplierOrigin, SupplierStatus, SupplierType
 from app.core.database import SessionLocal
 from app.core.timeutils import to_business
-from app.models import AuditLog, Contract, Document, Invoice, Supplier, User, ValidationResult, ValidationRule, now_utc
+from app.models import AuditLog, Document, Invoice, Supplier, User, ValidationResult, ValidationRule, now_utc
 from app.services.foreign_invoice_service import MSG_NOT_INTERNATIONAL
-from tests.conftest import active_contract, csrf, identity_account, invoice_by_number, login
+from tests.cfdi import item
+from tests.conftest import csrf, identity_account, invoice_by_number, login, supplier_by_email
 
 INTERNATIONAL = "proveedor3@poc.local"  # proveedor internacional demo del seed (D11)
-AMOUNTS = {"invoice_date": "2026-09-15", "subtotal": "1,000.00", "tax": "0.00", "total": "1000", "currency": "USD"}
+# Orden de compra sembrada del proveedor internacional demo (45009042); los envios usan una orden propia.
+AMOUNTS = {
+    "purchase_order_number": "45009042",
+    "invoice_date": "2026-09-15",
+    "subtotal": "1,000.00",
+    "tax": "0.00",
+    "total": "1000",
+    "currency": "USD",
+}
+FOREIGN_NAME = "Global Data Services Inc. (DEMO)"
 INVOICE_TEXT = [
     "INVOICE - Global Data Services Inc.",
     "Tax ID: 98-7654321",
-    "Bill to: FERROMEX, S.A. de C.V.",
-    "Av. Insurgentes Sur 1, Ciudad de Mexico, C.P. 03930",
+    "Bill to: INTERMODAL MEXICO, S.A. de C.V.",
+    "Av. Insurgentes Sur 1, Ciudad de Mexico, C.P. 11700",
     "Total USD 1,000.00",
 ]
 TXT = b"Documento de prueba"
@@ -44,25 +54,10 @@ def pdf(lines: list[str]) -> bytes:
     return content
 
 
-def contract_of(email: str) -> Contract:
-    with SessionLocal() as db:
-        supplier_id = db.scalar(select(User.supplier_id).where(User.email == email))
-        return db.scalar(select(Contract).where(Contract.supplier_id == supplier_id))
-
-
 def register(client, email: str = INTERNATIONAL, **overrides):
     """Alta de una factura con numero unico; devuelve (respuesta, numero)."""
-    contract = contract_of(email)
     number = f"HU15-{uuid4().hex[:10]}"
-    data = {
-        "contract_id": contract.id,
-        "invoice_number": number,
-        "service_period": "08/2026",
-        "project_name": contract.project_name,
-        **AMOUNTS,
-        **overrides,
-        "csrf_token": csrf(client, "/invoices/new"),
-    }
+    data = {"invoice_number": number, **AMOUNTS, **overrides, "csrf_token": csrf(client, "/invoices/new")}
     return client.post("/invoices/new", data=data, follow_redirects=False), number
 
 
@@ -82,11 +77,24 @@ def upload(client, invoice_id: int, document_type: str, filename: str, content: 
 
 
 def complete(client, invoice_id: int, invoice_pdf: bytes, filename: str | None = None) -> None:
-    """Invoice, orden de compra y Vo.Bo.: los obligatorios iniciales del internacional."""
+    """Invoice y Vo.Bo.: los obligatorios iniciales del internacional (la orden de compra ya no es un archivo)."""
     name = filename or f"INV-{uuid4().hex[:8]}.pdf"
     assert upload(client, invoice_id, "FOREIGN_INVOICE", name, invoice_pdf).status_code == 303
-    assert upload(client, invoice_id, "PURCHASE_ORDER", "oc.txt", TXT).status_code == 303
     assert upload(client, invoice_id, "APPROVAL", "vobo.txt", TXT).status_code == 303
+
+
+def foreign_order(purchase_orders, supplier_email: str = INTERNATIONAL, **changes):
+    """Orden de compra en USD del proveedor internacional, ligada por supplier_id, que cuadra con AMOUNTS."""
+    values = {
+        "rfc": "XEXX010101000",
+        "supplier_name": FOREIGN_NAME,
+        "total": "1000.00",
+        "taxes": "0.00",
+        "items": [item("DATA ANALYTICS CONSULTING", "1000.00", currency="USD")],
+        "supplier_id": supplier_by_email(supplier_email).id,
+        **changes,
+    }
+    return purchase_orders(**values)
 
 
 def post(client, path: str, data: dict | None = None):
@@ -128,7 +136,7 @@ def amount_audits(invoice_id: int) -> list[AuditLog]:
 
 @pytest.fixture()
 def other_international():
-    """Segundo proveedor internacional autorizado, con contrato en USD y usuario; se reutiliza entre pruebas."""
+    """Segundo proveedor internacional autorizado, con usuario; se reutiliza entre pruebas."""
     email = "otro.internacional@poc.local"
     with SessionLocal() as db:
         if db.scalar(select(User.id).where(User.email == email)) is None:
@@ -144,17 +152,6 @@ def other_international():
             )
             db.add(supplier)
             db.flush()
-            active_contract(
-                db,
-                supplier.id,
-                project_name="Consultoria Canada",
-                project_leader="Lider Demo",
-                authorized_technology="Data Analytics",
-                authorized_amount=Decimal("50000.00"),
-                currency="USD",
-                start_date=date(2026, 1, 1),
-                end_date=date(2026, 12, 31),
-            )
             db.add(
                 User(
                     name="Otro internacional",
@@ -174,8 +171,9 @@ def other_international():
 def test_formulario_internacional_con_datos_del_invoice(client):
     login(client, INTERNATIONAL)
     page = client.get("/invoices/new").text
-    assert "Datos del Invoice" in page and 'name="invoice_date"' in page
-    assert '<option value="USD" selected>' in page  # moneda del contrato preseleccionada
+    assert "Datos del Invoice" in page and 'name="invoice_date"' in page and 'name="purchase_order_number"' in page
+    for field in ("contract_id", "service_period", "project_name", "project_leader"):
+        assert f'name="{field}"' not in page
 
 
 def test_registro_de_un_invoice(client):
@@ -191,6 +189,15 @@ def test_registro_de_un_invoice(client):
         Decimal("1000.00"),
         "USD",
     )
+    assert (created.service_period, created.purchase_order_number, created.contract_id) == ("09/2026", "45009042", None)
+
+
+@pytest.mark.parametrize("number", ["", "PO-42", "12345", "12345678901"])
+def test_sin_numero_de_orden_de_compra(client, number):
+    login(client, INTERNATIONAL)
+    response, created = register(client, purchase_order_number=number)
+    assert response.status_code == 400 and "Capture el número de orden de compra" in response.text
+    assert invoice_by_number(created) is None
 
 
 def test_total_manipulado_por_el_cliente(client):
@@ -240,14 +247,11 @@ def test_varios_errores_juntos(client):
 
 def test_proveedor_nacional_sin_datos_del_invoice(client):
     login(client, "proveedor1@poc.local")
-    assert "Datos del Invoice" not in client.get("/invoices/new").text
-    created = new_invoice(client, "proveedor1@poc.local")  # los campos del Invoice se ignoran
-    assert (created.subtotal, created.total, created.currency, created.invoice_date) == (
-        Decimal("0.00"),
-        Decimal("0.00"),
-        "MXN",
-        None,
-    )
+    page = client.get("/invoices/new").text
+    assert "Datos del Invoice" not in page and 'name="pdf"' in page
+    response, number = register(client, "proveedor1@poc.local")  # sin archivos: el nacional registra por su PDF
+    assert response.status_code == 400 and "Adjunte el PDF de la factura" in response.text
+    assert invoice_by_number(number) is None
 
 
 # --- Edicion de los datos del Invoice -----------------------------------------------------------------------------
@@ -262,7 +266,29 @@ def test_formulario_en_la_carga_documental(client):
     created = new_invoice(client)
     page = client.get(f"/invoices/{created.id}/documents").text
     assert 'action="/invoices/' + str(created.id) + '/amounts"' in page
-    assert 'value="2026-09-15"' in page and 'value="1000.00"' in page
+    assert 'value="2026-09-15"' in page and 'value="1000.00"' in page and 'value="45009042"' in page
+
+
+def test_correccion_de_la_orden_de_compra(client):
+    login(client, INTERNATIONAL)
+    created = new_invoice(client)
+    assert edit(client, created.id, purchase_order_number="45009043").status_code == 303
+    assert invoice(created.id).purchase_order_number == "45009043"
+    [entry] = amount_audits(created.id)
+    assert entry.old_value == {"purchase_order_number": "45009042"}
+    assert entry.new_value == {"purchase_order_number": "45009043"}
+
+
+def test_orden_propuesta_desde_el_invoice(client):
+    login(client, INTERNATIONAL)
+    created = new_invoice(client)
+    with SessionLocal() as db:
+        db.execute(update(Invoice).where(Invoice.id == created.id).values(purchase_order_number=None))
+        db.commit()
+    upload(client, created.id, "FOREIGN_INVOICE", f"INV-{uuid4().hex[:6]}.pdf", pdf([*INVOICE_TEXT, "PO: OC/45009001"]))
+    page = client.get(f"/invoices/{created.id}/documents").text
+    assert 'name="purchase_order_number" class="form-control" inputmode="numeric"' in page
+    assert 'value="45009001"' in page
 
 
 def test_correccion_tras_observaciones(client):
@@ -324,7 +350,7 @@ def test_edicion_por_otro_rol(client):
 
 def test_edicion_de_factura_nacional(client):
     login(client, "proveedor1@poc.local")
-    created = new_invoice(client, "proveedor1@poc.local")
+    created = invoice_by_number("A-CORRECTA")
     response = edit(client, created.id)
     assert response.status_code == 400 and MSG_NOT_INTERNATIONAL in response.text
 
@@ -393,12 +419,21 @@ def test_duplicado_detectado_al_enviar(client):
 
 # --- Validacion internacional -------------------------------------------------------------------------------------
 
-NOT_FOR_INTERNATIONAL = [f"XML-{n:03d}" for n in range(1, 11)] + ["FIN-004", "SUP-003", "SUP-004"]
+NOT_FOR_INTERNATIONAL = [f"XML-{n:03d}" for n in range(1, 12)] + [
+    "PRV-001",
+    "PRV-002",
+    "PRV-003",
+    "FIN-004",
+    "SUP-003",
+    "SUP-004",
+]
+ORDER_PASS = ["OC-001", "OC-002", "OC-004", "OC-005", "OC-006", "OC-010", "OC-011", "OC-012"]
 
 
-def test_envio_de_extremo_a_extremo(client):
+def test_envio_de_extremo_a_extremo(client, purchase_orders):
+    order = foreign_order(purchase_orders)
     login(client, INTERNATIONAL)
-    created = new_invoice(client)
+    created = new_invoice(client, purchase_order_number=str(order.convenio))
     complete(client, created.id, pdf(INVOICE_TEXT))
     assert invoice(created.id).status == InvoiceStatus.UPLOADED
     response = post(client, f"/invoices/{created.id}/submit")
@@ -414,22 +449,28 @@ def test_envio_de_extremo_a_extremo(client):
     assert by_code["XML-001"].severity == "CRITICAL" and by_code["SUP-003"].severity == "ERROR"
     assert [by_code[c].status for c in ("INT-001", "INT-002", "INT-003", "FIN-007")] == ["PASS"] * 4
     assert by_code["INT-004"].status == "NOT_APPLICABLE"  # direccion vacia en la instalacion
-    assert (by_code["SEM-001"].status, by_code["SEM-001"].message) == (
-        "NOT_EVALUATED",
-        "Sin conceptos que comparar: el Invoice no es un CFDI",
-    )
     assert all(result.status != "FAIL" for result in by_code.values())
-    assert by_code["FIN-001"].status == "PASS" and by_code["FIN-003"].status == "PASS"
+    assert [by_code[code].status for code in ORDER_PASS] == ["PASS"] * len(ORDER_PASS)
+    assert (by_code["OC-003"].status, by_code["OC-003"].message) == (
+        "NOT_APPLICABLE",
+        "No aplica para proveedores internacionales",
+    )
+    for code in ("OC-007", "OC-008", "OC-009"):
+        assert (by_code[code].status, by_code[code].message) == ("NOT_APPLICABLE", "Sin partidas en el Invoice")
+    assert not {"SEM-001", "FIN-001", "FIN-003", "FIN-006", "SUP-002", "DOC-005"} & set(by_code)
+    assert sent.purchase_order_id == order.id
 
 
-def test_datos_ausentes_son_advertencias(client):
+def test_datos_ausentes_son_advertencias(client, purchase_orders):
+    order = foreign_order(purchase_orders)
     login(client, INTERNATIONAL)
-    created = new_invoice(client)
+    created = new_invoice(client, purchase_order_number=str(order.convenio))
     complete(client, created.id, pdf(["INVOICE without reference data", "Total 1,000.00"]))
     assert post(client, f"/invoices/{created.id}/submit").status_code == 303
     by_code = results(created.id)
     assert [by_code[c].status for c in ("INT-001", "INT-002", "INT-003")] == ["WARNING"] * 3
     assert by_code["INT-002"].message == "No se encontró la razón social de FERROMEX en el Invoice"
+    assert by_code["INT-002"].expected_value == "INTERMODAL MEXICO"
     assert invoice(created.id).status == InvoiceStatus.UNDER_REVIEW
 
 
@@ -478,14 +519,36 @@ def test_comparaciones_desactivadas_y_direccion(client, restore_validation_rules
     assert by_code["INT-004"].status == "PASS"  # sin acentos ni signos: "Ciudad de México" = "Ciudad de Mexico"
 
 
-def test_monto_excedido(client):
+def test_subtotal_distinto_de_la_orden(client, purchase_orders):
+    order = foreign_order(purchase_orders)
     login(client, INTERNATIONAL)
-    created = new_invoice(client, subtotal="25000.00", tax="0.00", total="25000.00")
+    created = new_invoice(client, subtotal="25000.00", tax="0.00", purchase_order_number=str(order.convenio))
     complete(client, created.id, pdf(INVOICE_TEXT))
     assert post(client, f"/invoices/{created.id}/submit").status_code == 409
-    fin001 = results(created.id)["FIN-001"]
-    assert (fin001.status, fin001.severity) == ("FAIL", "CRITICAL")
+    rule = results(created.id)["OC-005"]
+    assert (rule.status, rule.expected_value, rule.detected_value) == ("FAIL", "1000.00", "25000.00")
     assert invoice(created.id).status == InvoiceStatus.UPLOADED
+
+
+def test_orden_de_otro_proveedor(client, purchase_orders, other_international):
+    order = foreign_order(purchase_orders, other_international, supplier_name="Otro Proveedor Internacional LLC")
+    login(client, INTERNATIONAL)
+    created = new_invoice(client, purchase_order_number=str(order.convenio))
+    complete(client, created.id, pdf(INVOICE_TEXT))
+    assert post(client, f"/invoices/{created.id}/submit").status_code == 409
+    rule = results(created.id)["OC-002"]
+    assert (rule.status, rule.message) == ("FAIL", f"La orden de compra {order.convenio} no existe para el proveedor")
+
+
+def test_orden_sin_entrada_de_mercancia(client, purchase_orders):
+    pending = item("DATA ANALYTICS CONSULTING", "1000.00", currency="USD", delivered=False)
+    order = foreign_order(purchase_orders, items=[pending])
+    login(client, INTERNATIONAL)
+    created = new_invoice(client, purchase_order_number=str(order.convenio))
+    complete(client, created.id, pdf(INVOICE_TEXT))
+    assert post(client, f"/invoices/{created.id}/submit").status_code == 409
+    rule = results(created.id)["OC-011"]
+    assert (rule.status, rule.message) == ("FAIL", "Partidas sin entrada de mercancía: DATA ANALYTICS CONSULTING")
 
 
 def test_factura_nacional_sin_cambios(client):
@@ -495,7 +558,8 @@ def test_factura_nacional_sin_cambios(client):
     by_code = results(national.id)
     assert not {code for code in by_code if code.startswith("INT-")} and "FIN-007" not in by_code
     assert by_code["XML-001"].status == "PASS" and by_code["FIN-004"].status == "PASS"
-    assert by_code["SUP-003"].status == "PASS" and by_code["SEM-001"].status in {"PASS", "WARNING"}
+    assert by_code["SUP-003"].status == "PASS" and "SEM-001" not in by_code
+    assert by_code["OC-001"].status == "PASS" and by_code["PRV-001"].status == "PASS"
 
 
 # --- Detalle ------------------------------------------------------------------------------------------------------
@@ -508,6 +572,7 @@ def test_detalle_de_la_factura_internacional_demo(client):
     assert "Datos del Invoice" in page and "Datos CFDI" not in page
     assert "$18,000.00 USD" in page and "No aplica (Invoice)" in page
     assert "US · 98-7654321" in page and "Legible" in page
+    assert "<dt>Orden de compra</dt><dd>45009042</dd>" in page
 
 
 def test_detalle_nacional_con_datos_cfdi(client):

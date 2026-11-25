@@ -178,7 +178,7 @@ def test_autorizacion_de_proveedores_registrados(client, registered_suppliers):
     for row in rows:
         authorized = supplier(row.id)
         assert authorized.status == SupplierStatus.ACTIVE
-        sup001 = supplier_rules(authorized, None, Checklist(RequirementProfile.PERSONA_MORAL, []))[0]
+        sup001 = supplier_rules(authorized, Checklist(RequirementProfile.PERSONA_MORAL, []))[0]
         assert (sup001.rule_code, sup001.status) == ("SUP-001", "PASS")
     assert len(messages()) == 3
 

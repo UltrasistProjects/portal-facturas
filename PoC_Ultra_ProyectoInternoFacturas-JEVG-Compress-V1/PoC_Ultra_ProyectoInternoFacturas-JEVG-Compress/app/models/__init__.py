@@ -6,6 +6,7 @@ from enum import StrEnum
 from typing import Any
 
 from sqlalchemy import (
+    BigInteger,
     Boolean,
     CheckConstraint,
     Date,
@@ -145,7 +146,6 @@ class Supplier(Base):
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=now_utc)
     updated_at: Mapped[datetime] = mapped_column(UTCDateTime, default=now_utc, onupdate=now_utc)
     users: Mapped[list[User]] = relationship(back_populates="supplier")
-    contracts: Mapped[list[Contract]] = relationship(back_populates="supplier")
     invoices: Mapped[list[Invoice]] = relationship(back_populates="supplier")
 
     @property
@@ -155,6 +155,10 @@ class Supplier(Base):
 
 
 class Contract(Base):
+    """Obsoleto en la rama ferromex (HU-24): la factura se controla contra su orden de compra. La tabla se conserva
+    con sus datos y restricciones (P-02), sin relaciones ni uso en el portal; el modelo existe para que alembic check
+    no proponga borrarla."""
+
     __tablename__ = "contracts"
     __table_args__ = (
         CheckConstraint("authorized_amount > 0", name="ck_contracts_authorized_amount_positive"),
@@ -177,14 +181,10 @@ class Contract(Base):
     created_by: Mapped[int | None] = mapped_column(restrict("users.id"))
     updated_at: Mapped[datetime] = mapped_column(UTCDateTime, default=now_utc, onupdate=now_utc)
     updated_by: Mapped[int | None] = mapped_column(restrict("users.id"))
-    supplier: Mapped[Supplier] = relationship(back_populates="contracts")
-    amendments: Mapped[list[ContractAmendment]] = relationship(
-        back_populates="contract", order_by="ContractAmendment.id", passive_deletes="all"
-    )
 
 
 class ContractAmendment(Base):
-    """Cambio del monto autorizado. El monto solo se modifica mediante una enmienda auditada."""
+    """Obsoleto en la rama ferromex (HU-24): enmiendas del monto de un contrato. Se conserva sin uso (P-02)."""
 
     __tablename__ = "contract_amendments"
     __table_args__ = (CheckConstraint("new_amount > 0", name="ck_contract_amendments_new_amount_positive"),)
@@ -195,8 +195,39 @@ class ContractAmendment(Base):
     reason: Mapped[str] = mapped_column(Text)
     created_by: Mapped[int] = mapped_column(restrict("users.id"), index=True)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=now_utc)
-    contract: Mapped[Contract] = relationship(back_populates="amendments")
-    author: Mapped[User] = relationship()
+
+
+class PurchaseOrder(Base):
+    """Orden de compra de SAP (convenio) contra la que se valida la factura (HU-24). `data` conserva las partidas con
+    las etiquetas de SAP (seccion 6.2 de la HU) para la integracion futura; purchase_order_service valida su
+    estructura. Las facturas nacionales la encuentran por `rfc`; las internacionales, por `supplier_id` (su RFC en SAP
+    es generico)."""
+
+    __tablename__ = "purchase_orders"
+    __table_args__ = (
+        UniqueConstraint("convenio", name="uq_purchase_orders_convenio"),
+        CheckConstraint("convenio > 0", name="ck_purchase_orders_convenio_positive"),
+        CheckConstraint("total > 0", name="ck_purchase_orders_total_positive"),
+        CheckConstraint("taxes >= 0", name="ck_purchase_orders_taxes_non_negative"),
+        CheckConstraint("char_length(rfc) BETWEEN 12 AND 13", name="ck_purchase_orders_rfc_length"),
+        CheckConstraint(
+            "CASE WHEN jsonb_typeof(data -> 'items') = 'array' THEN jsonb_array_length(data -> 'items') >= 1"
+            " ELSE false END",
+            name="ck_purchase_orders_items",
+        ),
+    )
+    id: Mapped[int] = mapped_column(primary_key=True)
+    convenio: Mapped[int] = mapped_column(BigInteger)
+    rfc: Mapped[str] = mapped_column(String(13), index=True)
+    supplier_name: Mapped[str] = mapped_column(String(150))
+    order_date: Mapped[date] = mapped_column(Date)
+    total: Mapped[Decimal] = mapped_column(Money())
+    taxes: Mapped[Decimal] = mapped_column(Money())
+    data: Mapped[dict[str, Any]] = mapped_column(JSONB)
+    supplier_id: Mapped[int | None] = mapped_column(restrict("suppliers.id"), index=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=now_utc)
+    updated_at: Mapped[datetime] = mapped_column(UTCDateTime, default=now_utc, onupdate=now_utc)
+    invoices: Mapped[list[Invoice]] = relationship(back_populates="purchase_order", passive_deletes="all")
 
 
 INVOICE_CANCELLATION_CHECK = (
@@ -247,13 +278,18 @@ class Invoice(Base):
     internal_folio: Mapped[str] = mapped_column(String(30), unique=True, index=True)
     supplier_id: Mapped[int] = mapped_column(restrict("suppliers.id"))
     uploaded_by: Mapped[int] = mapped_column(restrict("users.id"), index=True)
+    # Obsoleta en la rama ferromex (HU-24): las facturas nuevas no tienen contrato; las anteriores lo conservan.
     contract_id: Mapped[int | None] = mapped_column(restrict("contracts.id"), index=True)
     invoice_number: Mapped[str] = mapped_column(String(100), index=True)
     uuid: Mapped[str | None] = mapped_column(String(50))
     invoice_date: Mapped[date | None] = mapped_column(Date)
     service_period: Mapped[str] = mapped_column(String(20))
+    # Numero de orden de compra detectado en los conceptos (nacional) o capturado (internacional), aunque la orden no
+    # exista; purchase_order_id es la liga que asigna el envio (HU-24).
     purchase_order_number: Mapped[str | None] = mapped_column(String(100))
-    project_name: Mapped[str] = mapped_column(String(200))
+    purchase_order_id: Mapped[int | None] = mapped_column(restrict("purchase_orders.id"), index=True)
+    # Sin uso desde HU-24: las facturas nuevas no tienen proyecto ni lider; se conservan los de las anteriores.
+    project_name: Mapped[str | None] = mapped_column(String(200))
     project_leader: Mapped[str | None] = mapped_column(String(150))
     subtotal: Mapped[Decimal] = mapped_column(Money(), default=Decimal("0"))
     tax: Mapped[Decimal] = mapped_column(Money(), default=Decimal("0"))
@@ -276,7 +312,7 @@ class Invoice(Base):
     payment_complement_due_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
     payment_complement_received_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
     supplier: Mapped[Supplier] = relationship(back_populates="invoices")
-    contract: Mapped[Contract | None] = relationship()
+    purchase_order: Mapped[PurchaseOrder | None] = relationship(back_populates="invoices")
     # Sin delete/delete-orphan: documentos, validaciones y revisiones son evidencia fiscal (AUDITORIA BD-12).
     documents: Mapped[list[Document]] = relationship(
         back_populates="invoice", cascade="save-update, merge", passive_deletes="all"
@@ -419,9 +455,8 @@ Index("uq_supplier_document_types_name_lower", func.lower(SupplierDocumentType.n
 
 
 class ContractDocumentType(Base):
-    """Requisito de alta del contrato (HU-22): documento del expediente del contrato, con un solo nivel de exigencia
-    para todos los contratos y si admite varios archivos. `code` es el valor de documents.document_type en los
-    documentos del contrato (contract_id); sin FK por la misma razon que InvoiceDocumentType."""
+    """Obsoleto en la rama ferromex (HU-24): requisitos de alta del contrato (HU-22). La tabla se conserva con sus
+    datos (P-02) y el portal ya no la lee ni la escribe."""
 
     __tablename__ = "contract_document_types"
     __table_args__ = (
@@ -645,6 +680,7 @@ __all__ = [
     "Supplier",
     "Contract",
     "ContractAmendment",
+    "PurchaseOrder",
     "Invoice",
     "Document",
     "FileContent",

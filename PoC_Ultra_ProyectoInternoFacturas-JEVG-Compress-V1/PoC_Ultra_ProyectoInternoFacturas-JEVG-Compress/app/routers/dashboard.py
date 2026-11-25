@@ -27,10 +27,10 @@ class KPI:
 
 # Indicadores de seguimiento por estatus (HU-17, EP-01 DT-01): cada uno abre el listado filtrado.
 STATUS_KPIS = [
-    (InvoiceStatus.UNDER_REVIEW, "Enviadas", "En validación del PMO", ""),
+    (InvoiceStatus.UNDER_REVIEW, "Enviadas", "En validación de cuentas por pagar", ""),
     (InvoiceStatus.REQUIRES_CORRECTION, "Observaciones", "Por corregir y reenviar", "warning"),
-    (InvoiceStatus.ACCEPTED, "Autorizadas", "Para su pago", "success"),
-    (InvoiceStatus.PAID, "Pagadas", "Pago registrado", "success"),
+    (InvoiceStatus.ACCEPTED, "Autorizadas", "Por programar su pago", "success"),
+    (InvoiceStatus.PAID, "Programado para pago", "Pago programado", "success"),
     (InvoiceStatus.REJECTED, "Rechazadas", "Decisión definitiva", "danger"),
     (InvoiceStatus.CANCELLED, "Canceladas", "Con acuse de cancelación", "muted"),
 ]

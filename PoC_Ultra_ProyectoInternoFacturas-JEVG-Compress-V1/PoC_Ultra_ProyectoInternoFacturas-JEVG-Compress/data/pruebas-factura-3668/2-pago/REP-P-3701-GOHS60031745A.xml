@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- DOCUMENTO FICTICIO PARA PRUEBAS. NO ES UN CFDI TIMBRADO VALIDO. -->
+<cfdi:Comprobante xmlns:cfdi="http://www.sat.gob.mx/cfd/4" xmlns:pago20="http://www.sat.gob.mx/Pagos20" xmlns:tfd="http://www.sat.gob.mx/TimbreFiscalDigital" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.sat.gob.mx/cfd/4 http://www.sat.gob.mx/sitio_internet/cfd/4/cfdv40.xsd http://www.sat.gob.mx/Pagos20 http://www.sat.gob.mx/sitio_internet/cfd/Pagos/Pagos20.xsd" Version="4.0" Serie="P" Folio="3701" Fecha="2026-02-04T10:12:08" SubTotal="0" Moneda="XXX" Total="0" TipoDeComprobante="P" Exportacion="01" LugarExpedicion="36100" NoCertificado="00001000000500000001" Certificado="" Sello="">
+  <cfdi:Emisor Rfc="GOHS60031745A" Nombre="SOCORRO PATRICIA GONZALEZ HERNANDEZ" RegimenFiscal="612"/>
+  <cfdi:Receptor Rfc="IME010718PU3" Nombre="INTERMODAL MEXICO" DomicilioFiscalReceptor="11700" RegimenFiscalReceptor="601" UsoCFDI="CP01"/>
+  <cfdi:Conceptos>
+    <cfdi:Concepto ClaveProdServ="84111506" Cantidad="1" ClaveUnidad="ACT" Descripcion="Pago" ValorUnitario="0" Importe="0" ObjetoImp="01"/>
+  </cfdi:Conceptos>
+  <cfdi:Complemento>
+    <pago20:Pagos Version="2.0">
+      <pago20:Totales TotalTrasladosBaseIVA16="3559.05" TotalTrasladosImpuestoIVA16="569.45" MontoTotalPagos="4128.50"/>
+      <pago20:Pago FechaPago="2026-02-02T12:00:00" FormaDePagoP="03" MonedaP="MXN" TipoCambioP="1" Monto="4128.50">
+        <pago20:DoctoRelacionado IdDocumento="A328F91A-DDDD-4624-89AC-877819F5B540" Folio="3668" MonedaDR="MXN" EquivalenciaDR="1" NumParcialidad="1" ImpSaldoAnt="4128.50" ImpPagado="4128.50" ImpSaldoInsoluto="0.00" ObjetoImpDR="02">
+          <pago20:ImpuestosDR><pago20:TrasladosDR><pago20:TrasladoDR BaseDR="3559.05" ImpuestoDR="002" TipoFactorDR="Tasa" TasaOCuotaDR="0.160000" ImporteDR="569.45"/></pago20:TrasladosDR></pago20:ImpuestosDR>
+        </pago20:DoctoRelacionado>
+        <pago20:ImpuestosP><pago20:TrasladosP><pago20:TrasladoP BaseP="3559.05" ImpuestoP="002" TipoFactorP="Tasa" TasaOCuotaP="0.160000" ImporteP="569.45"/></pago20:TrasladosP></pago20:ImpuestosP>
+      </pago20:Pago>
+    </pago20:Pagos>
+    <tfd:TimbreFiscalDigital Version="1.1" UUID="6B0E2C47-91D3-4A8F-B5E6-3C8D17A92F40" FechaTimbrado="2026-02-04T10:12:41" RfcProvCertif="SAT970701NN3" SelloCFD="" NoCertificadoSAT="00001000000500000002" SelloSAT=""/>
+  </cfdi:Complemento>
+</cfdi:Comprobante>

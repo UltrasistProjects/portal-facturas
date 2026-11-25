@@ -1,17 +1,11 @@
-from datetime import date
-
-from app.core.constants import ContractStatus, SupplierOrigin, SupplierStatus
+from app.core.constants import SupplierOrigin, SupplierStatus
 from app.rules.base import NOT_FOR_INTERNATIONAL, not_applicable, outcome
 
 
-def supplier_rules(supplier, contract, checklist):
+def supplier_rules(supplier, checklist):
     """`checklist` es el de supplier_requirements_service: los requisitos de alta del proveedor con la configuracion
-    vigente (HU-21). SUP-003 exige los mismos requisitos que la autorizacion."""
-    active_contract = bool(
-        contract
-        and contract.status == ContractStatus.ACTIVE
-        and contract.start_date <= date.today() <= contract.end_date
-    )
+    vigente (HU-21). SUP-003 exige los mismos requisitos que la autorizacion. SUP-002 (contrato vigente) se retiro con
+    HU-24."""
     international = supplier.origin == SupplierOrigin.INTERNATIONAL
     if international and not checklist.has_exigible:
         # Sin requisitos de alta exigibles para el internacional (P-06 de HU-21), como antes de HU-21.
@@ -47,7 +41,6 @@ def supplier_rules(supplier, contract, checklist):
             "Proveedor activo",
             "Proveedor inactivo",
         ),
-        outcome("SUP-002", "SUP", active_contract, "CRITICAL", "Contrato vigente", "Contrato no vigente"),
         minimum,
         validity,
     ]

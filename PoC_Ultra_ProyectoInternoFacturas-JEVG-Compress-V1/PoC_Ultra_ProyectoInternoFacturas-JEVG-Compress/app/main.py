@@ -17,7 +17,7 @@ from app.core.middleware import (
     security_headers,
 )
 from app.core.startup import run_startup_checks
-from app.routers import admin, auth, contracts, dashboard, invoices, suppliers
+from app.routers import admin, auth, dashboard, invoices, purchase_orders, suppliers
 
 configure_logging(settings.log_dir, settings.debug)
 logger = logging.getLogger(__name__)
@@ -47,7 +47,7 @@ app.add_middleware(
 app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(RequestContextMiddleware)
 app.mount("/static", StaticFiles(directory=BASE_DIR / "app" / "static"), name="static")
-for router in (auth.router, dashboard.router, invoices.router, suppliers.router, contracts.router, admin.router):
+for router in (auth.router, dashboard.router, invoices.router, suppliers.router, purchase_orders.router, admin.router):
     app.include_router(router)
 
 

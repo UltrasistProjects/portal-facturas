@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 
 MSG_CONFIRM = "Confirme la cancelación"
 MSG_ALREADY_CANCELLED = "La factura ya está cancelada"
-MSG_PAID = "Una factura pagada no se puede cancelar"
+MSG_PAID = "Una factura programada para pago no se puede cancelar"
 ENTITY = "Invoice"
 
 

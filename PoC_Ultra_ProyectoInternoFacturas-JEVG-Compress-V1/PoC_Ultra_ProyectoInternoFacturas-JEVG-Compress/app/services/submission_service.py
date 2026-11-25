@@ -46,8 +46,8 @@ def submit_invoice(db: Session, invoice: Invoice, user_id: int) -> SubmissionRes
 
     Orden: bloqueo de fila, estatus editable (409 si no), complementos de pago vencidos del proveedor (409, HU
     Complemento de Pagos), recalculo de "Borrador"/"Cargada" (en "Borrador" no se ejecuta el motor), motor y, sin
-    FAIL, transicion a UNDER_REVIEW (asigna submitted_at; verifica de nuevo los archivos obligatorios) e
-    INVOICE_SUBMITTED."""
+    FAIL, transicion a UNDER_REVIEW (asigna submitted_at; verifica de nuevo los archivos obligatorios), liga de la
+    orden de compra e INVOICE_SUBMITTED."""
     lock_invoice(db, invoice)
     if not is_editable(invoice):
         raise BusinessRuleError(MSG_NOT_SUBMITTABLE)
@@ -61,5 +61,10 @@ def submit_invoice(db: Session, invoice: Invoice, user_id: int) -> SubmissionRes
     if failures:
         return SubmissionResult(SubmissionOutcome.RULES_FAILED, failures)
     transition_invoice(db, invoice, InvoiceStatus.UNDER_REVIEW, user_id)
+    # La factura enviada queda ligada a la orden de compra que resolvio el motor (HU-24, RD-15). Sin FAIL, OC-001 y
+    # OC-002 pasaron, asi que hay orden.
+    order = outcome.get("purchase_order")
+    if order is not None:
+        invoice.purchase_order_id = order.id
     audit(db, "INVOICE_SUBMITTED", "Invoice", invoice.id, user_id)
     return SubmissionResult(SubmissionOutcome.SUBMITTED)

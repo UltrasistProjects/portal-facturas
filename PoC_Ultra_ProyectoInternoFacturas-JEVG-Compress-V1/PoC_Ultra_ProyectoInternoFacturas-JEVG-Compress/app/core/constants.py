@@ -1,4 +1,5 @@
 from datetime import timedelta
+from decimal import Decimal
 from enum import StrEnum
 
 
@@ -7,6 +8,12 @@ class Role(StrEnum):
     ADMINISTRADOR = "Administrador"
     PROVEEDOR = "Proveedor"
     PMO = "PMO"
+
+
+# Nombre visible de cada rol. En la rama ferromex el PMO se presenta como "Analista de cuentas por pagar"; la clave
+# "PMO" sigue siendo la de users.role y la del realm role de Keycloak.
+PMO_LABEL = "Analista de cuentas por pagar"
+ROLE_LABELS = {Role.ADMINISTRADOR: "Administrador", Role.PROVEEDOR: "Proveedor", Role.PMO: PMO_LABEL}
 
 
 class SupplierType(StrEnum):
@@ -85,17 +92,12 @@ REQUIREMENT_PROFILE_PLURALS = {
 
 
 class ContractStatus(StrEnum):
-    # El alta crea el contrato Registrado; solo la activacion, con sus requisitos completos, lo pasa a Activo (HU-22).
+    """Obsoleto en la rama ferromex (HU-24): el portal ya no usa contratos. Se conserva porque define el CHECK de
+    contracts.status, tabla que se conserva con sus datos (P-02)."""
+
     REGISTERED = "REGISTERED"
     ACTIVE = "ACTIVE"
     INACTIVE = "INACTIVE"
-
-
-CONTRACT_STATUS_LABELS = {
-    ContractStatus.REGISTERED: "Registrado",
-    ContractStatus.ACTIVE: "Activo",
-    ContractStatus.INACTIVE: "Inactivo",
-}
 
 
 class ProcessingStatus(StrEnum):
@@ -128,7 +130,9 @@ STATUS_LABELS = {
     InvoiceStatus.REJECTED: "Rechazada",
     InvoiceStatus.REQUIRES_CORRECTION: "Observaciones",
     InvoiceStatus.CANCELLED: "Cancelada",
-    InvoiceStatus.PAID: "Pagada",
+    # Ferromex: el pago se programa en el portal (solicitud a SAP) en lugar de registrarse como hecho. La clave PAID
+    # se conserva; cambia la etiqueta.
+    InvoiceStatus.PAID: "Programado para pago",
 }
 
 # Plazo que tiene Recepcion de Facturas para aceptar ante el SAT la cancelacion del CFDI (HU-14): horas naturales
@@ -240,6 +244,47 @@ ALLOWED_TRANSITIONS: dict[InvoiceStatus, set[InvoiceStatus]] = {
 }
 
 
+# Orden de compra (HU-24). Etiquetas de SAP de cada partida en purchase_orders.data["items"] que exigen las reglas OC
+# (seccion 6.2 de la HU); las demas (Material, Fe.Entrega, Grupo.Art, Almacen) solo se muestran.
+PO_TEXT, PO_QUANTITY, PO_UNIT, PO_NET_PRICE, PO_CURRENCY = (
+    "Txt.brv",
+    "Ctd.Pedido",
+    "Unidad.Pedido",
+    "Prc.Neto",
+    "Moneda",
+)
+PO_MATERIAL_DOC, PO_POSTING_DATE = "Docto Material", "Fecha Conta"
+PURCHASE_ORDER_ITEM_KEYS = (PO_TEXT, PO_QUANTITY, PO_UNIT, PO_NET_PRICE, PO_CURRENCY)
+# Todas las etiquetas de una partida, en el orden en que se muestran.
+PURCHASE_ORDER_ITEM_LABELS = (
+    ("Material", "Material"),
+    (PO_TEXT, "Txt.brv"),
+    (PO_QUANTITY, "Ctd. pedido"),
+    (PO_UNIT, "Unidad"),
+    ("Fe.Entrega", "Fe. entrega"),
+    (PO_NET_PRICE, "Prc. neto"),
+    (PO_CURRENCY, "Moneda"),
+    ("Grupo.Art", "Grupo art."),
+    ("Almacen", "Almacén"),
+    (PO_MATERIAL_DOC, "Docto. material"),
+    (PO_POSTING_DATE, "Fecha contab."),
+)
+# Unidad de SAP -> unidades equivalentes en la factura (ClaveUnidad o Unidad del CFDI), sin distinguir mayusculas
+# (RD-10, seccion 6.5 de la HU). Valores iniciales mientras negocio no defina la tabla oficial (P-10).
+UNIT_EQUIVALENCES: dict[str, frozenset[str]] = {
+    "PZA": frozenset({"H87", "PZ", "PZA", "PIEZA"}),
+    "SER": frozenset({"E48", "SERV", "SERVICIO"}),
+    "KG": frozenset({"KGM", "KG"}),
+    "LT": frozenset({"LTR", "L", "LT"}),
+    "M": frozenset({"MTR", "M"}),
+    "ACT": frozenset({"ACT", "ACTIVIDAD"}),
+}
+# Tolerancia de redondeo al comparar montos de la factura con la orden de compra (RD-12, P-12).
+AMOUNT_TOLERANCE = Decimal("0.01")
+# IVA que se compara con los impuestos de la orden de compra (RD-13): traslado 002 a la tasa 0.160000.
+IVA_TAX, IVA_RATE = "002", Decimal("0.160000")
+
+
 # Pesos del score por severidad. Los valores esperados de las reglas viven en Reglas de Validacion (tabla
 # validation_rules, por origen); las monedas aceptadas, en el catalogo de monedas (HU-07).
 BUSINESS_RULES = {
@@ -253,9 +298,6 @@ BUSINESS_RULES = {
 QUOTATION_DOCUMENT = "ECONOMIC_PROPOSAL"
 # Documentos con vigencia: advertencia (SUP-004) si su fecha tiene mas de tres meses; no impiden la autorizacion.
 DATED_SUPPLIER_DOCUMENTS = {"TAX_STATUS", "SAT_OPINION", "ADDRESS_PROOF", "LEGAL_REP_ADDRESS_PROOF", "BANK_STATEMENT"}
-
-# Requisitos de alta del contrato (HU-22): el catalogo vive en contract_document_types. Clave del contrato firmado.
-SIGNED_CONTRACT_DOCUMENT = "SIGNED_CONTRACT"
 
 
 class NotificationEvent(StrEnum):

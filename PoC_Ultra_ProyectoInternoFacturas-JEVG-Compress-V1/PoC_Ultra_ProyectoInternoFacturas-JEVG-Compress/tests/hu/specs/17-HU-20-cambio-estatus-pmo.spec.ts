@@ -186,7 +186,7 @@ test('HU-20 · Cambio de estatus de factura', async ({ browser }, testInfo) => {
         await pmo.goto(`/invoices/${n1.id}`);
         await expect(pmo.locator('#decision')).toHaveCount(0);
         await expect(pmo.getByRole('link', { name: /Decidir/ })).toHaveCount(0);
-        await expect(pmo.locator('#history')).toContainText('PMO Demo');
+        await expect(pmo.locator('#history')).toContainText('Analista CxP Demo');
         await hu.captura(pmo, 'historial-decision', 'Historial de la factura autorizada, sin panel de decisión.', { enfocar: pmo.locator('#history') });
         return `Sin panel de decisión; historial: ${(await pmo.locator('#history ol').innerText()).replace(/\s+/g, ' ')}.`;
       });

@@ -5,7 +5,7 @@ severidad y el tipo de su valor esperado. La tabla guarda lo que el Administrado
 baja logica); el motor y la pantalla leen ambas cosas con validation_rules_service.rule_set, de modo que lo que se ve
 es exactamente lo que se aplica.
 
-Las demas reglas del motor (DOC, SUP, FIN, CON, DAT, SEM y XML-001, XML-006, XML-007 y XML-008) no se configuran.
+Las demas reglas del motor (DOC, PRV, SUP, FIN, DAT, OC y XML-001, XML-006, XML-007 y XML-008) no se configuran.
 XML-007 compara la moneda con el catalogo de monedas: es la regla inviolable de la moneda y no se puede eliminar.
 """
 
@@ -155,10 +155,12 @@ class ConfiguredRule:
 
 @dataclass(frozen=True)
 class RuleSet:
-    """Reglas de un origen que aplica una prevalidacion, y las monedas activas del catalogo (XML-007)."""
+    """Reglas de un origen que aplica una prevalidacion, las monedas activas del catalogo (XML-007) y los regimenes
+    fiscales activos (PRV-003)."""
 
     rules: Mapping[str, ConfiguredRule] = field(default_factory=dict)
     currencies: frozenset[str] = frozenset()
+    tax_regimes: frozenset[str] = frozenset()
 
     def active(self, code: str) -> bool:
         rule = self.rules.get(code)

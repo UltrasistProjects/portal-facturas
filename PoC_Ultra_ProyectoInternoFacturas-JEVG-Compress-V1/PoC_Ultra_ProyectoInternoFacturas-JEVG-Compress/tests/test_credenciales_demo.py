@@ -125,3 +125,33 @@ def test_desarrollo_no_aplica_verificaciones_de_produccion(monkeypatch):
     monkeypatch.setattr(settings, "app_env", "development")
     with SessionLocal() as db:
         assert startup_problems(settings, db) == []
+
+
+def test_seed_reutiliza_la_cuenta_demo_existente(keycloak, monkeypatch):
+    """Al reconstruir la demo (reset_demo) la cuenta demo ya existe con la contrasena de la demo, que la politica
+    passwordHistory del realm no deja volver a poner: primero pasa por una aleatoria y despues recibe la de la demo."""
+    from app.core.constants import Role
+    from scripts.seed_db import demo_user
+
+    account = keycloak.add_account("historial-demo@poc.local")
+    applied = []
+    original = keycloak.set_password
+
+    def record(user_id, password, *, temporary):
+        applied.append(password)
+        original(user_id, password, temporary=temporary)
+
+    monkeypatch.setattr(keycloak, "set_password", record)
+    with SessionLocal() as db:
+        user = demo_user(
+            db,
+            keycloak,
+            name="Historial",
+            email=account.email,
+            role=Role.PMO,
+            password="Demo#Historial1",
+            temporary=False,
+        )
+    assert user.keycloak_sub == account.id
+    assert len(applied) == 2 and applied[0] != "Demo#Historial1" and applied[1] == "Demo#Historial1"
+    assert keycloak.accounts[account.id].required_actions == []

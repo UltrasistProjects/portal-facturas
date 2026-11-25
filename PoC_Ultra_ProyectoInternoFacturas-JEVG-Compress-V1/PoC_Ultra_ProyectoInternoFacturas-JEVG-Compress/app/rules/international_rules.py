@@ -6,10 +6,10 @@ FIN-007 si bloquea: es el control de duplicados del Invoice, que no tiene UUID.
 """
 
 import re
-import unicodedata
 
 from app.rules.base import not_applicable, outcome
 from app.rules.definitions import RuleSet
+from app.rules.text import compact
 from app.rules.xml_rules import DISABLED
 from app.schemas import ValidationOutcome
 
@@ -18,13 +18,6 @@ INT_CODES = ("INT-001", "INT-002", "INT-003", "INT-004")
 UNREADABLE = "No se pudo leer el texto del Invoice"
 NO_VALUE = "Sin dato que buscar"
 FOUND, NOT_FOUND = "Encontrado en el Invoice", "No encontrado"
-
-
-def compact(value: str | None) -> str:
-    """Texto comparable: sin acentos, en minusculas y solo con letras y digitos. Asi "FERROMEX, S.A. de C.V."
-    coincide con "FERROMEX SA DE CV" y "98-7654321" con "987654321"."""
-    plain = "".join(c for c in unicodedata.normalize("NFKD", value or "") if not unicodedata.combining(c))
-    return re.sub(r"[^0-9a-z]", "", plain.casefold())
 
 
 def _search(code: str, value: str, haystack: str, message_pass: str, message_fail: str) -> ValidationOutcome:

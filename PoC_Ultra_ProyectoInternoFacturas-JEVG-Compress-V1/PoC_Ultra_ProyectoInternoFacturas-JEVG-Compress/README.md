@@ -2,13 +2,13 @@
 
 Portal local de facturación y prevalidación de proveedores para FERROMEX. Recibe expedientes, extrae CFDI 4.0, aplica reglas determinísticas, presenta una matriz de evidencia y soporta revisión administrativa con trazabilidad completa.
 
-> **Datos exclusivamente DEMO.** Los RFC, XML, contratos, nombres y documentos incluidos son sintéticos, no tienen validez fiscal o legal y no representan personas reales.
+> **Datos exclusivamente DEMO.** Los RFC, XML, órdenes de compra, nombres y documentos incluidos son sintéticos y no tienen validez fiscal o legal. La excepción es el ejemplo de la solicitud de FERROMEX (HU-24): la factura 3668, su orden de compra 25704872 y su emisor (el proveedor persona física demo) reproducen el documento de negocio, sólo para las pruebas de la rama `ferromex`.
 
 ## Principio de arquitectura
 
 La solución separa cuatro responsabilidades:
 
-1. **Reglas Python:** XML, RFC, documentos, fechas, montos, duplicados, contrato y transiciones.
+1. **Reglas Python:** XML y PDF del CFDI, RFC, documentos, fechas, montos, duplicados, orden de compra y transiciones.
 2. **Extracción documental:** parser CFDI con `lxml` y PDF con PyMuPDF.
 3. **AI semántica:** interfaz `DocumentAnalyzer`; por defecto usa un mock local reproducible.
 4. **Human in the loop:** sólo un usuario `PMO` o `Administrador` puede registrar la decisión final.
@@ -269,9 +269,9 @@ app/
   core/          configuración, seguridad, DB, enums y logging
   models/        entidades SQLAlchemy
   repositories/ consultas con alcance por usuario
-  routers/       auth, dashboard, facturas, proveedores, contratos y admin
-  rules/         reglas DOC/XML/SUP/CON/FIN/DAT/SEM
-  services/      storage, XML, PDF, conciliación, score, auditoría, workflow y notificaciones por correo
+  routers/       auth, dashboard, facturas, proveedores, órdenes de compra y admin
+  rules/         reglas DOC/XML/PRV/SUP/FIN/DAT/OC/INT
+  services/      storage, XML, PDF (extracción de la factura), órdenes de compra, score, auditoría, workflow y correo
     ai/          interfaz, mock y adaptadores Azure
   templates/     interfaz Jinja server-rendered
   static/        CSS y JavaScript Vanilla
@@ -286,9 +286,9 @@ tests/           pruebas críticas automatizadas
 
 ## Flujo funcional
 
-Login → alta de factura → carga/reemplazo documental → "Verificar" (opcional) → "Enviar a validación" (parser XML/PDF, reglas, score y evidencia) → decisión del PMO: autorizar, rechazar u observaciones, con su correo (Recepción de Facturas o el proveedor) → el PMO marca la factura autorizada como pagada y el proveedor recibe el aviso; si es nacional con método PPD, adjunta su Complemento de Pago y Recepción de Facturas recibe el aviso. Antes del pago, el proveedor puede cancelar la factura con su acuse; Recepción de Facturas recibe el aviso.
+Login → registro de la factura por sus archivos (PDF y, si lo hay, XML) → revisión de los datos leídos junto a la imagen del PDF y carga de soportes → "Verificar" (opcional) → "Enviar a validación" (reglas, validación contra la orden de compra, score y evidencia) → decisión del PMO: autorizar, rechazar u observaciones, con su correo (Recepción de Facturas o el proveedor) → el PMO marca la factura autorizada como pagada y el proveedor recibe el aviso; si es nacional con método PPD, adjunta su Complemento de Pago y Recepción de Facturas recibe el aviso. Antes del pago, el proveedor puede cancelar la factura con su acuse; Recepción de Facturas recibe el aviso.
 
-El proveedor registra, carga, verifica y envía sus facturas, y sólo ve las suyas. `PMO` revisa y decide. `Administrador` añade administración de usuarios, proveedores, contratos, reglas visibles y Audit Log. `PMO` y `Administrador` consultan las facturas y descargan sus documentos, pero no las registran, cargan, verifican ni envían (403).
+El proveedor registra, carga, verifica y envía sus facturas, y sólo ve las suyas. `PMO` revisa y decide; en la rama `ferromex` se muestra como **Analista de cuentas por pagar** (la clave del rol en la base y en Keycloak sigue siendo `PMO`). `PMO` y `Administrador` consultan, dan de alta y editan las órdenes de compra; `Administrador` añade administración de usuarios, proveedores, reglas visibles y Audit Log. `PMO` y `Administrador` consultan las facturas y descargan sus documentos, pero no las registran, cargan, verifican ni envían (403).
 
 **Formularios y confirmaciones.** Con JavaScript (`form_validation.js`, en todas las páginas), los errores de validación aparecen en español debajo de cada campo, en lugar de la burbuja del navegador. Al enviar se marcan todos y el foco va al primero. Un campo se valida al salir de él con un valor cambiado; desde que muestra un error, el mensaje se actualiza al escribir y desaparece cuando el valor es válido. Las reglas siguen siendo los atributos de cada campo (`required`, `pattern`, `minlength`, `min`, `step`, `type`): el script sólo cambia cómo se muestran, y el servidor valida igual. Las confirmaciones usan modales de Bootstrap, nunca `alert`, `confirm` ni `prompt`. Sin JavaScript queda la validación nativa del navegador.
 
@@ -305,11 +305,11 @@ Modelo del ERS (§3.6), fijado por EP-01 para el proveedor y el PMO:
 | Rechazada | `REJECTED` | Decisión del PMO; no admite otra decisión | No |
 | Observaciones | `REQUIRES_CORRECTION` | El PMO pidió correcciones | Sí: corrige y reenvía |
 | Cancelada | `CANCELLED` | El proveedor la canceló con su acuse; es final | No |
-| Pagada | `PAID` | El PMO o el Administrador registraron el pago de la factura autorizada; es final | Sólo adjunta su Complemento de Pago, si lo requiere |
+| Programado para pago | `PAID` | El PMO o el Administrador programaron el pago de la factura autorizada (en la PoC original, "Pagada"); es final | Sólo adjunta su Complemento de Pago, si lo requiere |
 
-- **Registro (HU-12):** el formulario usa el proveedor del usuario y sólo ofrece sus contratos activos; los de otros proveedores nunca llegan al navegador. Un proveedor que no está "Autorizado" no puede registrar (409). La factura nace en "Borrador" y cada carga o reemplazo de documento la pasa a "Cargada" o de vuelta a "Borrador" según los [archivos mínimos](#archivos-mínimos-por-tipo-de-proveedor); con los obligatorios completos, la carga documental avisa "Factura cargada. Ya puede enviarla a validación". "Observaciones" no se recalcula.
+- **Registro (HU-12, HU-24):** ver [Registro de la factura por sus archivos](#registro-de-la-factura-por-sus-archivos). El proveedor de la factura es el del usuario; un proveedor que no está "Autorizado" no puede registrar (409). La factura nace en "Borrador" y cada carga o reemplazo de documento la pasa a "Cargada" o de vuelta a "Borrador" según los [archivos mínimos](#archivos-mínimos-por-tipo-de-proveedor); con los obligatorios completos, la carga documental avisa "Factura cargada. Ya puede enviarla a validación". "Observaciones" no se recalcula.
 - **Verificar:** ejecuta el motor y guarda sus resultados sin cambiar el estatus. El detalle lista las "Reglas que impiden el envío".
-- **Envío (HU-13):** "Enviar a validación", desde "Cargada" u "Observaciones", ejecuta el motor con la configuración vigente en ese momento. Sin ningún `FAIL`, la factura pasa a "Enviada" con `submitted_at` y la auditoría `INVOICE_SUBMITTED`. Con algún `FAIL` (crítico o error), responde 409, conserva el estatus y muestra cada regla que lo impide con el valor esperado y el detectado. Las advertencias no bloquean. Desde "Borrador" responde 409 ("Faltan archivos obligatorios") sin ejecutar el motor.
+- **Envío (HU-13):** "Enviar a validación", desde "Cargada" u "Observaciones", ejecuta el motor con la configuración vigente y la orden de compra vigente en ese momento. Sin ningún `FAIL`, la factura pasa a "Enviada" con `submitted_at`, queda ligada a su orden de compra y se audita `INVOICE_SUBMITTED`. Con algún `FAIL` (crítico o error), responde 409, conserva el estatus y muestra cada regla que lo impide con el valor esperado y el detectado. Las advertencias no bloquean. Desde "Borrador" responde 409 ("Faltan archivos obligatorios") sin ejecutar el motor.
 - **Duplicados (RN-HU13-01):** el UUID del CFDI (folio fiscal) no se repite en ninguna otra factura, de ningún proveedor ni estatus, incluidas las rechazadas (FIN-004 y `uq_invoices_uuid`). El mensaje no revela datos de la otra factura.
 - **Concurrencia:** la carga, la verificación y el envío bloquean la fila de la factura, así que se ejecutan uno después del otro.
 - **Migración `0010_invoice_status_model`:** retira `VALIDATING`, `VALIDATION_FAILED` y `PREVALIDATED`. Las facturas previas al envío pasan a "Cargada" o "Borrador" según sus obligatorios, salvo las que el PMO devolvió y aún no se reenvían, que quedan en "Observaciones". Cada cambio queda en el Audit Log como `STATUS_MIGRATED`.
@@ -329,12 +329,12 @@ El proveedor cancela su factura desde cualquier estatus excepto "Cancelada" y "P
 
 HU Complemento de Pagos: el PMO o el Administrador registran el pago y, en las facturas nacionales con método de pago PPD (`MetodoPago` del CFDI, pago en parcialidades o diferido), el proveedor tiene 72 horas para adjuntar su Complemento de Pago.
 
-- **Marcar como pagada:** panel "Pago" en el detalle de una factura "Autorizada", sólo para `PMO` y `Administrador`, con la casilla "Confirmo que la factura … fue pagada. Se notificará al proveedor." (`POST /invoices/{id}/payment`, CSRF). Bloquea la fila: sin confirmación responde 400; otro estatus, 409 ("Sólo una factura autorizada se puede marcar como pagada" o "La factura ya fue pagada"). Registra `paid_at` y `paid_by` y audita `STATUS_CHANGED` e `INVOICE_PAID`.
+- **Programar pago** (antes "Marcar como pagada"): botón en el detalle de una factura "Autorizada", sólo para `PMO` y `Administrador`. Abre una ventana con la solicitud de programación en JSON (`PROGRAMACION_PAGO`: factura, proveedor, receptor, orden de compra y complemento; botón "Copiar") y "Confirmar y programar pago" (`POST /invoices/{id}/payment`, CSRF). La factura queda "Programado para pago" y, ya programada, "Ver solicitud (JSON)" muestra la registrada. Bloquea la fila: sin confirmación responde 400; otro estatus, 409 ("Sólo se puede programar el pago de una factura autorizada" o "La factura ya está programada para pago"). Registra `paid_at` y `paid_by` y audita `STATUS_CHANGED` e `INVOICE_PAID` con la solicitud (`schedule_request`).
 - **¿Requiere complemento?** Sí, si el proveedor es nacional y el XML del CFDI vigente trae `MetodoPago="PPD"` (el dato que extrajo el motor). Se decide una vez, al pagar, y queda en `payment_complement_due_at` (`paid_at` + 72 horas naturales). PUE, sin XML o internacional: no lo requiere.
-- **Correo "Pagada"** (`INVOICE_PAID`) al correo del proveedor en el catálogo, después del commit: "Su factura número … ha sido pagada." Si requiere complemento y aún no lo adjunta, agrega "Es importante que adjunte su “Complemento de Pago” a dicha factura pagada antes del …". Si el envío falla, el PMO ve "Reenviar notificación".
+- **Correo "Programado para pago"** (`INVOICE_PAID`) al correo del proveedor en el catálogo, después del commit: "Su factura número … ha sido programada para pago." Si requiere complemento y aún no lo adjunta, agrega "Es importante que adjunte su “Complemento de Pago” a dicha factura antes del …". La migración `0024_ferromex_programar_pago` cambia el texto predeterminado sólo si la plantilla no se había modificado. Si el envío falla, el PMO ve "Reenviar notificación".
 - **Adjuntar el complemento:** en la factura "Pagada", la carga documental sólo ofrece "Complemento de pago (XML)" y "(PDF)" (otro tipo: 409). El XML debe ser un CFDI con `TipoDeComprobante="P"` cuyo `DoctoRelacionado` relacione el UUID de la factura; si no, responde 400 sin escribir el archivo (la misma verificación aplica a un complemento cargado antes del pago). La primera carga válida del XML registra `payment_complement_received_at`; cada una audita `PAYMENT_COMPLEMENT_UPLOADED` y envía a Recepción de Facturas el correo `PAYMENT_COMPLEMENT` ("El Complemento de Pago ha sido adjuntado a la factura …"). El PDF es opcional y no envía correo.
 - **Bloqueo:** cada "Enviar a validación" verifica, antes del motor, si el proveedor tiene complementos vencidos (requeridos, sin adjuntar y con la fecha límite pasada). Si los tiene, responde 409 "No puede enviar facturas a validación: tiene complementos de pago vencidos de las facturas …" sin ejecutar el motor. Se calcula en cada envío, sin tareas programadas, y se levanta al adjuntar. No impide dar de alta facturas, cargar documentos ni verificar.
-- **Vistas:** el detalle muestra "Pagada el …" y el bloque "Complemento de pago" (No requerido, Pendiente, Vencido o Adjuntado, con sus fechas) y, al proveedor, "Adjuntar Complemento de Pago". El tablero y el listado del proveedor avisan "Tiene complementos de pago pendientes", primero los vencidos. El tablero agrega el indicador "Pagadas" y el historial, el pago y cada complemento.
+- **Vistas:** el detalle muestra "Programado para pago el …" y el bloque "Complemento de pago" (No requerido, Pendiente, Vencido o Adjuntado, con sus fechas) y, al proveedor, "Adjuntar Complemento de Pago". El tablero y el listado del proveedor avisan "Tiene complementos de pago pendientes", primero los vencidos. El tablero agrega el indicador "Programado para pago" y el historial, el pago y cada complemento.
 - **Fuera de alcance:** capturar fecha, monto o referencia del pago, pagos parciales, revertir un pago, recordatorios automáticos, validar el complemento ante el SAT y reenviar el aviso del complemento.
 - **Migración `0018_invoice_payment`:** agrega las columnas del pago con `ck_invoices_payment` y el índice parcial `ix_invoices_pending_complement`, el estatus `PAID`, los eventos y plantillas nuevos con sus copias vacías, y deja fijos los niveles del complemento (si el Administrador los había cambiado, los normaliza y lo audita). El downgrade se niega si hay facturas pagadas o correos de los eventos nuevos.
 
@@ -342,7 +342,7 @@ HU Complemento de Pagos: el PMO o el Administrador registran el pago y, en las f
 
 El proveedor da seguimiento a sus facturas (HU-17, RF-16):
 
-- **Tablero:** total de facturas con su monto acumulado e indicadores Enviadas, Observaciones, Autorizadas, Pagadas, Rechazadas y Canceladas. Cada indicador abre el listado filtrado por su estatus. El PMO y el Administrador ven los mismos indicadores sobre todas las facturas.
+- **Tablero:** total de facturas con su monto acumulado e indicadores Enviadas, Observaciones, Autorizadas, Programado para pago, Rechazadas y Canceladas. El listado de facturas ofrece "Reporte PDF" (`GET /invoices/report.pdf`, con los mismos filtros y alcance): resumen por estatus y por origen, montos por moneda y gráfico de pie por estatus. Cada indicador abre el listado filtrado por su estatus. El PMO y el Administrador ven los mismos indicadores sobre todas las facturas.
 - **Listado:** sólo sus facturas, con búsqueda, filtro por los ocho estatus y 25 por página. Una factura de otro proveedor responde 404.
 - **Causa de la decisión:** en "Rechazada" el detalle destaca "Motivo del rechazo" y en "Observaciones", "Observaciones del PMO", con el texto de la última decisión: el mismo del correo. En "Observaciones" añade "Corrija lo indicado y vuelva a enviar la factura" con el enlace a la carga documental. En los demás estatus no hay aviso de observaciones: las de rondas anteriores quedan en el seguimiento.
 - **Seguimiento:** sus envíos, las decisiones del PMO (atribuidas a "PMO", sin el nombre del revisor ni los comentarios internos), la cancelación con su fecha límite, el pago (atribuido a "PMO") y cada Complemento de Pago, en orden cronológico.
@@ -353,32 +353,32 @@ Todos los listados de registros se paginan en la base de datos (`LIMIT/OFFSET`) 
 
 | Listado | Por página | Orden | Búsqueda |
 | --- | --- | --- | --- |
-| Facturas (`/invoices`) | 25 | más recientes (bandeja del PMO: la que más ha esperado) | folio, número, proyecto, proveedor |
+| Facturas (`/invoices`) | 25 | más recientes (bandeja del PMO: la que más ha esperado) | folio, número, orden de compra, proveedor |
 | Proveedores (`/suppliers`) | 25 | razón social | razón social, RFC, ID fiscal, correo (con el filtro de estatus) |
 | Usuarios (`/admin/users`) | 25 | nombre | nombre, correo |
-| Contratos (`/contracts`) | 25 | más recientes | proyecto, proveedor |
+| Órdenes de compra (`/purchase-orders`) | 25 | más recientes | convenio exacto, RFC, nombre |
 | Claves de catálogo (`/admin/catalogs/…`) | 25 | clave | clave, descripción |
 | Bitácora de envíos (`/admin/notifications`) | 25 | más recientes | — |
 | Audit Log (`/admin/audit`) | 50 | más recientes | — |
 
 - La búsqueda no distingue mayúsculas y trata `%` y `_` como caracteres literales.
-- **Altas:** crear un usuario o una clave regresa al listado buscando el registro creado, con el aviso "Usuario creado" o "Clave agregada". El alta de un proveedor lleva a su expediente, y la de un contrato, al expediente del contrato.
-- **Acciones:** habilitar un usuario, registrar una enmienda o editar una clave regresa a la misma búsqueda y página.
+- **Altas:** crear un usuario o una clave regresa al listado buscando el registro creado, con el aviso "Usuario creado" o "Clave agregada". El alta de un proveedor lleva a su expediente.
+- **Acciones:** habilitar un usuario o editar una clave regresa a la misma búsqueda y página.
 - **Transacciones:** cada alta o acción se confirma en una sola transacción de PostgreSQL con su auditoría: o queda todo o no queda nada. Los correos salen después de confirmar y un envío fallido se reenvía desde la pantalla.
 - No se paginan los formularios de configuración (archivos mínimos, reglas, plantillas, índice de catálogos) ni los resultados de un archivo (vista previa de la carga masiva).
 
 ## Reglas implementadas
 
-- `DOC-001..009`: archivos mínimos según el origen del proveedor (XML y PDF del CFDI, orden de compra, Vo.Bo., Invoice y otros tipos obligatorios; ver [Archivos mínimos por tipo de proveedor](#archivos-mínimos-por-tipo-de-proveedor)), contrato/anexo disponible según los [requisitos del contrato](#requisitos-de-alta-del-contrato) (`DOC-005`: sólo cuentan los documentos del contrato), complemento y procesabilidad.
-- `XML-001..010`: parseabilidad, RFC del receptor, método y forma de pago, UsoCFDI, UUID, moneda, esenciales, razón social y código postal del receptor, con los valores de [Reglas de validación](#reglas-de-validación).
-- `SUP-001..004`: proveedor activo, contrato vigente, expediente mínimo según los [requisitos de alta](#requisitos-de-alta-del-proveedor) y vigencia aproximada (`SUP-004` no aplica al proveedor internacional; `SUP-003` tampoco, mientras no tenga requisitos de alta exigibles).
-- `CON-001..004`: contrato, proyecto, periodo y heurística mes/tecnología.
+- `DOC-001..009` (sin `DOC-005`): archivos mínimos según el origen del proveedor (PDF y XML del CFDI, Vo.Bo., Invoice y otros tipos obligatorios; ver [Archivos mínimos por tipo de proveedor](#archivos-mínimos-por-tipo-de-proveedor)), complemento y procesabilidad.
+- `XML-001..011`: parseabilidad, RFC, razón social, código postal y régimen del receptor, método y forma de pago, UsoCFDI, UUID, moneda y esenciales, con los valores de [Reglas de validación](#reglas-de-validación). Sin XML se evalúan con los datos leídos del PDF (`XML-001` no aplica).
+- `PRV-001..003`: RFC, nombre y régimen fiscal del emisor contra el proveedor del usuario (HU-24).
+- `SUP-001`, `SUP-003`, `SUP-004`: proveedor activo, expediente mínimo según los [requisitos de alta](#requisitos-de-alta-del-proveedor) y vigencia aproximada (`SUP-004` no aplica al proveedor internacional; `SUP-003` tampoco, mientras no tenga requisitos de alta exigibles).
 - `DAT-001`: recepción del día 1 al 20; advertencia no fatal.
-- `FIN-001..006`: límite autorizado, consistencia, moneda, UUID/número duplicados y diferencia absoluta/porcentual. `FIN-007`: Invoice duplicado por nombre de archivo (sólo internacional).
+- `FIN-002`, `FIN-004`, `FIN-005`: consistencia y UUID/número duplicados. `FIN-007`: Invoice duplicado por nombre de archivo (sólo internacional).
+- `OC-001..012`: la factura contra su [orden de compra](#órdenes-de-compra) (HU-24).
 - `INT-001..004`: datos del proveedor y de FERROMEX en el texto del Invoice (sólo internacional; advertencias). Ver [Facturas de proveedores internacionales](#facturas-de-proveedores-internacionales).
-- `SEM-001`: comparación semántica mediante adaptador; el mock reconoce Power Platform/Power Automate con confianza 0.93.
 
-`SEM-002..004` quedan reservadas como extensión. Los parámetros del motor (datos del receptor, método y forma de pago, usos de CFDI e interruptores) tienen una sola fuente, la tabla `validation_settings`, que el Administrador edita en `/admin/rules` y el motor lee en cada prevalidación. Las monedas aceptadas son las activas del catálogo de monedas. Sólo los pesos del score siguen en `BUSINESS_RULES` (`app/core/constants.py`).
+Las reglas contra el contrato (`SUP-002`, `CON-001..004`, `DOC-005`, `FIN-001`, `FIN-003`, `FIN-006` y `SEM-001`) se retiraron con HU-24. Los valores esperados del receptor y del CFDI viven en [Reglas de validación](#reglas-de-validación); las monedas y los regímenes aceptados, en los catálogos. Sólo los pesos del score siguen en `BUSINESS_RULES` (`app/core/constants.py`).
 
 ### Cálculo del score
 
@@ -386,13 +386,14 @@ Cada regla evaluada aporta al denominador según severidad: `CRITICAL=35`, `ERRO
 
 ## Reglas de validación
 
-El Administrador define en **Administración › Reglas de validación** (`/admin/rules`) los datos de FERROMEX y los parámetros del CFDI contra los que se comparan las facturas (HU-06). La migración `0007_validation_rules_catalogs` siembra los valores que antes estaban fijos en el código, y la siguiente verificación o envío usa lo que se guarde.
+El Administrador define en **Administración › Reglas de validación** (`/admin/rules`) los datos de FERROMEX y los parámetros del CFDI contra los que se comparan las facturas (HU-06). La migración `0007_validation_rules_catalogs` siembra los valores que antes estaban fijos en el código y `0023_ferromex_purchase_orders` los cambia al receptor de las facturas de FERROMEX, INTERMODAL MEXICO (HU-24, P-01). La siguiente verificación o envío usa lo que se guarde.
 
 | Regla | Compara | Severidad | Valor inicial |
 | --- | --- | --- | --- |
-| XML-002 | `Receptor.Rfc` con el RFC | `CRITICAL` | `ULT940623AG0` |
-| XML-009 | `Receptor.Nombre` con la razón social, sin distinguir mayúsculas, acentos ni espacios repetidos | `ERROR` | `FERROMEX` |
-| XML-010 | `Receptor.DomicilioFiscalReceptor` con el código postal | `ERROR` | `03930` |
+| XML-002 | `Receptor.Rfc` con el RFC | `CRITICAL` | `IME010718PU3` |
+| XML-009 | `Receptor.Nombre` con la razón social, sin distinguir mayúsculas, acentos ni espacios repetidos | `ERROR` | `INTERMODAL MEXICO` |
+| XML-010 | `Receptor.DomicilioFiscalReceptor` con el código postal | `ERROR` | `11700` |
+| XML-011 | `Receptor.RegimenFiscalReceptor` con el régimen | `ERROR` | `601` |
 | XML-003 | `MetodoPago` con el método esperado | `ERROR` | `PPD` |
 | XML-004 | `FormaPago` con la forma esperada | `ERROR` | `99` |
 | XML-005 | `UsoCFDI` con los usos permitidos | `ERROR` | `G03`, `I04` |
@@ -428,8 +429,8 @@ El Administrador define en **Requisitos mínimos › Archivos de factura** (`/ad
 | No aplica | No se ofrece; el servidor rechaza la carga | No se exige |
 
 - **Catálogo** (`invoice_document_types`): 11 tipos del sistema, con nombre en español, descripción y formatos admitidos (PDF, PNG, JPEG, XML, TXT), más los tipos soporte que cree el Administrador. La carga documental rechaza con HTTP 400, antes de escribir el archivo, un tipo que no aplica a la factura o una extensión que el tipo no admite.
-- **Valores iniciales:** Nacional exige XML y PDF del CFDI, orden de compra y Vo.Bo., y conserva el comportamiento anterior. Internacional exige Invoice (PDF), orden de compra y Vo.Bo. Contrato, anexo y documentación adicional son opcionales para ambos; los complementos de pago sólo aplican al Nacional.
-- **Niveles fijos:** XML y PDF del CFDI son obligatorios para el Nacional y no aplican al Internacional; el Invoice, al revés. El "Acuse de cancelación" no aplica a ninguno: sólo se carga al [cancelar la factura](#cancelación-de-la-factura). El "Complemento de pago" (XML y PDF) es Opcional para el Nacional y no aplica al Internacional, porque sólo existe después del [pago](#pago-y-complemento-de-pago). La pantalla los muestra con candado, el servidor rechaza cambiarlos (409) y la base de datos los garantiza con un `CHECK`.
+- **Valores iniciales (rama `ferromex`, HU-24):** Nacional exige el PDF del CFDI y el Vo.Bo.; el XML es Opcional. Internacional exige Invoice (PDF) y Vo.Bo. Orden de compra, contrato y anexo no aplican (la orden de compra es una entidad del portal, no un archivo); documentación adicional es opcional para ambos y los complementos de pago sólo aplican al Nacional.
+- **Por origen:** el XML y el PDF del CFDI no aplican al Internacional; el Invoice no aplica al Nacional. El "Acuse de cancelación" no aplica a ninguno: sólo se carga al [cancelar la factura](#cancelación-de-la-factura). El "Complemento de pago" (XML y PDF) es Opcional para el Nacional y no aplica al Internacional, porque sólo existe después del [pago](#pago-y-complemento-de-pago). La pantalla los muestra con candado, el servidor rechaza cambiarlos (409) y la base de datos los garantiza con un `CHECK`.
 - **Tipos soporte:** el Administrador los da de alta (nombre, descripción, formatos y un nivel por origen, "No aplica" por defecto), los edita, los desactiva o reactiva y los elimina. Su clave es `SOPORTE_<id>`. Al desactivarlos, los documentos ya cargados siguen visibles y descargables en el detalle de la factura. Los tipos del sistema no se editan, no se desactivan ni se eliminan. Desde la fila de cada tipo del Administrador (activo o inactivo) están las acciones **Editar** y **Eliminar**; eliminar pide confirmación y sólo procede si ningún documento, vigente o reemplazado, usa su clave (si no, HTTP 409: "desactívelo en su lugar").
 - **Reglas:** DOC-001 (XML del CFDI, `CRITICAL`), DOC-002 (PDF del CFDI), DOC-003 (orden de compra) y DOC-004 (Vo.Bo.) resultan `PASS`/`FAIL` cuando su tipo es obligatorio para el origen y `NOT_APPLICABLE` en otro caso. DOC-008 evalúa el Invoice (`CRITICAL`) y DOC-009 genera un resultado por cada otro tipo obligatorio, con su clave en la fuente.
 - **Vigencia:** la configuración se lee en cada verificación y envío. Una factura que ya salió de los estados editables conserva sus resultados; una editable se evalúa con la configuración vigente al verificarse o enviarse. Si la configuración cambia, el estatus "Borrador"/"Cargada" se recalcula en la siguiente carga o en el envío.
@@ -447,7 +448,7 @@ El Administrador define en **Requisitos mínimos › Alta de proveedor** (`/admi
 | Opcional | Se pide | No se exige |
 | No aplica | No se pide; el servidor rechaza la carga (400) | No se exige |
 
-- **Catálogo** (`supplier_document_types`): 13 requisitos del sistema y los que cree el Administrador. Para la persona moral son obligatorios los siete de la solicitud de negocio: Acta constitutiva, Poderes, Cédula fiscal, Identificación del representante legal, Comprobante de domicilio del representante legal, Comprobante de domicilio y Estado de cuenta bancario. Para la persona física: Identificación oficial, Cédula fiscal, Comprobante de domicilio y Estado de cuenta bancario. El internacional no tiene requisitos. Opinión de cumplimiento, Propuesta económica, Debida diligencia y Ubicación son opcionales. El Contrato (`SUPPLIER_CONTRACT`) ya no es requisito de alta: queda fijo en "No aplica" (candado y `CHECK`) y se carga en cada contrato (ver [Requisitos de alta del contrato](#requisitos-de-alta-del-contrato)); los que ya estaban cargados siguen descargables en "Otros documentos del expediente". Las preguntas abiertas con negocio (P-01 a P-07 de la HU) sólo cambian estos valores.
+- **Catálogo** (`supplier_document_types`): 13 requisitos del sistema y los que cree el Administrador. Para la persona moral son obligatorios los siete de la solicitud de negocio: Acta constitutiva, Poderes, Cédula fiscal, Identificación del representante legal, Comprobante de domicilio del representante legal, Comprobante de domicilio y Estado de cuenta bancario. Para la persona física: Identificación oficial, Cédula fiscal, Comprobante de domicilio y Estado de cuenta bancario. El internacional no tiene requisitos. Opinión de cumplimiento, Propuesta económica, Debida diligencia y Ubicación son opcionales. El Contrato (`SUPPLIER_CONTRACT`) ya no es requisito de alta: queda fijo en "No aplica" (candado y `CHECK`); los que ya estaban cargados siguen descargables en "Otros documentos del expediente". Las preguntas abiertas con negocio (P-01 a P-07 de la HU) sólo cambian estos valores.
 - **Propuesta económica:** es exigible si el alta es por cotización o licitación y su nivel no es "No aplica". Es la única exigencia condicional.
 - **Vigencia:** un documento de cédula, opinión, comprobantes de domicilio o estado de cuenta con más de tres meses muestra "Advertencia de vigencia (+3 meses)" y `SUP-004` la reporta, pero no impide autorizar.
 - **Expediente:** el panel "Requisitos de alta" muestra primero los obligatorios, cada uno cargado (archivo y fecha) o "Pendiente", y el aviso "Faltan N requisitos obligatorios" o "Requisitos de alta completos". El formulario de carga ofrece sólo los requisitos que aplican; los documentos de requisitos que dejaron de aplicar siguen descargables en "Otros documentos del expediente". Sólo cuentan los documentos del expediente, no los de las facturas.
@@ -455,39 +456,42 @@ El Administrador define en **Requisitos mínimos › Alta de proveedor** (`/admi
 - **Concurrencia y auditoría:** como en archivos mínimos, la huella `config_version` evita sobrescribir el cambio de otro Administrador (409). Cada cambio queda en el Audit Log (`SUPPLIER_REQUIREMENTS_UPDATED`, `SUPPLIER_DOCUMENT_TYPE_CREATED`, `SUPPLIER_DOCUMENT_TYPE_UPDATED` y `SUPPLIER_DOCUMENT_TYPE_STATUS_CHANGED`).
 - **Proveedores ya autorizados:** la configuración no cambia el estatus de nadie. Si se agrega un requisito obligatorio, el listado marca con "Faltan N" a los autorizados que no lo tienen y `SUP-003` impide enviar sus facturas hasta que lo carguen. **Al desplegar** la migración `0016_supplier_document_types` en un ambiente con proveedores reales, ninguno tiene "Poderes", que es nuevo: cárguelo antes o deje "Poderes" en Opcional y vuélvalo obligatorio después (P-07). Los datos demo ya lo incluyen.
 
-## Requisitos de alta del contrato
+## Registro de la factura por sus archivos
 
-El Administrador define en **Requisitos mínimos › Alta de contrato** (`/admin/contract-requirements`) qué documentos debe tener un contrato para poder activarlo (HU-22; Lineamientos 1.i: "Debe existir contrato vigente"). Cada requisito tiene un solo nivel, igual para todos los contratos:
+El proveedor nacional registra su factura en tres pasos (HU-24): **Archivos → Revisión → Envío**.
 
-| Nivel | En el expediente del contrato | Al activar y en `DOC-005` |
-| --- | --- | --- |
-| Obligatorio | Se pide; el panel indica cuántos faltan | Si falta, el contrato no se activa y `DOC-005` resulta `FAIL` |
-| Opcional | Se pide | No se exige |
-| No aplica | No se pide; el servidor rechaza la carga (400) | No se exige |
+- **Archivos** (`/invoices/new`): carga el PDF de la factura (obligatorio) y su XML (opcional). No captura número, periodo, proyecto ni contrato. El portal valida extensión, contenido y tamaño, extrae los datos y crea la factura en "Borrador". El número es `Serie-Folio` del CFDI (o el impreso) y el periodo, el mes de la fecha de emisión.
+  - Con XML, los datos salen del XML; sin XML, del texto de la representación impresa del CFDI 4.0 (`invoice_extraction_service.parse_printed_cfdi`, por etiquetas: "FOLIO FISCAL (UUID)", "CLIENTE", "CONCEPTOS", "SUBTOTAL", etc.). Un PDF sin texto se envía al analizador documental configurado; el de demo no lo lee.
+  - PDF y XML con UUID distinto: 409. Sin datos esenciales y sin XML: 422 "No pudimos leer los datos de la factura en el PDF. Adjunte el XML.". Número repetido: 409.
+  - Los datos y su fuente (`xml`, `pdf_text`, `ocr`) quedan en `metadata_json` del documento; el log registra `invoice.extracted` sin datos fiscales.
+- **Revisión** (`/invoices/{id}/data`): las páginas del PDF a la izquierda y los datos leídos a la derecha (factura, proveedor, cliente, conceptos con la orden de compra detectada y totales). Junto a cada dato validado aparece la Validación 1 (`PRV-001..003` y las reglas XML): ✓, o ✗ con el valor esperado. Se calcula al abrir la página, no cambia el estatus ni guarda resultados. Desde ahí se cargan los soportes (Vo.Bo.) y se reemplaza el PDF o el XML, que vuelve a extraer los datos (`INVOICE_DATA_EXTRACTED`).
+- **Envío:** "Enviar a validación" ejecuta todas las reglas, incluida la Validación 2 contra la orden de compra.
 
-- **Catálogo** (`contract_document_types`): Contrato (obligatorio fijo, con candado; la base de datos lo garantiza con un `CHECK`), Orden de compra y Anexos (opcionales, con varios archivos), más los que cree el Administrador (`REQ_CONTRATO_<id>`; alta, edición, desactivación, reactivación y eliminación; Editar y Eliminar están en su fila, y eliminar sólo procede si ningún documento usa su clave). "Admite varios archivos" se fija al crear el requisito.
-- **Estatus del contrato:** el alta crea el contrato **"Registrado"** y lleva a su expediente (`/contracts/{id}`), que pide sus requisitos. "Activar contrato" lo pasa a **"Activo"** sólo si su proveedor está "Autorizado" y tiene cargados sus requisitos obligatorios; lo verifica en una transacción, con la configuración vigente, y responde 409 con lo que falta. Sólo un contrato activo se ofrece al facturar y cumple `SUP-002`. Los contratos que existían al migrar siguen "Activo".
-- **Documentos del contrato:** el Administrador los carga en el expediente del contrato, "Registrado" o "Activo"; el PMO los consulta y descarga; el Proveedor no tiene acceso. Se guardan en `storage/contracts/<id>/` y son sólo del contrato (`documents.contract_id`, sin `supplier_id` ni `invoice_id`): no cuentan en el expediente del proveedor ni en la factura. Un requisito de un archivo reemplaza al vigente; uno de varios agrega, o reemplaza el elegido en "Reemplaza a". Nada se borra.
-- **Listado de contratos:** estatus en español y columna "Requisitos" ("Completos" o "Faltan N").
-- **Concurrencia y auditoría:** huella `config_version` (409) y Audit Log: `CONTRACT_REQUIREMENTS_UPDATED`, `CONTRACT_DOCUMENT_TYPE_CREATED`, `CONTRACT_DOCUMENT_TYPE_UPDATED`, `CONTRACT_DOCUMENT_TYPE_STATUS_CHANGED`, `CONTRACT_DOCUMENT_UPLOADED`/`CONTRACT_DOCUMENT_REPLACED` y `CONTRACT_STATUS_CHANGED`.
-- **Al desplegar** la migración `0017_contract_document_types` en un ambiente con contratos reales, ninguno tiene su contrato firmado: el listado los marca con "Faltan 1" y `DOC-005` impide enviar sus facturas editables hasta que se cargue (P-06 de la HU). Los datos demo ya lo incluyen.
+## Órdenes de compra
+
+La factura se controla contra la orden de compra (convenio) de SAP citada en sus conceptos, por ejemplo `OC/25704872` (HU-24). Los contratos se retiraron del portal: sus tablas y datos se conservan sin uso (P-02).
+
+- **Entidad** (`purchase_orders`): convenio (único), RFC, nombre del proveedor, fecha, total sin impuestos, impuestos y las partidas en `data` con las etiquetas de SAP (`Txt.brv`, `Ctd.Pedido`, `Unidad.Pedido`, `Prc.Neto`, `Moneda`, `Docto Material`, `Fecha Conta`, etc.). Se siembran; la integración con SAP queda fuera de esta HU. La factura enviada queda ligada con `invoices.purchase_order_id`.
+- **Consulta** (`/purchase-orders`, PMO y Administrador): listado paginado con búsqueda por convenio, RFC o nombre, y detalle con partidas y facturas ligadas. El detalle de la factura muestra su orden.
+- **Reglas `OC-001..012`:** número de orden en los conceptos (todos la misma), orden del proveedor (por RFC; el internacional, por proveedor), RFC y nombre, subtotal contra total, IVA trasladado 16 % contra impuestos, y por concepto: partida por `Txt.brv` (la descripción debe contenerlo, sin distinguir mayúsculas, acentos, espacios ni signos), cantidad y unidad (equivalencias como `H87`/`PZ`/`PZA`), precio e importe (`Ctd.Pedido × Prc.Neto`, ±0.01), moneda, entrada de mercancía y orden sin otra factura vigente (lectura con `FOR UPDATE`). `CRITICAL` y `ERROR` bloquean el envío; la evidencia guarda los valores de la orden leídos.
+- **Internacional:** captura el número de orden en su Invoice y se valida encabezado y entrega (sin partidas).
 
 ## Facturas de proveedores internacionales
 
 El proveedor extranjero (`suppliers.origin = INTERNATIONAL`) no emite CFDI: factura con un Invoice en PDF (HU-15, HU-16).
 
-- **Datos del Invoice:** al registrar la factura captura la fecha, el subtotal, los impuestos, el total y la moneda (catálogo de monedas activas). El total debe ser igual al subtotal más impuestos (tolerancia 0.02, como `FIN-002`). Se guardan en las mismas columnas que el XML llena para el nacional. Mientras la factura es editable ("Borrador", "Cargada" u "Observaciones") los corrige desde la carga documental; cada cambio se audita como `INVOICE_AMOUNTS_UPDATED`.
+- **Datos del Invoice:** al registrar la factura captura el número de factura, el número de orden de compra (6 a 10 dígitos), la fecha, el subtotal, los impuestos y la moneda (catálogo de monedas activas); el periodo sale de la fecha. El total debe ser igual al subtotal más impuestos (tolerancia 0.02, como `FIN-002`). Se guardan en las mismas columnas que el XML llena para el nacional. Mientras la factura es editable ("Borrador", "Cargada" u "Observaciones") los corrige desde la carga documental; cada cambio se audita como `INVOICE_AMOUNTS_UPDATED`.
 - **Duplicados por nombre de archivo:** al cargar un Invoice cuyo nombre (sin distinguir mayúsculas ni espacios de los extremos) ya tiene otra factura no cancelada del mismo proveedor, la carga responde 409 con el folio de esa factura y no escribe el archivo. Un bloqueo consultivo por proveedor serializa estas cargas y `FIN-007` (`CRITICAL`) lo verifica de nuevo al enviar.
-- **Validación:** `XML-001..010`, `FIN-004`, `SUP-004` y, mientras no tenga [requisitos de alta](#requisitos-de-alta-del-proveedor) exigibles, `SUP-003` resultan "No aplica a proveedores internacionales"; `SEM-001` no se evalúa. Las demás reglas se aplican con los importes capturados: por ejemplo, `FIN-001` bloquea un subtotal mayor al monto autorizado del contrato.
+- **Validación:** `XML-001..011`, `PRV-001..003`, `FIN-004`, `SUP-004` y, mientras no tenga [requisitos de alta](#requisitos-de-alta-del-proveedor) exigibles, `SUP-003` resultan "No aplica a proveedores internacionales". Las reglas `OC-*` comparan los importes capturados con su orden de compra (`OC-003` y `OC-007..009` no aplican).
 - **Reglas del Invoice (`INT`):** buscan en el texto del PDF, sin acentos, mayúsculas, espacios ni signos: `INT-001` el identificador fiscal del proveedor, `INT-002` la razón social de FERROMEX, `INT-003` su código postal y `INT-004` su dirección (si está configurada). `INT-002` e `INT-003` respetan los interruptores de [Reglas de validación](#reglas-de-validación). Son advertencias: no bloquean el envío. Un PDF sin texto legible (escaneado) las deja "No evaluadas".
 - **Pendiente con negocio:** se calibrarán con las tres muestras de invoices extranjeros acordadas en la minuta. El expediente del proveedor internacional (equivalente al Anexo A) está por definir; cuando se defina, el Administrador lo configura en la columna Internacional de los requisitos de alta.
-- **Demo:** `proveedor3@poc.local` es "Global Data Services Inc. (DEMO)" (US, identificador `98-7654321`), con el contrato "Analitica Global 2026" por 20,000.00 USD y la factura `INV-2026-0042` en "Cargada", lista para enviar.
+- **Demo:** `proveedor3@poc.local` es "Global Data Services Inc. (DEMO)" (US, identificador `98-7654321`), con la orden de compra 45009042 por 18,000.00 USD y la factura `INV-2026-0042` en "Cargada", lista para enviar contra ella.
 
 ## Bandeja y revisión del PMO
 
 El PMO (rol `PMO`) y el Administrador (rol `Administrador`) revisan las facturas enviadas (HU-18, HU-19):
 
-- **Bandeja:** **Facturas** abre en "Enviada", con las que más han esperado primero (orden por fecha de envío, también en las páginas siguientes). "Todos los estados" u otro estatus vuelven al orden por fecha de creación. El filtro de origen separa facturas nacionales e internacionales. Cada fila muestra proveedor, folio y número, origen, proyecto, fecha de envío, monto, score con el número de advertencias y estatus. El proveedor conserva su listado de siempre.
+- **Bandeja:** **Facturas** abre en "Enviada", con las que más han esperado primero (orden por fecha de envío, también en las páginas siguientes). "Todos los estados" u otro estatus vuelven al orden por fecha de creación. El filtro de origen separa facturas nacionales e internacionales. Cada fila muestra proveedor, folio y número, origen, orden de compra, fecha de envío, monto, score con el número de advertencias y estatus. El proveedor conserva su listado de siempre.
 - **Ver documentos:** el ícono del ojo abre el documento en una pestaña del portal. Las páginas de un PDF se muestran como imágenes renderizadas en el servidor (hasta 20 páginas); las imágenes se muestran tal cual y el XML o el texto, escapados (hasta 200,000 caracteres). El navegador nunca abre el PDF ni el XML como documento, así que no depende de su visor ni se relaja la CSP. La autorización es la de la descarga, que sigue siendo un adjunto.
 - **Detalle:** para el PMO y el Administrador, un bloque "Proveedor" (origen, identificador fiscal, correo y estatus) y el "Historial" con los envíos del proveedor, las revisiones (decisión, observaciones y revisor) y la cancelación, en orden cronológico. El proveedor ve el mismo historial como "Seguimiento" (ver [Seguimiento del proveedor](#seguimiento-del-proveedor)).
 - **Decisión (HU-20):** en el panel "Decisión" del detalle de una factura "Enviada" (el botón "Decidir" del encabezado lleva ahí), con tres botones:
@@ -659,7 +663,7 @@ Los aplica Keycloak (RF-06); el portal no muestra formularios de contraseña.
 - **Evidencia fiscal:**
   - no se permite el borrado físico de facturas;
   - las versiones sustituidas quedan con `is_current=false` y referencia al documento anterior;
-  - el monto autorizado de un contrato sólo cambia mediante enmiendas auditadas.
+  - una orden de compra con facturas no se puede borrar (llave foránea `RESTRICT`).
 
 `SECRET_KEY` es obligatoria (mínimo 32 caracteres; se rechaza el valor de ejemplo `change-me...`). `scripts/create_env.py` la genera al crear `.env`. `DEBUG` sólo sube el nivel de log; nunca muestra trazas al usuario.
 
@@ -721,31 +725,32 @@ AI_ENABLED=false
 DOCUMENT_AI_PROVIDER=mock
 ```
 
-`LocalMockAnalyzer` no usa red y devuelve resultados reproducibles para análisis, campos, comparación, confidence y evidencia. El portal funciona íntegramente sin Azure.
+`LocalMockAnalyzer` no usa red y no inventa datos: no lee PDF sin texto (`extract_invoice` responde "no disponible"), así que una factura escaneada pide su XML. El portal funciona íntegramente sin Azure.
 
 ## Preparación Azure
 
 Los adaptadores de `app/services/ai/` validan configuración y fallan de forma controlada:
 
-- `AzureDocumentIntelligenceAnalyzer`: OCR/extracción de PDF, OC, contrato y anexos.
+- `AzureDocumentIntelligenceAnalyzer`: OCR de la representación impresa del CFDI (`extract_invoice`).
 - `AzureContentUnderstandingAnalyzer`: extracción semiestructurada y clasificación.
-- `AzureFoundryAnalyzer`: comparación semántica y explicación.
+- `AzureFoundryAnalyzer`: extracción asistida por modelo (punto de extensión).
 
 Complete las variables Azure en `.env`, implemente la llamada HTTP/SDK dentro del adaptador y seleccione el proveedor. Ningún router, regla financiera ni modelo importa SDKs Azure directamente. Las keys nunca deben incluirse en Git.
 
 ## Datos de demostración
 
-El seed crea 5 usuarios, 3 proveedores, 3 contratos activos con su contrato firmado, expedientes Anexo A, 13 facturas y Audit Log. Incluye: borrador sin documentos (`BORRADOR-001`), borrador sin Vo.Bo. (`D-SIN-VOBO`), cargadas listas para enviar (`A-CORRECTA`, `E-SEMANTICO`), cargada cuyo envío no procede porque excede el contrato (`B-EXCEDE`), enviada (`REVISION-001`), una segunda enviada por decidir (`ENVIADA-002`), autorizada, rechazada por RFC incorrecto, una devuelta con observaciones del PMO (`OBSERVACIONES-001`), una cancelada con su acuse (`CANCELADA-001`; la siembra no envía su correo) y una pagada, nacional PPD, con su Complemento de Pago ya adjuntado (`PAGADA-001`; uno pendiente vencería a las 72 horas y bloquearía los envíos del proveedor demo). Esas doce son de `proveedor1@poc.local`; la decimotercera, `INV-2026-0042`, es del proveedor internacional `proveedor3@poc.local` y está cargada, lista para enviar.
+El seed crea 5 usuarios, 3 proveedores, 23 órdenes de compra, expedientes Anexo A, 13 facturas y Audit Log. El proveedor persona física (`proveedor2@poc.local`) es el emisor de la factura 3668 del ejemplo: puede registrarla sólo con `data/demo_documents/factura_3668.pdf` contra la orden 25704872. Su [flujo completo](data/pruebas-factura-3668/INSTRUCTIVO.md) (Observaciones, autorización, pago y complemento) usa un PDF con la maqueta del documento de negocio. Facturas: borrador sin documentos (`BORRADOR-001`), borrador sin Vo.Bo. (`D-SIN-VOBO`), cargadas listas para enviar (`A-CORRECTA`, `E-SEMANTICO`), cargada cuyo envío no procede porque excede su orden de compra (`B-EXCEDE`), enviada (`REVISION-001`), una segunda enviada por decidir (`ENVIADA-002`), autorizada, rechazada por RFC incorrecto, una devuelta con observaciones del PMO (`OBSERVACIONES-001`), una cancelada con su acuse (`CANCELADA-001`; la siembra no envía su correo) y una pagada, nacional PPD, con su Complemento de Pago ya adjuntado (`PAGADA-001`). Esas doce son de `proveedor1@poc.local` y cada una cita su propia orden de compra (`45001xxx`); las enviadas o posteriores quedan ligadas a ella. La decimotercera, `INV-2026-0042`, es del proveedor internacional y está cargada, lista para enviar. También se siembran una orden sin entrada de mercancía, una con dos partidas, las dos del [recorrido manual](data/pruebas-ferromex/GUIA-PRUEBAS.md) y las seis de la [prueba de lectura del PDF](data/pruebas-pdf-orden-compra/INSTRUCTIVO.md), del proveedor `MFB140325AB1` que se da de alta en esa prueba.
 
-Los XML bajo `data/demo_documents/` son estructuralmente útiles para el parser, pero **no están timbrados ni son fiscalmente válidos**. El seed asigna a cada factura demo un UUID fiscal distinto y usa el PDF sintético versionado `data/demo_documents/factura_demo.pdf` (si faltara, lo genera en un directorio temporal sin modificar el repositorio).
+Los XML y PDF de las facturas demo los genera `scripts/cfdi_demo.py` (también `factura_3668.pdf`/`.xml` y los `cfdi_demo_*.xml`): son estructuralmente útiles para el parser, pero **no están timbrados ni son fiscalmente válidos**.
 
 ## Limitaciones y fuera de alcance
 
 - Sin validación SAT online, timbrado ni generación CFDI.
-- Sin integración con ClickBalance ni SAP Ariba: el flujo del portal termina en "Autorizada".
+- Sin integración con ClickBalance ni SAP: el flujo del portal termina en "Autorizada" y las órdenes de compra se siembran o se capturan en el portal ("Nueva orden de compra" y "Editar"; con facturas ligadas no cambian el convenio ni el proveedor); no se consultan en SAP. "Programar pago" sólo muestra la solicitud en JSON: no la envía a ningún sistema.
+- El parser de la representación impresa del CFDI se probó con PDF sintéticos (la 3668 reconstruida, en la maqueta simple y en la del documento de negocio; los del recorrido manual y los de la prueba de lectura del PDF); falta probarlo con PDF reales de FERROMEX. No hay facturas parciales ni con varias órdenes de compra.
 - Sin pagos, banca, firma, SharePoint, Blob, Azure SQL, SSO con proveedores externos, despliegue Azure, Kubernetes o colas.
 - Los adaptadores Azure son contratos preparados, no llamadas productivas.
-- Las Reglas de validación y los catálogos son editables, pero los pesos del score siguen en el código y no se pueden crear reglas nuevas desde la interfaz. Los catálogos se usan en la validación del CFDI; la moneda del contrato sigue siendo texto libre de tres letras.
+- Las Reglas de validación y los catálogos son editables, pero los pesos del score siguen en el código y no se pueden crear reglas nuevas desde la interfaz. Los catálogos se usan en la validación del CFDI.
 - Las reglas `INT` del Invoice internacional buscan texto literal y aún no se calibran con invoices reales; no hay extracción automática de datos del Invoice.
 - Los correos (credenciales, decisión del PMO, cancelación) se envían de forma síncrona, sin cola ni reintentos automáticos; un envío fallido se reenvía a mano. No hay recordatorio antes de que venza el plazo de 72 horas de una cancelación.
 - El monto acumulado del tablero suma los totales sin convertir moneda: con facturas en MXN y USD es sólo una referencia.

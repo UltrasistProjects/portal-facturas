@@ -1,6 +1,8 @@
 """Pago de la factura y Complemento de Pago (HU Complemento de Pagos).
 
-El PMO o el Administrador marcan como "Pagada" una factura "Autorizada". Si el proveedor es nacional y el CFDI es de
+El PMO (en la rama ferromex, el analista de cuentas por pagar) o el Administrador programan el pago de una factura
+"Autorizada": la factura pasa a PAID, que en Ferromex se muestra como "Programado para pago", y la solicitud de
+programacion se presenta como JSON (schedule_request). Si el proveedor es nacional y el CFDI es de
 metodo de pago PPD, la factura requiere Complemento de Pago: el proveedor tiene 72 horas para adjuntar su XML (un CFDI
 de tipo P que relacione el UUID de la factura). Mientras tenga complementos vencidos, no puede enviar facturas a
 validacion; el bloqueo se calcula en cada envio, sin tareas programadas (D8).
@@ -9,6 +11,7 @@ Ningun servicio hace commit: el endpoint confirma el pago o la carga y despues e
 fallido no los revierte.
 """
 
+import json
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -20,13 +23,17 @@ from app.core.constants import (
     DEFERRED_PAYMENT_METHOD,
     PAYMENT_COMPLEMENT_TYPES,
     PAYMENT_COMPLEMENT_WINDOW,
+    SUPPLIER_ORIGIN_LABELS,
+    SUPPLIER_TYPE_LABELS,
     DocumentType,
     InvoiceStatus,
     NotificationEvent,
     SupplierOrigin,
 )
 from app.core.errors import BusinessRuleError, InvalidInputError
-from app.models import Document, EmailDelivery, Invoice, InvoiceDocumentType
+from app.core.timeutils import to_business
+from app.models import Document, EmailDelivery, Invoice, InvoiceDocumentType, User
+from app.services import invoice_extraction_service as extraction
 from app.services import notification_service
 from app.services import notification_templates as nt
 from app.services.audit_service import audit
@@ -36,10 +43,10 @@ from app.services.xml_service import XMLParseError, parse_payment_complement
 logger = logging.getLogger(__name__)
 
 ENTITY = "Invoice"
-MSG_ALREADY_PAID = "La factura ya fue pagada"
-MSG_NOT_ACCEPTED = "Sólo una factura autorizada se puede marcar como pagada"
+MSG_ALREADY_PAID = "La factura ya está programada para pago"
+MSG_NOT_ACCEPTED = "Sólo se puede programar el pago de una factura autorizada"
 MSG_NOT_REQUIRED = "La factura no requiere Complemento de Pago"
-MSG_ONLY_COMPLEMENT = "En una factura pagada sólo se puede cargar el Complemento de Pago"
+MSG_ONLY_COMPLEMENT = "En una factura programada para pago sólo se puede cargar el Complemento de Pago"
 MSG_NOT_COMPLEMENT = "El XML no es un Complemento de Pago (CFDI de tipo P)"
 MSG_NOT_RELATED = "El Complemento de Pago no relaciona la factura {uuid}"
 MSG_NO_INVOICE_UUID = "El Complemento de Pago no relaciona la factura: la factura aún no tiene el UUID de su CFDI"
@@ -74,12 +81,12 @@ def complement_type_active(db: Session) -> bool:
 
 
 def requires_complement(invoice: Invoice) -> bool:
-    """Proveedor nacional y MetodoPago PPD en el XML del CFDI vigente, leido de los datos que extrajo el motor. Sin
-    XML o sin metodo de pago, no lo requiere."""
+    """Proveedor nacional y MetodoPago PPD en los datos extraidos del CFDI vigente: los del XML o, si la factura se
+    registro solo con su PDF (HU-24), los del PDF. Sin datos o sin metodo de pago, no lo requiere."""
     if invoice.supplier.origin != SupplierOrigin.NATIONAL:
         return False
-    xml = _current_document(invoice, DocumentType.INVOICE_XML)
-    return xml is not None and (xml.metadata_json or {}).get("payment_method") == DEFERRED_PAYMENT_METHOD
+    stored = extraction.stored_data(invoice)
+    return stored is not None and stored.data.get("payment_method") == DEFERRED_PAYMENT_METHOD
 
 
 def complement_required(invoice: Invoice) -> bool:
@@ -99,8 +106,9 @@ def is_overdue(invoice: Invoice, now: datetime | None = None) -> bool:
 
 
 def mark_paid(db: Session, invoice: Invoice, user_id: int) -> None:
-    """Pasa una factura "Autorizada" a "Pagada" y fija si requiere complemento. Bloquea la fila antes de comprobar el
-    estatus: de dos pagos simultaneos, o de un pago y una cancelacion, el segundo recibe 409."""
+    """Programa el pago de una factura "Autorizada" (PAID, "Programado para pago") y fija si requiere complemento.
+    Bloquea la fila antes de comprobar el estatus: de dos pagos simultaneos, o de un pago y una cancelacion, el
+    segundo recibe 409."""
     lock_invoice(db, invoice)
     if invoice.status == InvoiceStatus.PAID:
         raise BusinessRuleError(MSG_ALREADY_PAID)
@@ -125,6 +133,8 @@ def mark_paid(db: Session, invoice: Invoice, user_id: int) -> None:
             "paid_at": invoice.paid_at.isoformat(),
             "requires_complement": required,
             "complement_due_at": due.isoformat() if due else None,
+            # La solicitud de programacion tal como se mostro al confirmar: evidencia de lo que se entrego.
+            "schedule_request": schedule_request(db, invoice),
         },
     )
 
@@ -135,6 +145,84 @@ def complement_notice(invoice: Invoice) -> str:
     if not is_pending(invoice):
         return ""
     return nt.COMPLEMENT_NOTICE.format(fecha=nt.format_datetime(invoice.payment_complement_due_at))
+
+
+# --- Solicitud de programacion del pago ----------------------------------------------------------------------------
+
+SCHEDULE_REQUEST_TYPE = "PROGRAMACION_PAGO"
+
+
+def _amount(value) -> str | None:
+    return None if value is None else f"{value:.2f}"
+
+
+def _iso(value: datetime | None) -> str | None:
+    return to_business(value).isoformat(timespec="seconds") if value else None
+
+
+def schedule_request(db: Session, invoice: Invoice, user: User | None = None, at: datetime | None = None) -> dict:
+    """Solicitud de programacion del pago que el portal entregaria a SAP, la que muestra la ventana de "Programar
+    pago". Antes de programar, con la fecha y el usuario de la vista previa; despues, con los registrados en la
+    factura (paid_at y paid_by). No consulta servicios externos ni guarda nada."""
+    if invoice.paid_at is not None:
+        at = invoice.paid_at
+        user = db.get(User, invoice.paid_by) if invoice.paid_by else None
+    stored = extraction.stored_data(invoice)
+    data = stored.data if stored else {}
+    supplier = invoice.supplier
+    order = invoice.purchase_order
+    required = requires_complement(invoice) and complement_type_active(db)
+    due = invoice.payment_complement_due_at
+    if due is None and required and at is not None and invoice.paid_at is None:
+        due = at + PAYMENT_COMPLEMENT_WINDOW
+    identity = (
+        {"rfc": supplier.rfc}
+        if supplier.rfc
+        else {"pais": supplier.country, "identificador_fiscal": supplier.foreign_tax_id}
+    )
+    return {
+        "tipo": SCHEDULE_REQUEST_TYPE,
+        "estatus": "PROGRAMADO_PARA_PAGO",
+        "fecha_programacion": _iso(at),
+        "programado_por": {"nombre": user.name, "correo": user.email} if user else None,
+        "factura": {
+            "folio_interno": invoice.internal_folio,
+            "numero": invoice.invoice_number,
+            "uuid": invoice_uuid(invoice),
+            "fecha_emision": data.get("date") or (invoice.invoice_date.isoformat() if invoice.invoice_date else None),
+            "moneda": invoice.currency,
+            "subtotal": _amount(invoice.subtotal),
+            "impuestos": _amount(invoice.tax),
+            "total": _amount(invoice.total),
+            "metodo_pago": data.get("payment_method"),
+            "forma_pago": data.get("payment_form"),
+            "uso_cfdi": data.get("cfdi_use"),
+        },
+        "proveedor": {
+            "nombre": supplier.business_name,
+            **identity,
+            "origen": SUPPLIER_ORIGIN_LABELS[supplier.origin],
+            "tipo_persona": SUPPLIER_TYPE_LABELS[supplier.supplier_type],
+            "correo": supplier.email,
+            "informacion_bancaria": supplier.bank_information,
+        },
+        "receptor": {"rfc": data.get("receiver_rfc"), "nombre": data.get("receiver_name")},
+        "orden_compra": (
+            {
+                "convenio": order.convenio,
+                "fecha": order.order_date.isoformat(),
+                "total": _amount(order.total),
+                "impuestos": _amount(order.taxes),
+            }
+            if order
+            else ({"convenio": invoice.purchase_order_number} if invoice.purchase_order_number else None)
+        ),
+        "complemento_pago": {"requerido": required, "fecha_limite": _iso(due)},
+    }
+
+
+def schedule_request_json(db: Session, invoice: Invoice, user: User | None = None, at: datetime | None = None) -> str:
+    return json.dumps(schedule_request(db, invoice, user, at), ensure_ascii=False, indent=2)
 
 
 # --- Complemento --------------------------------------------------------------------------------------------------

@@ -50,7 +50,7 @@ def test_proveedor_sin_proveedor_rechazado(client, email):
     page = response.text
     assert '<details class="panel admin-create" open>' in page
     assert f'value="{email}"' in page and 'value="Joshua Bolaños Hernández"' in page
-    assert "<option selected>Proveedor</option>" in page and 'name="password"' not in page
+    assert '<option value="Proveedor" selected>Proveedor</option>' in page and 'name="password"' not in page
 
 
 def test_proveedor_inexistente(client, email):

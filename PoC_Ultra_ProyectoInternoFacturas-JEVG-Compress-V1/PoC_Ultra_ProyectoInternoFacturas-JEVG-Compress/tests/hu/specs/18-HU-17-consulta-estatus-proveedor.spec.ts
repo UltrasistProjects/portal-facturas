@@ -77,8 +77,8 @@ test('HU-17 · Consulta de estatus de factura', async ({ browser }, testInfo) =>
           await expect(causa.locator('p').first()).toHaveText(rechazada.texto);
           const correo = buscarCorreo('proveedor1@poc.local', `Factura ${rechazada.numero} rechazada`);
           expect(correo?.texto ?? '').toContain(rechazada.texto);
-          await expect(proveedor.locator('#history')).toContainText('PMO');
-          await expect(proveedor.locator('#history')).not.toContainText('PMO Demo');
+          await expect(proveedor.locator('#history')).toContainText('Analista de cuentas por pagar');
+          await expect(proveedor.locator('#history')).not.toContainText('Analista CxP Demo');
           await hu.captura(proveedor, 'motivo-rechazo', 'Detalle "Rechazada" con el motivo del rechazo.');
           // Coherencia de fechas: el seguimiento muestra la hora de negocio (America/Mexico_City).
           const fechaSeguimiento = ((await proveedor.locator('#history li span').first().innerText()).match(/\d{2}\/\d{2}\/\d{4}/) ?? [''])[0];

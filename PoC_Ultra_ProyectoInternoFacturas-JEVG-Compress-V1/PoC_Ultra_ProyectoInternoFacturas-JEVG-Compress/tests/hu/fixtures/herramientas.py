@@ -41,10 +41,11 @@ def _pdf(path: Path, lines: list[str]) -> None:
     document.close()
 
 
-def _cfdi(uuid_value: str, postal_code: str = "03930") -> str:
+def _cfdi(uuid_value: str, postal_code: str = "11700") -> str:
+    """CFDI demo (receptor INTERMODAL MEXICO, HU-24) con un UUID nuevo y, si se indica, otro codigo postal."""
     raw = (DEMO / "cfdi_demo_correcto.xml").read_text(encoding="utf-8")
     raw = re.sub(r'UUID="[^"]*"', f'UUID="{uuid_value}"', raw)
-    return raw.replace('DomicilioFiscalReceptor="03930"', f'DomicilioFiscalReceptor="{postal_code}"')
+    return raw.replace('DomicilioFiscalReceptor="11700"', f'DomicilioFiscalReceptor="{postal_code}"')
 
 
 def _payment_complement(related_uuid: str) -> str:
@@ -89,12 +90,12 @@ def fixtures(run: str, out: str) -> None:
     shutil.copyfile(DEMO / "factura_demo.pdf", files["pdf_cfdi"])
     shutil.copyfile(DEMO / "orden_compra_demo.txt", files["orden_compra"])
     shutil.copyfile(DEMO / "vobo_demo.txt", files["vobo"])
-    # Invoice internacional: trae el identificador fiscal del proveedor demo y el codigo postal de FERROMEX, pero no
+    # Invoice internacional: trae el identificador fiscal del proveedor demo y el codigo postal del receptor, pero no
     # su razon social, para que INT-002 resulte advertencia (no bloquea el envio).
     invoice_lines = [
         f"INVOICE INV-QA-{run}",
         "Global Data Services Inc. - Tax ID 98-7654321",
-        "Bill to: customer in Mexico City, ZIP 03930",
+        "Bill to: customer in Mexico City, ZIP 11700",
         "Data analytics services - August 2026",
         "Subtotal 1,000.00 USD  Tax 0.00  Total 1,000.00 USD",
         "QA TEST DOCUMENT - NO FISCAL VALIDITY",

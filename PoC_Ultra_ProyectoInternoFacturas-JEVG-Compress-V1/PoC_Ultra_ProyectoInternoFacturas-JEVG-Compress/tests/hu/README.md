@@ -41,6 +41,12 @@ archivos una por una y los correos que genera el portal. Resultado: `evidencias/
 de la suite (`playwright.video.config.ts`, `video/`): no toca los resultados de las HUs y crea datos propios en cada
 corrida. `RECORRIDO_SLOWMO=0 npm run video` quita la pausa entre acciones.
 
+`npm run video-3668` graba solo el recorrido de la factura 3668 del documento de negocio, con los archivos de
+`data/pruebas-factura-3668` y en el orden de su `INSTRUCTIVO.md`. La proveedora `proveedor2@poc.local` registra la
+factura solo con su PDF, y la factura pasa por Observaciones, autorización, pago y Complemento de Pago. Necesita una base
+recién reiniciada (`scripts/reset_demo.py`), porque el UUID de la 3668 es fijo. Resultado:
+`evidencias/video/recorrido-factura-3668.webm`.
+
 ## Resultado
 
 - `PASS`: todos los escenarios pasaron. `FAIL`: algún paso no cumplió lo esperado (se captura la pantalla del fallo).

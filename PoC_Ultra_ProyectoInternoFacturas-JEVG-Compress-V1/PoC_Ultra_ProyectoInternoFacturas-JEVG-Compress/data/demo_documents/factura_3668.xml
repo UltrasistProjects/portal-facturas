@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- DOCUMENTO FICTICIO PARA PRUEBAS. NO ES UN CFDI TIMBRADO VALIDO. -->
+<cfdi:Comprobante xmlns:cfdi="http://www.sat.gob.mx/cfd/4" xmlns:tfd="http://www.sat.gob.mx/TimbreFiscalDigital" Version="4.0" Folio="3668" Fecha="2026-01-03T14:24:46" FormaPago="99" SubTotal="3559.05" Moneda="MXN" Total="4128.50" TipoDeComprobante="I" Exportacion="01" MetodoPago="PPD" LugarExpedicion="36100">
+  <cfdi:Emisor Rfc="GOHS60031745A" Nombre="SOCORRO PATRICIA GONZALEZ HERNANDEZ" RegimenFiscal="612"/>
+  <cfdi:Receptor Rfc="IME010718PU3" Nombre="INTERMODAL MEXICO" DomicilioFiscalReceptor="11700" RegimenFiscalReceptor="601" UsoCFDI="G03"/>
+  <cfdi:Conceptos>
+    <cfdi:Concepto ClaveProdServ="26111700" NoIdentificacion="L-31T-900" Cantidad="1.00" ClaveUnidad="H87" Unidad="PZ" Descripcion="LTH TIPO L-31T-900 AR BATERIA (OC/25704872)" ValorUnitario="3559.05" Importe="3559.05" ObjetoImp="02"><cfdi:Impuestos><cfdi:Traslados><cfdi:Traslado Base="3559.05" Impuesto="002" TipoFactor="Tasa" TasaOCuota="0.160000" Importe="569.45"/></cfdi:Traslados></cfdi:Impuestos></cfdi:Concepto>
+  </cfdi:Conceptos>
+  <cfdi:Impuestos TotalImpuestosTrasladados="569.45"/>
+  <cfdi:Complemento><tfd:TimbreFiscalDigital Version="1.1" UUID="A328F91A-DDDD-4624-89AC-877819F5B540"/></cfdi:Complemento>
+</cfdi:Comprobante>

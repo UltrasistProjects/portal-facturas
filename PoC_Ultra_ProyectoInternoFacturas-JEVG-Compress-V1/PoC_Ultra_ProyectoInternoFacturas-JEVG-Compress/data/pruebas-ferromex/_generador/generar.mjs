@@ -3,8 +3,11 @@
 //
 //   node data/pruebas-ferromex/_generador/generar.mjs
 //
-// RECEPTOR copia la configuración vigente de Reglas de Validación (XML-002, XML-009, XML-010). Si cambia el RFC,
-// la razón social o el C.P. de FERROMEX, actualízalo aquí y vuelve a generar: los XML deben coincidir con esa regla.
+// RECEPTOR copia la configuración inicial de Reglas de Validación (XML-002, XML-009, XML-010 y XML-011): el receptor de
+// las facturas de FERROMEX es INTERMODAL MEXICO (HU-24, P-01). Si cambia, actualízalo aquí y vuelve a generar.
+// Cada CFDI cita en su concepto la orden de compra (convenio) que siembra scripts/seed_db.py (WALKTHROUGH_ORDERS):
+// A-1001 cuadra con la orden 45000451; A-1002 factura más que la orden 45000452. Los PDF del CFDI usan las etiquetas
+// de la representación impresa que lee el portal (sección 6.3 de la HU-24).
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
@@ -15,9 +18,9 @@ const SALIDA = join(AQUI, '..');
 const HU_DIR = process.env.HU_DIR ?? join(AQUI, '../../../tests/hu');
 
 const RECEPTOR = {
-  rfc: 'ULT940623AG0',
-  nombre: 'FERROMEX',
-  cp: '03930',
+  rfc: 'IME010718PU3',
+  nombre: 'INTERMODAL MEXICO',
+  cp: '11700',
   regimen: '601',
   regimenNombre: 'General de Ley Personas Morales',
   usoCfdi: 'G03',
@@ -41,19 +44,18 @@ const PROVEEDOR = {
   sucursal: '0580 Monterrey Obispado',
 };
 
-const CONTRATO = {
-  numero: 4,
+// Proyecto del servicio facturado (el portal ya no usa contratos: la factura se valida contra su orden de compra).
+const PROYECTO = {
   proyecto: 'Monitoreo de Flota Ferroviaria FERROMEX',
   lider: 'Mariana Cortés Elizondo',
   tecnologia: 'React + Python Fast API',
   monto: 45000,
   inicio: '2026-10-01',
   fin: '2027-03-31',
-  firma: '2026-09-28',
 };
 
-const concepto = (periodo) =>
-  `Desarrollo del sistema de Monitoreo de Flota Ferroviaria con React + Python Fast API, servicio del mes ${periodo}`;
+const concepto = (periodo, oc) =>
+  `Desarrollo del sistema de Monitoreo de Flota Ferroviaria con React + Python Fast API, servicio del mes ${periodo} (OC/${oc})`;
 
 const FACTURA_A = {
   carpeta: '3-factura-observaciones-autorizada',
@@ -62,8 +64,7 @@ const FACTURA_A = {
   fecha: '2026-11-19T09:30:00',
   timbrado: '2026-11-19T09:35:00',
   periodo: '10/2026',
-  oc: 'OC-2026-0451',
-  ocFecha: '2026-10-01',
+  oc: 45000451,
   subtotal: 45000,
   letra: 'CINCUENTA Y DOS MIL DOSCIENTOS PESOS 00/100 M.N.',
   uuid: '8E21EC7A-43E0-4C56-8644-D1E9325DE2EE',
@@ -76,8 +77,7 @@ const FACTURA_B = {
   fecha: '2026-11-19T10:00:00',
   timbrado: '2026-11-19T10:05:00',
   periodo: '11/2026',
-  oc: 'OC-2026-0452',
-  ocFecha: '2026-11-03',
+  oc: 45000452,
   subtotal: 52000,
   letra: 'SESENTA MIL TRESCIENTOS VEINTE PESOS 00/100 M.N.',
   uuid: '4CCE1C44-89B6-4EB9-9B0F-657760BAEE08',
@@ -117,7 +117,7 @@ function cfdiIngreso(f) {
     <cfdi:Emisor Rfc="${PROVEEDOR.rfc}" Nombre="${PROVEEDOR.nombreCfdi}" RegimenFiscal="${PROVEEDOR.regimen}"/>
     <cfdi:Receptor Rfc="${RECEPTOR.rfc}" Nombre="${esc(RECEPTOR.nombre)}" DomicilioFiscalReceptor="${RECEPTOR.cp}" RegimenFiscalReceptor="${RECEPTOR.regimen}" UsoCFDI="${RECEPTOR.usoCfdi}"/>
     <cfdi:Conceptos>
-        <cfdi:Concepto ClaveProdServ="81111500" Cantidad="1" ClaveUnidad="E48" Unidad="Servicio" Descripcion="${esc(concepto(f.periodo))}" ValorUnitario="${sub}" Importe="${sub}" ObjetoImp="02">
+        <cfdi:Concepto ClaveProdServ="81111500" Cantidad="1" ClaveUnidad="E48" Unidad="Servicio" Descripcion="${esc(concepto(f.periodo, f.oc))}" ValorUnitario="${sub}" Importe="${sub}" ObjetoImp="02">
             <cfdi:Impuestos>
                 <cfdi:Traslados>
                     <cfdi:Traslado Base="${sub}" Impuesto="002" TipoFactor="Tasa" TasaOCuota="0.160000" Importe="${imp}"/>
@@ -220,12 +220,6 @@ function kv(pares, porRenglon = 2) {
 const firmas = (...personas) =>
   `<div class="firmas">${personas.map(([n, r]) => `<div class="firma">${n}<small>${r}</small></div>`).join('')}</div>`;
 
-const encabezadoFerromex = (titulo, meta) => ({
-  titulo: RECEPTOR.nombre,
-  sub: [`RFC: ${RECEPTOR.rfc}`, `C.P. ${RECEPTOR.cp}`],
-  meta: [`<b>${titulo}</b>`, ...meta],
-});
-
 const encabezadoProveedor = (titulo, meta) => ({
   titulo: PROVEEDOR.nombreCfdi,
   sub: [
@@ -260,18 +254,18 @@ const receptorCfdi = (uso, usoNombre) =>
 function pdfCfdi(f) {
   const tot = total(f.subtotal);
   return pagina({
-    ...encabezadoProveedor('FACTURA (CFDI 4.0)', [
-      `Serie-Folio: ${serieFolio(f)}`,
-      `Fecha: ${f.fecha}`,
-      'Tipo: I - Ingreso',
+    ...encabezadoProveedor(`Factura ${serieFolio(f)}`, [
+      'CFDI 4.0',
+      `Fecha y hora de emisión de CFDI: ${f.fecha}`,
+      'Tipo de comprobante: I - Ingreso',
       'Exportación: 01 - No aplica',
     ]),
     aviso: false,
     cuerpo: `${receptorCfdi(RECEPTOR.usoCfdi, RECEPTOR.usoCfdiNombre)}
 <h2>Conceptos</h2><table><tr><th>Clave</th><th>Cant.</th><th>Unidad</th><th>Descripción</th><th class="num">Valor unitario</th><th class="num">Importe</th><th>Obj. Imp.</th></tr>
-<tr><td>81111500</td><td>1</td><td>E48 - Servicio</td><td>${esc(concepto(f.periodo))}</td><td class="num">${money(f.subtotal)}</td><td class="num">${money(f.subtotal)}</td><td>02</td></tr></table>
+<tr><td>81111500</td><td>1</td><td>E48 - Servicio</td><td>${esc(concepto(f.periodo, f.oc))}</td><td class="num">${money(f.subtotal)}</td><td class="num">${money(f.subtotal)}</td><td>02</td></tr></table>
 <h2>Totales</h2><table class="totals"><tr><td class="k">Subtotal</td><td class="num">${money(f.subtotal)}</td></tr>
-<tr><td class="k">IVA Traslado 002 (Tasa 0.160000)</td><td class="num">${money(iva(f.subtotal))}</td></tr>
+<tr><td class="k">Traslado IVA Tasa 0.160000</td><td class="num">${money(iva(f.subtotal))}</td></tr>
 <tr><td class="k">Total</td><td class="num"><b>${money(tot)} MXN</b></td></tr></table>
 <p><b>Importe con letra:</b> ${f.letra}</p>
 <table><tr><td class="k">Moneda</td><td>MXN</td><td class="k">Forma de pago</td><td>99 - Por definir</td><td class="k">Método de pago</td><td>PPD - Pago en parcialidades o diferido</td></tr></table>
@@ -305,41 +299,13 @@ ${timbre(p.uuid, p.timbrado)}`,
   });
 }
 
-function pdfOrdenCompra(f, montoAutorizado) {
-  return pagina({
-    ...encabezadoFerromex('ORDEN DE COMPRA', [`No.: ${f.oc}`, `Fecha de emisión: ${f.ocFecha}`, `Contrato: ${CONTRATO.numero}`]),
-    cuerpo: `<h2>Proveedor</h2>${kv([
-      ['Nombre', PROVEEDOR.nombre],
-      ['RFC', PROVEEDOR.rfc],
-      ['Tipo', 'Persona física'],
-      ['Origen', 'Nacional'],
-    ])}
-<h2>Datos del proyecto</h2>${kv([
-      ['Proyecto', CONTRATO.proyecto],
-      ['Líder de proyecto', CONTRATO.lider],
-      ['Tecnología autorizada', CONTRATO.tecnologia],
-      ['Vigencia del contrato', `${CONTRATO.inicio} a ${CONTRATO.fin}`],
-      ['Periodo de servicio', f.periodo],
-    ])}
-<h2>Detalle</h2><table><tr><th>#</th><th>Descripción</th><th>Cant.</th><th class="num">Precio unitario</th><th class="num">Importe</th></tr>
-<tr><td>1</td><td>${esc(concepto(f.periodo))}</td><td>1</td><td class="num">${money(montoAutorizado)}</td><td class="num">${money(montoAutorizado)}</td></tr></table>
-<table class="totals" style="margin-top:6px"><tr><td class="k">Subtotal</td><td class="num">${money(montoAutorizado)}</td></tr>
-<tr><td class="k">IVA 16%</td><td class="num">${money(iva(montoAutorizado))}</td></tr>
-<tr><td class="k">Total</td><td class="num"><b>${money(total(montoAutorizado))} MXN</b></td></tr></table>
-<h2>Condiciones de facturación</h2><table><tr><td class="k">Uso CFDI</td><td>${RECEPTOR.usoCfdi}</td><td class="k">Método de pago</td><td>PPD</td><td class="k">Forma de pago</td><td>99</td></tr></table>
-<p>El monto autorizado de esta orden es de ${money(montoAutorizado)} MXN antes de impuestos. La factura deberá referir el proyecto y el periodo de servicio indicados.</p>
-${firmas(['Compras FERROMEX', 'Elaboró'], ['Dirección de Tecnología FERROMEX', 'Autorizó'])}`,
-  });
-}
-
 function pdfVobo(f, { periodo, folio, fecha }) {
   return pagina({
     titulo: RECEPTOR.nombre,
     sub: ['Visto Bueno del Líder de Proyecto'],
     meta: [`Fecha: ${fecha}`, `Folio: ${folio}`],
     cuerpo: `<h2>Referencia</h2>${kv([
-      ['Proyecto', CONTRATO.proyecto],
-      ['Contrato', CONTRATO.numero],
+      ['Proyecto', PROYECTO.proyecto],
       ['Proveedor', PROVEEDOR.nombre],
       ['RFC', PROVEEDOR.rfc],
       ['Orden de compra', f.oc],
@@ -349,9 +315,9 @@ function pdfVobo(f, { periodo, folio, fecha }) {
       ['Subtotal', `${money(f.subtotal)} MXN`],
       ['Total', `${money(total(f.subtotal))} MXN`],
     ])}
-<h2>Dictamen</h2><p>Por medio del presente, como líder del proyecto <b>${CONTRATO.proyecto}</b>, hago constar que los servicios de
-<b>desarrollo del sistema de Monitoreo de Flota Ferroviaria con ${CONTRATO.tecnologia}</b> correspondientes al periodo <b>${periodo}</b>
-fueron recibidos a entera satisfacción, conforme al alcance, tecnología y monto autorizados en el contrato, por lo que otorgo mi
+<h2>Dictamen</h2><p>Por medio del presente, como líder del proyecto <b>${PROYECTO.proyecto}</b>, hago constar que los servicios de
+<b>desarrollo del sistema de Monitoreo de Flota Ferroviaria con ${PROYECTO.tecnologia}</b> correspondientes al periodo <b>${periodo}</b>
+fueron recibidos a entera satisfacción, conforme al alcance y monto de la orden de compra ${f.oc}, por lo que otorgo mi
 <b>Visto Bueno</b> para el trámite de pago de la factura arriba referida.</p>
 ${kv(
   [
@@ -360,34 +326,7 @@ ${kv(
   ],
   1,
 )}
-${firmas([CONTRATO.lider, 'Líder de proyecto FERROMEX'])}`,
-  });
-}
-
-function pdfContrato() {
-  return pagina({
-    ...encabezadoFerromex('CONTRATO DE PRESTACIÓN DE SERVICIOS', [`Contrato: ${CONTRATO.numero}`, `Fecha de firma: ${CONTRATO.firma}`]),
-    cuerpo: `<h2>Partes</h2>${kv([
-      ['Contratante', RECEPTOR.nombre],
-      ['RFC', RECEPTOR.rfc],
-      ['Prestador', PROVEEDOR.nombre],
-      ['RFC', PROVEEDOR.rfc],
-    ])}
-<h2>Objeto y condiciones</h2>${kv([
-      ['Proyecto', CONTRATO.proyecto],
-      ['Líder de proyecto', CONTRATO.lider],
-      ['Tecnología autorizada', CONTRATO.tecnologia],
-      ['Monto autorizado', `${money(CONTRATO.monto)} MXN mensuales + IVA`],
-      ['Vigencia', `${CONTRATO.inicio} a ${CONTRATO.fin}`],
-      ['Facturación', 'Mensual, por periodo de servicio'],
-    ])}
-<p><b>PRIMERA.</b> El Prestador se obliga a desarrollar el sistema de Monitoreo de Flota Ferroviaria (ubicación de locomotoras y carros,
-alertas de detención y eventos de patio) con la tecnología autorizada, conforme al alcance acordado con el líder de proyecto.</p>
-<p><b>SEGUNDA.</b> FERROMEX pagará el monto autorizado por cada periodo de servicio, previa recepción del CFDI (XML y PDF), la orden de
-compra y el Vo.Bo. del líder de proyecto a través del Portal de Proveedores.</p>
-<p><b>TERCERA.</b> Ninguna factura podrá exceder el monto autorizado ni referir periodos fuera de la vigencia.</p>
-<p><b>CUARTA.</b> El Prestador emitirá el Complemento de Pago correspondiente a cada pago recibido y lo cargará en el Portal de Proveedores.</p>
-${firmas(['Dirección de Tecnología FERROMEX', 'Contratante'], [PROVEEDOR.nombre, 'Prestador'])}`,
+${firmas([PROYECTO.lider, 'Líder de proyecto FERROMEX'])}`,
   });
 }
 
@@ -494,10 +433,10 @@ function pdfPropuesta() {
     sub: [`RFC: ${PROVEEDOR.rfc}`, PROVEEDOR.domicilio],
     meta: ['<b>PROPUESTA ECONÓMICA</b>', `Fecha: ${DOC_FECHAS.propuesta}`, `Dirigida a: ${RECEPTOR.nombre}`],
     cuerpo: `<h2>Servicio propuesto</h2>${kv([
-      ['Proyecto', CONTRATO.proyecto],
-      ['Tecnología', CONTRATO.tecnologia],
-      ['Vigencia propuesta', `${CONTRATO.inicio} a ${CONTRATO.fin}`],
-      ['Monto mensual', `${money(CONTRATO.monto)} MXN + IVA`],
+      ['Proyecto', PROYECTO.proyecto],
+      ['Tecnología', PROYECTO.tecnologia],
+      ['Vigencia propuesta', `${PROYECTO.inicio} a ${PROYECTO.fin}`],
+      ['Monto mensual', `${money(PROYECTO.monto)} MXN + IVA`],
     ])}
 <p>Desarrollo y mantenimiento evolutivo del sistema de Monitoreo de Flota Ferroviaria: tablero de ubicación de locomotoras y carros,
 alertas de detención en vía y patio, y API de eventos para los sistemas operativos de FERROMEX. Facturación mensual por periodo de
@@ -525,9 +464,7 @@ const PDFS = {
   [`1-proveedor/Identificacion-Oficial-${rfc}.pdf`]: pdfIdentificacion(),
   [`1-proveedor/Opinion-Cumplimiento-${rfc}.pdf`]: pdfOpinion(),
   [`1-proveedor/Propuesta-Economica-${rfc}.pdf`]: pdfPropuesta(),
-  [`2-contrato/Contrato-${CONTRATO.numero}-MonitoreoFlota-${rfc}.pdf`]: pdfContrato(),
   [docA(`CFDI-A${FACTURA_A.folio}-${rfc}.pdf`)]: pdfCfdi(FACTURA_A),
-  [docA(`OrdenCompra-${FACTURA_A.oc}.pdf`)]: pdfOrdenCompra(FACTURA_A, CONTRATO.monto),
   [docA(`VoBo-A${FACTURA_A.folio}-v1-con-error-periodo-09-2026.pdf`)]: pdfVobo(FACTURA_A, {
     periodo: '09/2026',
     folio: 'VOBO-2026-0451',
@@ -540,7 +477,6 @@ const PDFS = {
   }),
   [docA(`REP-P${PAGO_A.folio}-${rfc}.pdf`)]: pdfPago(PAGO_A, FACTURA_A),
   [docB(`CFDI-A${FACTURA_B.folio}-${rfc}.pdf`)]: pdfCfdi(FACTURA_B),
-  [docB(`OrdenCompra-${FACTURA_B.oc}.pdf`)]: pdfOrdenCompra(FACTURA_B, CONTRATO.monto),
   [docB(`VoBo-A${FACTURA_B.folio}.pdf`)]: pdfVobo(FACTURA_B, {
     periodo: FACTURA_B.periodo,
     folio: 'VOBO-2026-0452',

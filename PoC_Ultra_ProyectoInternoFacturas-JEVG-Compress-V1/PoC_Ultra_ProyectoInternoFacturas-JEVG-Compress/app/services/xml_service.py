@@ -43,7 +43,8 @@ def _comprobante(source: bytes | str | Path) -> etree._Element:
 
 
 def parse_cfdi(source: bytes | str | Path) -> dict[str, Any]:
-    """Extrae CFDI sin resolver entidades ni depender de prefijos de namespace."""
+    """Extrae CFDI sin resolver entidades ni depender de prefijos de namespace. Las claves son las mismas que produce la
+    lectura de la representacion impresa (invoice_extraction_service.parse_printed_cfdi)."""
     root = _comprobante(source)
     issuer = next(iter(root.xpath("./*[local-name()='Emisor']")), None)
     receiver = next(iter(root.xpath("./*[local-name()='Receptor']")), None)
@@ -55,12 +56,19 @@ def parse_cfdi(source: bytes | str | Path) -> dict[str, Any]:
             {
                 "description": _attr(concept, "Descripcion"),
                 "quantity": _decimal(_attr(concept, "Cantidad")),
+                "unit_key": _attr(concept, "ClaveUnidad"),
+                "unit": _attr(concept, "Unidad"),
+                "identification": _attr(concept, "NoIdentificacion"),
                 "unit_value": _decimal(_attr(concept, "ValorUnitario")),
+                "tax_object": _attr(concept, "ObjetoImp"),
                 "amount": _decimal(_attr(concept, "Importe")),
                 "taxes": [
                     {
+                        # Traslado o Retencion: el IVA que se compara con la orden de compra es el trasladado (RD-13).
+                        "kind": etree.QName(t).localname,
                         "tax": _attr(t, "Impuesto"),
                         "rate": _attr(t, "TasaOCuota"),
+                        "base": _decimal(_attr(t, "Base")),
                         "amount": _decimal(_attr(t, "Importe")),
                     }
                     for t in taxes
@@ -71,8 +79,11 @@ def parse_cfdi(source: bytes | str | Path) -> dict[str, Any]:
     return {
         "version": _attr(root, "Version", "version"),
         "uuid": _attr(stamp, "UUID"),
+        "series": _attr(root, "Serie"),
+        "folio": _attr(root, "Folio"),
         "issuer_rfc": _attr(issuer, "Rfc", "rfc"),
         "issuer_name": _attr(issuer, "Nombre"),
+        "issuer_regime": _attr(issuer, "RegimenFiscal"),
         "receiver_rfc": _attr(receiver, "Rfc", "rfc"),
         "receiver_name": _attr(receiver, "Nombre"),
         "receiver_postal_code": _attr(receiver, "DomicilioFiscalReceptor"),

@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <cfdi:Comprobante xmlns:cfdi="http://www.sat.gob.mx/cfd/4" xmlns:pago20="http://www.sat.gob.mx/Pagos20" xmlns:tfd="http://www.sat.gob.mx/TimbreFiscalDigital" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.sat.gob.mx/cfd/4 http://www.sat.gob.mx/sitio_internet/cfd/4/cfdv40.xsd http://www.sat.gob.mx/Pagos20 http://www.sat.gob.mx/sitio_internet/cfd/Pagos/Pagos20.xsd" Version="4.0" Serie="P" Folio="1001" Fecha="2026-11-19T13:00:00" SubTotal="0" Moneda="XXX" Total="0" TipoDeComprobante="P" Exportacion="01" LugarExpedicion="64060" NoCertificado="00001000000500000001" Certificado="" Sello="">
   <cfdi:Emisor Rfc="GAVH810417Q42" Nombre="HECTOR GARZA VILLARREAL" RegimenFiscal="612"/>
-  <cfdi:Receptor Rfc="ULT940623AG0" Nombre="FERROMEX" DomicilioFiscalReceptor="03930" RegimenFiscalReceptor="601" UsoCFDI="CP01"/>
+  <cfdi:Receptor Rfc="IME010718PU3" Nombre="INTERMODAL MEXICO" DomicilioFiscalReceptor="11700" RegimenFiscalReceptor="601" UsoCFDI="CP01"/>
   <cfdi:Conceptos>
     <cfdi:Concepto ClaveProdServ="84111506" Cantidad="1" ClaveUnidad="ACT" Descripcion="Pago" ValorUnitario="0" Importe="0" ObjetoImp="01"/>
   </cfdi:Conceptos>

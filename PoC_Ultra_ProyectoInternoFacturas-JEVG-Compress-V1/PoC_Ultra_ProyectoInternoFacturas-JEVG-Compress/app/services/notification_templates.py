@@ -41,7 +41,7 @@ AUDIT_ACTION = "NOTIFICATION_TEMPLATE_UPDATED"
 
 # Valor de {{aviso_complemento}} en una factura que requiere Complemento de Pago (HU Complemento de Pagos).
 COMPLEMENT_NOTICE = (
-    "Es importante que adjunte su “Complemento de Pago” a dicha factura pagada antes del {fecha}. "
+    "Es importante que adjunte su “Complemento de Pago” a dicha factura antes del {fecha}. "
     "Mientras no lo adjunte, el portal no le permitirá enviar nuevas facturas a validación."
 )
 
@@ -65,7 +65,7 @@ VARIABLES = {
         Variable("fecha_estatus", "Fecha y hora del cambio de estatus, en la zona de negocio", "25/09/2026 10:30"),
         Variable(
             "observaciones",
-            "Causa que capturó el PMO",
+            "Causa que capturó el analista de cuentas por pagar",
             "El subtotal del XML no coincide con el de la orden de compra.",
         ),
         Variable(
@@ -82,9 +82,7 @@ VARIABLES = {
         # Credenciales de acceso (HU-03). El ejemplo de la contrasena es ficticio: nunca se leen datos reales.
         Variable("usuario", "Correo con el que el proveedor inicia sesión", "contacto@serviciosdelnorte.mx"),
         Variable("contrasena_temporal", "Contraseña temporal generada al autorizar", "Ejemplo#Temporal2026"),
-        Variable(
-            "url_portal", "Dirección de inicio de sesión del portal", "https://proveedores.ferromex.com.mx/login"
-        ),
+        Variable("url_portal", "Dirección de inicio de sesión del portal", "https://proveedores.ferromex.com.mx/login"),
     )
 }
 COMMON_VARIABLES = {"numero_factura", "folio_interno", "proveedor", "monto", "estatus", "fecha_estatus"}
@@ -210,17 +208,17 @@ EVENTS: dict[NotificationEvent, EventSpec] = {
         ),
         EventSpec(
             NotificationEvent.INVOICE_PAID,
-            "Pagada",
+            "Programado para pago",
             SUPPLIER,
             _variables("aviso_complemento"),
             ("numero_factura", "aviso_complemento"),
-            "Factura {{numero_factura}} pagada",
+            "Factura {{numero_factura}} programada para pago",
             "{{proveedor}}:\n\n"
-            "Su factura número {{numero_factura}} ha sido pagada.\n\n"
+            "Su factura número {{numero_factura}} ha sido programada para pago.\n\n"
             "{{aviso_complemento}}\n\n"
             "Folio interno: {{folio_interno}}\n"
             "Monto: {{monto}}\n"
-            "Fecha de pago: {{fecha_estatus}}\n\n" + SUPPLIER_FOOTER,
+            "Fecha de programación: {{fecha_estatus}}\n\n" + SUPPLIER_FOOTER,
         ),
         EventSpec(
             NotificationEvent.PAYMENT_COMPLEMENT,

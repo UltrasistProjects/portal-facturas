@@ -26,6 +26,21 @@ def inbox_status(user, status: str | None) -> str:
     return status
 
 
+def filter_invoices(stmt: Select, user, q: str = "", status: str = "", origin: str = "") -> Select:
+    """Alcance del usuario y filtros del listado (busqueda, estatus y origen) sobre una consulta que ya une Invoice con
+    Supplier. Los comparten el listado y el reporte PDF."""
+    stmt = _scoped(stmt, user)
+    stmt = search(
+        stmt, q, Invoice.internal_folio, Invoice.invoice_number, Invoice.purchase_order_number, Supplier.business_name
+    )
+    if status:
+        valid = status in {state.value for state in InvoiceStatus}
+        stmt = stmt.where(Invoice.status == status) if valid else stmt.where(false())
+    if origin in {value.value for value in SupplierOrigin}:
+        stmt = stmt.where(Supplier.origin == origin)
+    return stmt
+
+
 def search_invoices(
     db: Session,
     user,
@@ -37,13 +52,7 @@ def search_invoices(
 ) -> Page[Invoice]:
     # contains_eager: el proveedor llega en la misma consulta (sin N+1) y el JOIN permite buscar por razon social.
     stmt = select(Invoice).join(Invoice.supplier).options(contains_eager(Invoice.supplier))
-    stmt = _scoped(stmt, user)
-    stmt = search(stmt, q, Invoice.internal_folio, Invoice.invoice_number, Invoice.project_name, Supplier.business_name)
-    if status:
-        valid = status in {state.value for state in InvoiceStatus}
-        stmt = stmt.where(Invoice.status == status) if valid else stmt.where(false())
-    if origin in {value.value for value in SupplierOrigin}:
-        stmt = stmt.where(Supplier.origin == origin)
+    stmt = filter_invoices(stmt, user, q, status, origin)
     if user.role != Role.PROVEEDOR and status == InvoiceStatus.UNDER_REVIEW:
         # Bandeja del PMO: lo que mas ha esperado primero, tambien en las paginas siguientes (HU-18, D1).
         stmt = stmt.order_by(Invoice.submitted_at.asc(), Invoice.id.asc())

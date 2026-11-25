@@ -1,0 +1,36 @@
+{% extends "base.html" %}{% set editing = order is not none %}{% block title %}{{ 'Editar orden de compra ' ~ order.convenio if editing else 'Nueva orden de compra' }}{% endblock %}{% block content %}
+{% macro item_row(item) -%}
+<tr class="po-item">{% for key, label in item_labels %}{% set required = key in required_keys %}<td class="po-col-{{ loop.index }}">
+{%- if key == 'Unidad.Pedido' -%}<select name="item-{{ key }}" class="form-select form-select-sm" aria-label="{{ label }}"{% if required %} required{% endif %}><option value="">—</option>{% for unit in units %}<option{% if item.get(key) == unit %} selected{% endif %}>{{ unit }}</option>{% endfor %}</select>
+{%- elif key == currency_key -%}<select name="item-{{ key }}" class="form-select form-select-sm" aria-label="{{ label }}"{% if required %} required{% endif %}>{% for currency in currencies %}<option{% if item.get(key) == currency %} selected{% endif %}>{{ currency }}</option>{% endfor %}</select>
+{%- elif key in date_keys -%}<input type="date" name="item-{{ key }}" value="{{ item.get(key, '') }}" class="form-control form-control-sm" aria-label="{{ label }}">
+{%- elif key == 'Ctd.Pedido' -%}<input type="number" name="item-{{ key }}" value="{{ item.get(key, '') }}" class="form-control form-control-sm po-quantity" min="0.001" step="any" inputmode="decimal" aria-label="{{ label }}" required>
+{%- elif key == 'Prc.Neto' -%}<input type="number" name="item-{{ key }}" value="{{ item.get(key, '') }}" class="form-control form-control-sm po-price" min="0.01" step="0.01" inputmode="decimal" aria-label="{{ label }}" required>
+{%- else -%}<input name="item-{{ key }}" value="{{ item.get(key, '') }}" class="form-control form-control-sm" maxlength="{{ 120 if key == 'Txt.brv' else 40 }}" aria-label="{{ label }}"{% if required %} required{% endif %}>
+{%- endif %}</td>{% endfor %}<td><button type="button" class="btn btn-sm btn-light po-remove" aria-label="Quitar partida"><i class="bi bi-trash"></i></button></td></tr>
+{%- endmacro %}
+<div class="breadcrumb"><a href="/purchase-orders">Órdenes de compra</a><i class="bi bi-chevron-right"></i>{% if editing %}<a href="/purchase-orders/{{ order.id }}">{{ order.convenio }}</a><i class="bi bi-chevron-right"></i>Editar{% else %}Nueva{% endif %}</div>
+<div class="page-heading"><div><span class="eyebrow">CONVENIOS DE SAP</span><h1>{{ 'Editar orden de compra ' ~ order.convenio if editing else 'Nueva orden de compra' }}</h1><p>Encabezado y partidas con las etiquetas de SAP. Las facturas se validan contra estos datos.</p></div></div>
+{% if error %}<div class="alert alert-danger" role="alert" id="po-error">{{ error }}</div>{% endif %}
+{% if linked %}<div class="alert alert-warning" id="po-linked">La orden tiene {{ linked }} {{ 'factura ligada' if linked == 1 else 'facturas ligadas' }}: el convenio y el proveedor no se pueden cambiar. Los cambios en partidas y montos aplican a las validaciones siguientes.</div>{% endif %}
+<form method="post" action="{{ action }}" class="po-form" id="po-form"><input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+<section class="panel form-panel"><h2>Encabezado</h2><p class="text-muted"><span class="text-danger" aria-hidden="true">*</span> Obligatorio</p><div class="form-grid po-header">
+<div class="field"><label for="po-convenio">Convenio<span class="text-danger" aria-hidden="true"> *</span></label><input id="po-convenio" name="convenio" value="{{ form.convenio }}" class="form-control mono" inputmode="numeric" pattern="[0-9]{6,10}" maxlength="10" required{% if linked %} readonly{% endif %} data-error-pattern="El convenio debe tener de 6 a 10 dígitos."><small class="form-text">Número de la orden en SAP (6 a 10 dígitos): es el que el proveedor cita en su factura.</small></div>
+<div class="field"><label for="po-date">Fecha<span class="text-danger" aria-hidden="true"> *</span></label><input id="po-date" type="date" name="order_date" value="{{ form.order_date }}" class="form-control" required></div>
+<div class="field span-2"><label for="po-supplier">Proveedor<span class="text-danger" aria-hidden="true"> *</span></label>{% set orphan = editing and not form.supplier_id %}
+{% if linked %}<input type="hidden" name="supplier_id" value="{{ form.supplier_id }}">{% endif %}
+<select id="po-supplier"{% if not linked %} name="supplier_id"{% endif %} class="form-select"{% if not orphan %} required{% endif %}{% if linked %} disabled{% endif %}>
+{% if orphan %}<option value="">{{ order.rfc }} · {{ order.supplier_name }} (sin proveedor en el portal)</option>{% else %}<option value="">Seleccione un proveedor</option>{% endif %}
+{% for s in suppliers %}<option value="{{ s.id }}"{% if form.supplier_id == s.id|string %} selected{% endif %}>{{ s.business_name }} · {{ s.tax_identifier }}{% if not s.rfc %} (internacional){% endif %}</option>{% endfor %}</select>
+<small class="form-text">El RFC y el nombre de la orden se toman del proveedor. El internacional lleva el RFC genérico de SAP (XEXX010101000).</small></div>
+<div class="field"><label for="po-total">Total (sin impuestos)<span class="text-danger" aria-hidden="true"> *</span></label><input id="po-total" type="number" name="total" value="{{ form.total }}" class="form-control" min="0.01" step="0.01" inputmode="decimal" required data-auto="{{ '0' if form.total else '1' }}"></div>
+<div class="field"><label for="po-taxes">Impuestos<span class="text-danger" aria-hidden="true"> *</span></label><input id="po-taxes" type="number" name="taxes" value="{{ form.taxes }}" class="form-control" min="0" step="0.01" inputmode="decimal" required data-auto="{{ '0' if form.taxes else '1' }}"></div>
+<div class="span-2 po-totals-help"><button type="button" class="btn btn-outline-primary btn-sm" id="po-calculate"><i class="bi bi-calculator"></i> Calcular con las partidas</button><small class="text-muted">Total = suma de cantidad × precio neto; impuestos = IVA 16 %. Puede ajustarlos.</small></div>
+</div></section>
+<section class="panel" id="items"><div class="panel-header"><div><h2>Partidas</h2><p>Txt.brv, cantidad, unidad, precio neto y moneda son obligatorios. Docto. material y fecha contable registran la entrada de mercancía.</p></div><button type="button" class="btn btn-outline-primary btn-sm" id="po-add-item"><i class="bi bi-plus-lg"></i> Agregar partida</button></div>
+<div class="table-responsive"><table class="table enterprise-table order-items po-items"><thead><tr>{% for key, label in item_labels %}<th>{{ label }}{% if key in required_keys %}<span class="text-danger" aria-hidden="true"> *</span>{% endif %}</th>{% endfor %}<th></th></tr></thead>
+<tbody id="po-item-rows">{% for item in form.items %}{{ item_row(item) }}{% endfor %}</tbody></table></div>
+<template id="po-item-template">{{ item_row({currency_key: currencies[0] if 'MXN' not in currencies else 'MXN'}) }}</template></section>
+<div class="form-actions po-actions"><a class="btn btn-light" href="{{ '/purchase-orders/' ~ order.id if editing else '/purchase-orders' }}">Cancelar</a><button class="btn btn-primary"><i class="bi bi-check2"></i> {{ 'Guardar cambios' if editing else 'Crear orden de compra' }}</button></div>
+</form>{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', path='/js/purchase_order_form.js') }}"></script>{% endblock %}

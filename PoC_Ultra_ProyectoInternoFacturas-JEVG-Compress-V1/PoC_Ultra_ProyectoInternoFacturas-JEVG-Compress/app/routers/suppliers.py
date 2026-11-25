@@ -6,7 +6,7 @@ from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
 from pydantic import ValidationError
 from sqlalchemy import select
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy.orm import Session
 
 from app.core.constants import (
     DOCUMENT_REQUIREMENT_LABELS,
@@ -27,8 +27,8 @@ from app.models import Document, EmailDelivery, Supplier
 from app.repositories.pagination import list_query, paginate, search
 from app.routers.common import templates
 from app.schemas import SupplierCreate, SupplierUpdate, validation_message
+from app.services import purchase_order_service, supplier_import_service, supplier_service
 from app.services import supplier_access_service as access
-from app.services import supplier_import_service, supplier_service
 from app.services import supplier_requirements_service as requirements
 from app.services.audit_service import audit
 from app.services.catalog_service import active_entries
@@ -101,8 +101,8 @@ def _suppliers_page(
     q: str = "",
     page: int = 1,
 ):
-    # Busqueda, filtro y paginacion en SQL (listados-paginados); los contratos de la pagina, en una consulta.
-    stmt = select(Supplier).options(selectinload(Supplier.contracts)).order_by(Supplier.business_name, Supplier.id)
+    # Busqueda, filtro y paginacion en SQL (listados-paginados); las ordenes de compra de la pagina, en dos consultas.
+    stmt = select(Supplier).order_by(Supplier.business_name, Supplier.id)
     if status_filter in SupplierStatus.__members__:
         stmt = stmt.where(Supplier.status == SupplierStatus(status_filter))
     else:
@@ -117,6 +117,7 @@ def _suppliers_page(
         "user": user,
         "suppliers": result.items,
         "pending_counts": {supplier_id: len(types) for supplier_id, types in pending.items()},
+        "order_counts": purchase_order_service.counts_by_supplier(db, result.items),
         "page": result,
         "q": q,
         "base_query": list_query(q=q, status=status_filter),
@@ -218,6 +219,7 @@ def _supplier_detail_page(
         "user": user,
         "supplier": supplier,
         "activity_name": supplier_service.activity_name(db, supplier.main_activity),
+        "country_name": COUNTRIES.get(supplier.country, supplier.country),
         "checklist": requirements.checklist(db, supplier),
         "requirement_labels": DOCUMENT_REQUIREMENT_LABELS,
         "access_error": access_error,

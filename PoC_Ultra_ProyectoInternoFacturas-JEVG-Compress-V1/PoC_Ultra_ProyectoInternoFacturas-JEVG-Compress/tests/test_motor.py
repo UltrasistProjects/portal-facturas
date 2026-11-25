@@ -1,9 +1,7 @@
-import re
 from datetime import datetime, timezone
 from decimal import Decimal
 from types import SimpleNamespace
 
-import pytest
 from sqlalchemy import select
 
 from app.core.config import settings
@@ -13,9 +11,9 @@ from app.models import Document, Invoice, ValidationResult
 from app.rules.date_rules import date_rules
 from app.rules.financial_rules import financial_rules
 from app.services.validation_engine import run_validation
-from tests.conftest import ROOT, csrf, invoice_by_number, login, supplier_by_email
+from tests.cfdi import moral_cfdi, register, register_cfdi, xml_of
+from tests.conftest import ROOT, csrf, invoice_by_number, login
 
-CFDI = (ROOT / "data" / "demo_documents" / "cfdi_demo_correcto.xml").read_text(encoding="utf-8")
 PDF = (ROOT / "data" / "demo_documents" / "factura_demo.pdf").read_bytes()
 
 
@@ -48,28 +46,11 @@ def test_zona_configurable(monkeypatch):
 # --- UUID duplicado --------------------------------------------------------------------------------------
 
 
-def create_invoice_with_xml(client, number: str, uuid: str) -> Invoice:
-    supplier = supplier_by_email("proveedor1@poc.local")
-    contract_id = invoice_by_number("A-CORRECTA").contract_id
-    data = {
-        "supplier_id": supplier.id,
-        "contract_id": contract_id,
-        "invoice_number": number,
-        "service_period": "08/2026",
-        "project_name": "Automatizacion Operativa 2026",
-        "csrf_token": csrf(client, "/invoices/new"),
-    }
-    assert client.post("/invoices/new", data=data, follow_redirects=False).status_code == 303
-    invoice = invoice_by_number(number)
-    xml = re.sub(r'UUID="[^"]*"', f'UUID="{uuid}"', CFDI).encode()
-    for document_type, filename, content in (("INVOICE_XML", "cfdi.xml", xml), ("INVOICE_PDF", "factura.pdf", PDF)):
-        response = client.post(
-            f"/invoices/{invoice.id}/documents",
-            data={"document_type": document_type, "csrf_token": csrf(client, f"/invoices/{invoice.id}")},
-            files={"upload": (filename, content, "application/octet-stream")},
-            follow_redirects=False,
-        )
-        assert response.status_code == 303
+def create_invoice_with_xml(client, uuid: str) -> Invoice:
+    """Factura del proveedor moral registrada con su PDF y un XML con ese UUID (HU-24)."""
+    data = moral_cfdi(uuid=uuid)
+    response, invoice = register_cfdi(client, data)
+    assert response.status_code == 303, response.text
     return invoice
 
 
@@ -90,7 +71,7 @@ def rule(invoice_id: int, code: str) -> ValidationResult | None:
 def test_cfdi_ya_registrado_en_otra_factura(client):
     taken = invoice_by_number("A-CORRECTA").uuid
     login(client, "proveedor1@poc.local")
-    invoice = create_invoice_with_xml(client, "DUP-UUID-1", taken)
+    invoice = create_invoice_with_xml(client, taken)
     assert validate(client, invoice).status_code == 303
     fin_004 = rule(invoice.id, "FIN-004")
     assert (fin_004.status, fin_004.severity, fin_004.detected_value) == ("FAIL", "CRITICAL", taken)
@@ -109,7 +90,7 @@ def test_carrera_de_uuid_responde_409_sin_persistir(client, monkeypatch):
 
     taken = invoice_by_number("A-CORRECTA").uuid
     login(client, "proveedor1@poc.local")
-    invoice = create_invoice_with_xml(client, "DUP-UUID-2", taken)
+    invoice = create_invoice_with_xml(client, taken)
     # Simula que la otra factura confirmo su UUID despues de la comprobacion previa.
     monkeypatch.setattr(engine_module, "uuid_owner", lambda *_args: None)
     response = validate(client, invoice)
@@ -131,48 +112,31 @@ def test_revalidar_la_propia_factura():
 
 
 def test_numero_de_factura_duplicado_responde_409(client):
-    supplier = supplier_by_email("proveedor1@poc.local")
     login(client, "proveedor1@poc.local")
-    data = {
-        "supplier_id": supplier.id,
-        "contract_id": invoice_by_number("A-CORRECTA").contract_id,
-        "invoice_number": "A-CORRECTA",
-        "service_period": "08/2026",
-        "project_name": "Automatizacion Operativa 2026",
-        "csrf_token": csrf(client, "/invoices/new"),
-    }
-    response = client.post("/invoices/new", data=data, follow_redirects=False)
+    data = moral_cfdi()
+    assert register_cfdi(client, data)[0].status_code == 303
+    response = register(client, PDF, xml_of(moral_cfdi(folio=data["folio"])))
     assert response.status_code == 409
-    assert "Ya existe una factura con ese numero para el proveedor" in response.text
+    assert "Ya existe una factura con ese número para el proveedor" in response.text
 
 
 # --- Reglas financieras ----------------------------------------------------------------------------------
 
 
-def financial(invoice=None, contract=None, xml=None, duplicate_uuid=False, duplicate_number=False):
+def financial(invoice=None, data=None, duplicate_uuid=False, duplicate_number=False):
     invoice = invoice or SimpleNamespace(
         subtotal=Decimal("100"), tax=Decimal("16"), total=Decimal("116"), currency="MXN", uuid="U", invoice_number="F"
     )
-    contract = contract or SimpleNamespace(authorized_amount=Decimal("100"), currency="MXN")
-    return {r.rule_code: r for r in financial_rules(invoice, contract, xml, duplicate_uuid, duplicate_number)}
+    return {r.rule_code: r for r in financial_rules(invoice, data, duplicate_uuid, duplicate_number)}
 
 
 def test_fin_002_consistencia_de_componentes():
     assert financial()["FIN-002"].status == "PASS"
-    assert (
-        financial(xml={"subtotal": Decimal("100"), "tax": Decimal("16"), "total": Decimal("116.02")})["FIN-002"].status
-        == "PASS"
-    )
-    assert (
-        financial(xml={"subtotal": Decimal("100"), "tax": Decimal("16"), "total": Decimal("116.03")})["FIN-002"].status
-        == "FAIL"
-    )
-
-
-def test_fin_003_moneda_del_contrato():
-    assert financial()["FIN-003"].status == "PASS"
-    usd = SimpleNamespace(authorized_amount=Decimal("100"), currency="USD")
-    assert financial(contract=usd)["FIN-003"].status == "FAIL"
+    near = {"subtotal": Decimal("100"), "tax": Decimal("16"), "total": Decimal("116.02")}
+    assert financial(data=near)["FIN-002"].status == "PASS"
+    # Datos leidos del PDF y guardados en metadata_json: importes como texto.
+    far = {"subtotal": "100", "tax": "16", "total": "116.03"}
+    assert financial(data=far)["FIN-002"].status == "FAIL"
 
 
 def test_fin_005_numero_duplicado():
@@ -180,43 +144,6 @@ def test_fin_005_numero_duplicado():
     assert financial(duplicate_number=True)["FIN-005"].status == "FAIL"
 
 
-def test_fin_006_diferencia_contra_autorizado():
-    ok = financial()["FIN-006"]
-    assert ok.status == "PASS" and ok.evidence["absolute_difference"] == "0"
-    over = financial(xml={"subtotal": Decimal("118"), "tax": Decimal("0"), "total": Decimal("118")})["FIN-006"]
-    assert (over.status, over.severity) == ("FAIL", "WARNING")
-    assert over.evidence == {"absolute_difference": "18", "percentage": "18.00"}
-
-
-# --- CON-003: periodo por mes contra la vigencia del contrato -----------------------------------------------------
-
-
-def _contract(start: str, end: str):
-    from datetime import date
-    from types import SimpleNamespace
-
-    return SimpleNamespace(
-        start_date=date.fromisoformat(start),
-        end_date=date.fromisoformat(end),
-        project_name="Proyecto",
-        authorized_technology="Python",
-    )
-
-
-def _con_003(period: str, contract):
-    from types import SimpleNamespace
-
-    from app.rules.contract_rules import contract_rules
-
-    invoice = SimpleNamespace(service_period=period, project_name="Proyecto")
-    return next(r for r in contract_rules(invoice, contract, []) if r.rule_code == "CON-003")
-
-
-@pytest.mark.parametrize(
-    ("period", "status"),
-    [("08/2026", "PASS"), ("12/2026", "PASS"), ("07/2026", "FAIL"), ("01/2027", "FAIL"), ("2026-08", "FAIL")],
-)
-def test_periodo_por_mes_contra_la_vigencia(period, status):
-    """Un contrato que empieza a mitad de mes cubre ese mes completo; el valor esperado usa el formato MM/AAAA."""
-    result = _con_003(period, _contract("2026-08-15", "2026-12-10"))
-    assert (result.status, result.expected_value, result.detected_value) == (status, "08/2026 a 12/2026", period)
+def test_reglas_contra_el_contrato_retiradas():
+    """FIN-001, FIN-003 y FIN-006 comparaban contra el contrato: se retiraron con HU-24 (las sustituye OC-005)."""
+    assert set(financial()) == {"FIN-002", "FIN-004", "FIN-005"}

@@ -282,9 +282,9 @@ def test_facturas_demo_sin_fallas_de_expediente():
 
 def test_opinion_de_cumplimiento_opcional():
     moral = SimpleNamespace(**vars(supplier()), status="ACTIVE")
-    outcomes = supplier_rules(moral, None, checklist_for(moral, *MORAL_CODES))
+    outcomes = supplier_rules(moral, checklist_for(moral, *MORAL_CODES))
     assert sup(outcomes, "SUP-003").status == "PASS"
-    outcomes = supplier_rules(moral, None, checklist_for(moral, *MORAL_CODES[:-1]))
+    outcomes = supplier_rules(moral, checklist_for(moral, *MORAL_CODES[:-1]))
     assert sup(outcomes, "SUP-003").status == "FAIL"
     assert (
         sup(outcomes, "SUP-003").message == "Expediente del proveedor incompleto. Pendientes: Estado de cuenta bancario"
@@ -299,7 +299,7 @@ def test_requisito_obligatorio_agregado_despues_de_la_autorizacion():
             db, admin_id, "Declaración de ISR por retenciones de salarios", None, persona_moral_requirement="REQUIRED"
         )
         supplier = db.get(type(moral), moral.id)
-        outcomes = supplier_rules(supplier, None, requirements.checklist(db, supplier))
+        outcomes = supplier_rules(supplier, requirements.checklist(db, supplier))
         db.rollback()  # la base es compartida
     result = sup(outcomes, "SUP-003")
     assert (result.status, result.severity) == ("FAIL", "ERROR")
@@ -313,13 +313,13 @@ def test_proveedor_internacional_con_un_requisito_configurado():
     international = supplier_by_email("proveedor3@poc.local")
     with SessionLocal() as db:
         supplier = db.get(type(international), international.id)
-        initial = supplier_rules(supplier, None, requirements.checklist(db, supplier))
+        initial = supplier_rules(supplier, requirements.checklist(db, supplier))
         db.execute(
             update(SupplierDocumentType)
             .where(SupplierDocumentType.code == "BANK_STATEMENT")
             .values(international_requirement=DocumentRequirement.REQUIRED)
         )
-        configured = supplier_rules(supplier, None, requirements.checklist(db, supplier))
+        configured = supplier_rules(supplier, requirements.checklist(db, supplier))
         db.rollback()
     assert sup(initial, "SUP-003").status == "NOT_APPLICABLE"
     assert sup(initial, "SUP-003").message == "No aplica a proveedores internacionales"

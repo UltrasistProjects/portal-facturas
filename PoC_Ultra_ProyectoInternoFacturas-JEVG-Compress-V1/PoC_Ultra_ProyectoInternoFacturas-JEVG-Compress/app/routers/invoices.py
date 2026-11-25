@@ -1,11 +1,13 @@
 import logging
+import re
+import tempfile
+from datetime import date, datetime, timezone
 from decimal import Decimal
 from pathlib import Path
 from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, RedirectResponse, Response
-from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -13,8 +15,8 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.constants import (
     DOCUMENT_REQUIREMENT_LABELS,
+    PURCHASE_ORDER_ITEM_LABELS,
     CatalogType,
-    ContractStatus,
     DocumentType,
     InvoiceStatus,
     NotificationEvent,
@@ -27,18 +29,22 @@ from app.core.constants import (
 from app.core.database import get_db, violates
 from app.core.errors import BusinessRuleError, DuplicateInvoiceError, InvalidInputError
 from app.core.security import get_current_user, require_roles, validate_csrf
-from app.models import Contract, Document, Invoice, ValidationResult
+from app.core.types import to_money
+from app.models import Document, Invoice, ValidationResult
 from app.repositories.invoice_repository import get_visible_invoice, inbox_status, search_invoices, warning_counts
 from app.routers.common import templates
-from app.schemas import InvoiceCreate, validation_message
+from app.rules.purchase_order_rules import detect_order_number, order_items
 from app.services import cancellation_service as cancellation
 from app.services import catalog_service, review_service
 from app.services import document_requirements_service as requirements
 from app.services import document_view_service as document_view
 from app.services import foreign_invoice_service as foreign
+from app.services import invoice_deletion_service as deletion
+from app.services import invoice_extraction_service as extraction
+from app.services import invoice_report_service as report
 from app.services import payment_service as payment
 from app.services.audit_service import audit
-from app.services.file_service import LocalFileStorage, log_upload, safe_download_name
+from app.services.file_service import LocalFileStorage, check_upload, log_upload, read_upload, safe_download_name
 from app.services.invoice_history_service import decision_cause, history
 from app.services.invoice_service import (
     ensure_editable,
@@ -50,9 +56,8 @@ from app.services.invoice_service import (
     validation_summary,
 )
 from app.services.pdf_service import analyze_pdf
-from app.services.reconciliation_service import reconcile_amount
 from app.services.submission_service import SubmissionOutcome, submit_invoice
-from app.services.validation_engine import run_validation
+from app.services.validation_engine import identity_checks, run_validation, uuid_owner
 from app.services.xml_service import XMLParseError, parse_cfdi
 
 router = APIRouter(prefix="/invoices")
@@ -60,8 +65,11 @@ logger = logging.getLogger(__name__)
 # Registro, carga documental, verificacion y envio: solo el proveedor (EP-01 DT-04). El PMO y el Administrador
 # conservan el listado, el detalle y las descargas.
 provider_only = require_roles(Role.PROVEEDOR)
+# Eliminacion de una factura en Borrador o Cancelada: el Administrador o el proveedor duenio; el PMO no.
+admin_or_provider = require_roles(Role.ADMINISTRADOR, Role.PROVEEDOR)
 MSG_SUPPLIER_NOT_ACTIVE = "Su proveedor no está autorizado para registrar facturas"
 MSG_USER_WITHOUT_SUPPLIER = "Su usuario no está vinculado a un proveedor. Contacte al Administrador"
+MSG_DUPLICATE_NUMBER = "Ya existe una factura con ese número para el proveedor"
 # Avisos que llegan por ?notice= tras una redireccion; otro valor se ignora (como en el tablero).
 NOTICES = {"submitted": "Factura enviada a validación"}
 DOCUMENT_NOTICES = {
@@ -69,8 +77,10 @@ DOCUMENT_NOTICES = {
     "amounts_unchanged": "Sin cambios",
     "complement_saved": "Complemento de Pago guardado",
 }
-MSG_CONFIRM_PAYMENT = "Confirme que la factura fue pagada"
+MSG_CONFIRM_PAYMENT = "Confirme la programación del pago"
 SUBMITTABLE_STATUSES = frozenset({InvoiceStatus.UPLOADED, InvoiceStatus.REQUIRES_CORRECTION})
+# Folio de la factura eliminada que el listado anuncia (?deleted=); otro valor se ignora.
+DELETED_FOLIO = re.compile(r"FAC-\d{4}-\d{5,}")
 
 
 def _invoice_or_404(db: Session, invoice_id: int, user):
@@ -87,6 +97,7 @@ def invoice_list(
     status: str | None = None,
     origin: str = "",
     page: int = 1,
+    deleted: str = "",
     db: Session = Depends(get_db),
     user=Depends(get_current_user),
 ):
@@ -106,8 +117,24 @@ def invoice_list(
         "origins": SupplierOrigin,
         "warnings": warning_counts(db, [invoice.id for invoice in result.items]) if reviewer else {},
         "pending_complements": [] if reviewer else payment.pending_notice(db, user.supplier_id),
+        "notice": f"Factura {deleted} eliminada" if DELETED_FOLIO.fullmatch(deleted) else None,
     }
     return templates.TemplateResponse(request, "invoices/list.html", context)
+
+
+@router.get("/report.pdf")
+def invoice_report(
+    q: str = "",
+    status: str | None = None,
+    origin: str = "",
+    db: Session = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    """Reporte resumen en PDF (Ferromex): totales por estatus y origen con grafico de pie, con los filtros y el alcance
+    del listado. Se declara antes de /{invoice_id} para que "report.pdf" no se lea como id."""
+    data = report.summary(db, user, q.strip(), inbox_status(user, status), origin)
+    headers = {"Content-Disposition": f'attachment; filename="{report.filename(data)}"'}
+    return Response(report.render(data), media_type="application/pdf", headers=headers)
 
 
 def _ensure_supplier_active(user) -> None:
@@ -125,25 +152,17 @@ def _new_invoice_page(
     status_code: int = 200,
     values: dict | None = None,
 ):
-    """El proveedor de la factura es el del usuario y el formulario solo recibe sus contratos activos (DT-05): los
-    de otros proveedores nunca llegan al navegador. El internacional captura ademas los datos del Invoice (HU-15)."""
-    contracts = list(
-        db.scalars(
-            select(Contract)
-            .where(Contract.supplier_id == user.supplier_id, Contract.status == ContractStatus.ACTIVE)
-            .order_by(Contract.project_name)
-        )
-    )
+    """Paso 1 del registro. El nacional carga el PDF (obligatorio) y el XML (opcional) de su factura (HU-24); el
+    internacional captura los datos del Invoice y su orden de compra (HU-15, HU-24). El proveedor es el del usuario."""
     international = user.supplier.origin == SupplierOrigin.INTERNATIONAL
-    defaults = {"currency": contracts[0].currency} if contracts else {}
     context = {
         "user": user,
         "supplier": user.supplier,
-        "contracts": contracts,
         "error": error,
         "international": international,
         "currencies": catalog_service.active_entries(db, CatalogType.CURRENCY) if international else [],
-        "values": {**defaults, **(values or {})},
+        "values": values or {},
+        "max_upload_mb": settings.max_upload_mb,
     }
     return templates.TemplateResponse(request, "invoices/new.html", context, status_code=status_code)
 
@@ -154,15 +173,188 @@ def new_invoice(request: Request, db: Session = Depends(get_db), user=Depends(pr
     return _new_invoice_page(request, db, user)
 
 
+def _has_file(upload: UploadFile | None) -> bool:
+    return upload is not None and bool(upload.filename)
+
+
+async def _read_invoice_file(db: Session, upload: UploadFile, document_type: DocumentType, extension: str) -> bytes:
+    """Contenido de un archivo del Paso 1 con la extension de su tipo y las verificaciones del almacenamiento."""
+    if Path(upload.filename or "").suffix.lower() != extension:
+        name = requirements.type_names(db).get(document_type.value, document_type.value)
+        raise InvalidInputError(f"Formato no admitido para {name}. Formatos admitidos: {extension[1:].upper()}")
+    content = await read_upload(upload)
+    try:
+        check_upload(upload.filename, content)
+    except ValueError as exc:
+        raise InvalidInputError(str(exc)) from exc
+    await upload.seek(0)
+    return content
+
+
+def _extract_files(pdf: bytes | None, xml: bytes | None, pdf_read=None) -> extraction.Extraction:
+    """Extraccion sobre copias temporales de los archivos (aun no se guardan): errores de lectura como 400."""
+    with tempfile.TemporaryDirectory(prefix="factura_") as tmp:
+        pdf_path = xml_path = None
+        if pdf is not None:
+            pdf_path = Path(tmp) / "factura.pdf"
+            pdf_path.write_bytes(pdf)
+        if xml is not None:
+            xml_path = Path(tmp) / "factura.xml"
+            xml_path.write_bytes(xml)
+        try:
+            return extraction.extract(pdf_path, xml_path, pdf_read=pdf_read)
+        except XMLParseError as exc:
+            logger.warning(
+                "xml.parse_failed",
+                extra={"event": "xml.parse_failed", "error_type": type(exc).__name__, "error": str(exc)},
+            )
+            raise InvalidInputError(str(exc)) from exc
+        except ValueError as exc:  # PDF que no abre: analyze_pdf ya registro el detalle
+            raise InvalidInputError(str(exc)) from exc
+
+
+def _extracted_values(db: Session, invoice: Invoice, result: extraction.Extraction) -> dict:
+    """Campos de la factura que salen de sus archivos (RD-01): numero, periodo, UUID (si no es de otra factura),
+    fecha, importes, moneda activa del catalogo y numero de orden de compra detectado."""
+    data = result.data
+    values = {
+        "invoice_number": result.number[:100],
+        "service_period": result.period or "",
+        "uuid": None if uuid_owner(db, data.get("uuid"), invoice.id or 0) else data.get("uuid"),
+        "invoice_date": datetime.fromisoformat(data["date"]).date() if data.get("date") else None,
+        "purchase_order_number": detect_order_number(c.get("description") for c in data.get("concepts") or []).number,
+    }
+    for field in ("subtotal", "tax", "total"):
+        value = data.get(field)
+        values[field] = to_money(Decimal(str(value))) if value is not None else Decimal("0")
+    if data.get("currency") in catalog_service.active_codes(db, CatalogType.CURRENCY):
+        values["currency"] = data["currency"]
+    return values
+
+
+def _invoice_document(invoice: Invoice, user, document_type: DocumentType, stored, metadata: dict | None, pages=None):
+    return Document(
+        invoice_id=invoice.id,
+        supplier_id=invoice.supplier_id,
+        document_type=document_type.value,
+        original_filename=stored.original_filename,
+        stored_filename=stored.stored_filename,
+        path=stored.relative_path,
+        mime_type=stored.mime_type,
+        file_size=stored.file_size,
+        sha256=stored.sha256,
+        uploaded_by=user.id,
+        processing_status=ProcessingStatus.PROCESSED,
+        page_count=pages,
+        metadata_json=metadata,
+    )
+
+
+async def _create_national(request: Request, db: Session, user, pdf: UploadFile | None, xml: UploadFile | None):
+    """Paso 1 nacional (HU-24): valida y lee los archivos, crea la factura en "Borrador" con los datos extraidos y
+    guarda ambos documentos. Nada se escribe si un archivo o sus datos no son aceptables."""
+    if not _has_file(pdf):
+        return _new_invoice_page(request, db, user, extraction.MSG_NO_PDF, 400)
+    try:
+        pdf_content = await _read_invoice_file(db, pdf, DocumentType.INVOICE_PDF, ".pdf")
+        xml_content = await _read_invoice_file(db, xml, DocumentType.INVOICE_XML, ".xml") if _has_file(xml) else None
+        result = _extract_files(pdf_content, xml_content)
+    except BusinessRuleError as exc:
+        return _new_invoice_page(request, db, user, exc.message, exc.status_code)
+    invoice = Invoice(
+        internal_folio=provisional_folio(),
+        supplier_id=user.supplier_id,
+        uploaded_by=user.id,
+        currency="MXN",
+    )
+    for field, value in _extracted_values(db, invoice, result).items():
+        setattr(invoice, field, value)
+    db.add(invoice)
+    try:
+        db.flush()
+    except IntegrityError as exc:
+        db.rollback()
+        if violates(exc, "uq_invoices_supplier_number"):
+            return _new_invoice_page(request, db, user, MSG_DUPLICATE_NUMBER, 409)
+        raise
+    invoice.internal_folio = internal_folio(invoice.id, invoice.created_at)
+    storage = LocalFileStorage()
+    stored_pdf = await storage.save_invoice_file(invoice.id, pdf)
+    db.add(
+        _invoice_document(
+            invoice,
+            user,
+            DocumentType.INVOICE_PDF,
+            stored_pdf,
+            result.pdf_metadata(),
+            result.pdf_analysis["page_count"],
+        )
+    )
+    log_upload(DocumentType.INVOICE_PDF.value, stored_pdf, invoice_id=invoice.id)
+    if xml_content is not None:
+        stored_xml = await storage.save_invoice_file(invoice.id, xml)
+        db.add(_invoice_document(invoice, user, DocumentType.INVOICE_XML, stored_xml, result.xml_metadata()))
+        log_upload(DocumentType.INVOICE_XML.value, stored_xml, invoice_id=invoice.id)
+    db.flush()
+    db.expire(invoice, ["documents"])
+    sync_upload_status(db, invoice, requirements.pending_required(requirements.checklist(db, invoice)) == 0, user.id)
+    audit(
+        db,
+        "INVOICE_CREATED",
+        "Invoice",
+        invoice.id,
+        user.id,
+        new={"folio": invoice.internal_folio, "source": result.source},
+    )
+    extraction.log_extraction(invoice.id, result)
+    db.commit()
+    return RedirectResponse(f"/invoices/{invoice.id}/data", status_code=303)
+
+
+async def _create_international(request: Request, db: Session, user, submitted: dict):
+    """Paso 1 internacional (HU-15, HU-24): numero de factura y datos del Invoice con su orden de compra. El periodo
+    sale de la fecha de la factura."""
+    errors = []
+    number = (submitted.get("invoice_number") or "").strip()
+    if not 1 <= len(number) <= 100:
+        errors.append("Número de factura: debe tener de 1 a 100 caracteres")
+    foreign_data, data_errors = foreign.parse_data(db, submitted)
+    errors += data_errors
+    if errors:
+        return _new_invoice_page(request, db, user, " ".join(errors), 400, submitted)
+    invoice = Invoice(
+        internal_folio=provisional_folio(),
+        supplier_id=user.supplier_id,
+        uploaded_by=user.id,
+        invoice_number=number,
+        service_period=f"{foreign_data.invoice_date.month:02d}/{foreign_data.invoice_date.year}",
+        subtotal=Decimal("0"),
+        tax=Decimal("0"),
+        total=Decimal("0"),
+        currency=foreign_data.currency,
+    )
+    foreign.apply_data(invoice, foreign_data)
+    db.add(invoice)
+    try:
+        db.flush()
+    except IntegrityError as exc:
+        db.rollback()
+        if violates(exc, "uq_invoices_supplier_number"):
+            return _new_invoice_page(request, db, user, MSG_DUPLICATE_NUMBER, 409, submitted)
+        raise
+    invoice.internal_folio = internal_folio(invoice.id, invoice.created_at)
+    audit(db, "INVOICE_CREATED", "Invoice", invoice.id, user.id, new={"folio": invoice.internal_folio})
+    db.commit()
+    return RedirectResponse(f"/invoices/{invoice.id}/documents", status_code=303)
+
+
 @router.post("/new")
 async def create_invoice(
     request: Request,
-    contract_id: int = Form(...),
-    invoice_number: str = Form(...),
-    service_period: str = Form(...),
-    project_name: str = Form(...),
+    pdf: UploadFile | None = File(None),
+    xml: UploadFile | None = File(None),
+    invoice_number: str = Form(""),
     purchase_order_number: str = Form(""),
-    project_leader: str = Form(""),
     invoice_date: str = Form(""),
     subtotal: str = Form(""),
     tax: str = Form(""),
@@ -170,74 +362,21 @@ async def create_invoice(
     db: Session = Depends(get_db),
     user=Depends(provider_only),
 ):
+    """Paso 1 del registro. Un supplier_id, contrato, proyecto o periodo recibidos en el formulario se ignoran: la
+    factura es del proveedor del usuario y sus datos salen de sus archivos o del Invoice (HU-24)."""
     await validate_csrf(request)
     _ensure_supplier_active(user)
+    if user.supplier.origin != SupplierOrigin.INTERNATIONAL:
+        return await _create_national(request, db, user, pdf, xml)
     submitted = {
-        "contract_id": str(contract_id),
         "invoice_number": invoice_number,
-        "service_period": service_period,
-        "project_name": project_name,
         "purchase_order_number": purchase_order_number,
-        "project_leader": project_leader,
         "invoice_date": invoice_date,
         "subtotal": subtotal,
         "tax": tax,
         "currency": currency,
     }
-    try:
-        data = InvoiceCreate(
-            invoice_number=invoice_number,
-            service_period=service_period,
-            project_name=project_name,
-            purchase_order_number=purchase_order_number or None,
-            project_leader=project_leader or None,
-        )
-    except ValidationError as exc:
-        return _new_invoice_page(request, db, user, validation_message(exc), 400, submitted)
-    # Datos del Invoice (HU-15): solo del proveedor internacional; al nacional se los da el XML y se ignoran.
-    foreign_data = None
-    if user.supplier.origin == SupplierOrigin.INTERNATIONAL:
-        foreign_data, errors = foreign.parse_data(db, submitted)
-        if errors:
-            return _new_invoice_page(request, db, user, " ".join(errors), 400, submitted)
-    # Un supplier_id recibido en el formulario se ignora: la factura es del proveedor del usuario.
-    supplier_id = user.supplier_id
-    contract = db.get(Contract, contract_id)
-    if not contract or contract.supplier_id != supplier_id:
-        raise HTTPException(400, "Contrato no corresponde al proveedor")
-    if contract.status != ContractStatus.ACTIVE:
-        raise HTTPException(400, "El contrato no está activo")
-    invoice = Invoice(
-        internal_folio=provisional_folio(),
-        supplier_id=supplier_id,
-        uploaded_by=user.id,
-        contract_id=contract_id,
-        invoice_number=data.invoice_number,
-        service_period=data.service_period,
-        project_name=data.project_name,
-        purchase_order_number=data.purchase_order_number or None,
-        project_leader=data.project_leader or contract.project_leader,
-        subtotal=Decimal("0"),
-        tax=Decimal("0"),
-        total=Decimal("0"),
-        # El nacional nace con la moneda de su contrato; el XML la reemplaza solo con una clave activa del catalogo.
-        currency=contract.currency,
-    )
-    if foreign_data:
-        foreign.apply_data(invoice, foreign_data)
-    db.add(invoice)
-    try:
-        db.flush()
-    except IntegrityError as exc:
-        db.rollback()
-        if violates(exc, "uq_invoices_supplier_number"):
-            message = "Ya existe una factura con ese numero para el proveedor"
-            return _new_invoice_page(request, db, user, message, 409, submitted)
-        raise
-    invoice.internal_folio = internal_folio(invoice.id, invoice.created_at)
-    audit(db, "INVOICE_CREATED", "Invoice", invoice.id, user.id, new={"folio": invoice.internal_folio})
-    db.commit()
-    return RedirectResponse(f"/invoices/{invoice.id}/documents", status_code=303)
+    return await _create_international(request, db, user, submitted)
 
 
 def _status_delivery(db: Session, invoice: Invoice, notification: str, reviewer: bool):
@@ -265,10 +404,12 @@ def _detail_page(
     notification: str = "",
     cancel_error: str | None = None,
     payment_error: str | None = None,
+    delete_error: str | None = None,
+    delete_open: bool = False,
 ):
     """Detalle de la factura. Tambien es la respuesta 409 de un envio que no procede (submit_blocked): muestra las
     reglas en FAIL que se acaban de guardar; la 400 de una cancelacion rechazada (cancel_error) y la del pago sin
-    confirmar (payment_error)."""
+    confirmar (payment_error) y la de la eliminacion sin confirmar (delete_error)."""
     validations = list(
         db.scalars(
             select(ValidationResult)
@@ -276,15 +417,7 @@ def _detail_page(
             .order_by(ValidationResult.category, ValidationResult.rule_code)
         )
     )
-    xml_doc = next(
-        (d for d in invoice.documents if d.is_current and d.document_type == DocumentType.INVOICE_XML.value), None
-    )
-    xml_data = xml_doc.metadata_json if xml_doc else None
-    rec = (
-        reconcile_amount(Decimal(invoice.contract.authorized_amount), Decimal(invoice.subtotal))
-        if invoice.contract
-        else None
-    )
+    stored = extraction.stored_data(invoice)
     summary = validation_summary(validations)
     editable = is_editable(invoice)
     international = foreign.is_international(invoice)
@@ -293,6 +426,7 @@ def _detail_page(
     cancelled = invoice.status == InvoiceStatus.CANCELLED
     paid = invoice.status == InvoiceStatus.PAID
     can_cancel = not reviewer and not cancelled and not paid
+    can_pay = reviewer and invoice.status == InvoiceStatus.ACCEPTED
     ack_type = cancellation.acknowledgment_type(db) if can_cancel else None
     delivery = _status_delivery(db, invoice, notification, reviewer)
     return templates.TemplateResponse(
@@ -302,8 +436,12 @@ def _detail_page(
             "user": user,
             "invoice": invoice,
             "validations": validations,
-            "xml": xml_data,
-            "reconciliation": rec,
+            "xml": stored.data if stored else None,
+            "data_source": stored.source_label if stored else None,
+            # Orden de compra ligada al enviar (HU-24) con sus partidas; antes del envio, el numero detectado.
+            "order": invoice.purchase_order,
+            "order_items": order_items(invoice.purchase_order.data) if invoice.purchase_order else (),
+            "item_labels": PURCHASE_ORDER_ITEM_LABELS,
             "summary": summary,
             # Nombre del catalogo de cada documento, tambien de tipos inactivos o que ya no aplican (RD-10).
             "type_names": requirements.type_names(db),
@@ -337,11 +475,20 @@ def _detail_page(
             "ack_formats": requirements.formats_label(ack_type) if ack_type else "",
             # Pago y Complemento de Pago (HU Complemento de Pagos): panel del PMO en "Autorizada", aviso de factura
             # pagada, estado del complemento y enlace del proveedor para adjuntarlo.
-            "can_pay": reviewer and invoice.status == InvoiceStatus.ACCEPTED,
+            "can_pay": can_pay,
             "paid": paid,
+            # "Programar pago" (Ferromex): la solicitud en JSON de la ventana de confirmacion y, ya programado, la que
+            # se registro. Solo para el PMO y el Administrador.
+            "payment_json": payment.schedule_request_json(db, invoice, user, datetime.now(timezone.utc))
+            if can_pay or (reviewer and paid)
+            else None,
             "complement": payment.complement_status(invoice),
             "can_attach_complement": not reviewer and payment.is_pending(invoice),
             "payment_error": payment_error,
+            # Eliminacion de una factura en Borrador o Cancelada: el Administrador o el proveedor duenio.
+            "can_delete": deletion.can_delete(user, invoice),
+            "delete_error": delete_error,
+            "delete_open": delete_open or bool(delete_error),
             "invoice_readable": (invoice_doc.metadata_json or {}).get("has_extractable_text") if invoice_doc else None,
         },
         status_code=status_code,
@@ -354,10 +501,13 @@ def invoice_detail(
     request: Request,
     notice: str = "",
     notification: str = "",
+    eliminar: str = "",
     db: Session = Depends(get_db),
     user=Depends(get_current_user),
 ):
-    return _detail_page(request, db, _invoice_or_404(db, invoice_id, user), user, notice, notification=notification)
+    invoice = _invoice_or_404(db, invoice_id, user)
+    # "Eliminar" de la cabecera abre el panel de eliminacion (?eliminar=1#deletion), sin JavaScript.
+    return _detail_page(request, db, invoice, user, notice, notification=notification, delete_open=bool(eliminar))
 
 
 def _documents_page(
@@ -425,12 +575,61 @@ def documents_page(
     return _documents_page(request, db, invoice, user, notice=notice, notification=notification)
 
 
+REVIEW_STEP = "data"
+# Tipos cuyo reemplazo vuelve a extraer los datos de la factura nacional (HU-24, RD-04).
+INVOICE_FILES = {DocumentType.INVOICE_PDF.value: ".pdf", DocumentType.INVOICE_XML.value: ".xml"}
+
+
+def _audit_text(value):
+    if isinstance(value, Decimal):
+        return f"{value:.2f}"
+    if isinstance(value, date):
+        return value.isoformat()
+    return value
+
+
+async def _reextract(db: Session, invoice: Invoice, document_type: str, upload: UploadFile):
+    """Datos de la factura nacional con el PDF o el XML nuevo y el otro archivo vigente, antes de guardar nada: 409 si
+    no son la misma factura o si el numero resultante ya es de otra factura del proveedor; 422 sin datos."""
+    content = await _read_invoice_file(db, upload, DocumentType(document_type), INVOICE_FILES[document_type])
+    if document_type == DocumentType.INVOICE_PDF.value:
+        xml_doc = extraction.current_document(invoice, DocumentType.INVOICE_XML)
+        xml = LocalFileStorage().resolve(xml_doc.path).read_bytes() if xml_doc else None
+        result = _extract_files(content, xml)
+    else:
+        pdf_doc = extraction.current_document(invoice, DocumentType.INVOICE_PDF)
+        stored = (pdf_doc.metadata_json or {}).get("invoice") if pdf_doc else None
+        result = _extract_files(None, content, pdf_read=(None, stored, (stored or {}).get("source")))
+    values = _extracted_values(db, invoice, result)
+    if values["invoice_number"] != invoice.invoice_number and db.scalar(
+        select(Invoice.id).where(
+            Invoice.supplier_id == invoice.supplier_id,
+            Invoice.invoice_number == values["invoice_number"],
+            Invoice.id != invoice.id,
+        )
+    ):
+        raise DuplicateInvoiceError(MSG_DUPLICATE_NUMBER)
+    return result, values
+
+
+def _apply_extracted(db: Session, invoice: Invoice, values: dict, user_id: int) -> None:
+    old, new = {}, {}
+    for field, value in values.items():
+        current = getattr(invoice, field)
+        if current != value:
+            old[field], new[field] = _audit_text(current), _audit_text(value)
+            setattr(invoice, field, value)
+    if new:
+        audit(db, "INVOICE_DATA_EXTRACTED", "Invoice", invoice.id, user_id, old=old, new=new)
+
+
 @router.post("/{invoice_id}/documents")
 async def upload_document(
     invoice_id: int,
     request: Request,
     document_type: str = Form(...),
     upload: UploadFile = File(...),
+    next_step: str = Form("", alias="next"),
     db: Session = Depends(get_db),
     user=Depends(provider_only),
 ):
@@ -442,27 +641,43 @@ async def upload_document(
         payment.ensure_paid_upload(invoice, document_type)
     else:
         ensure_editable(invoice)
+    international = foreign.is_international(invoice)
+    review = next_step == REVIEW_STEP and not international
+
+    def error_page(message: str, status_code: int):
+        if review:
+            return _review_page(request, db, invoice, user, message, status_code)
+        return _documents_page(request, db, invoice, user, message, status_code)
+
     # Antes de leer o escribir el archivo: el tipo debe aplicar al origen del proveedor y admitir la extension; el XML
     # del Complemento de Pago debe ser un CFDI de tipo P que relacione la factura.
-    complement_data = None
+    complement_data = extracted = None
     try:
         requirements.ensure_format(requirements.offered_type(db, invoice, document_type), upload.filename)
         if document_type == DocumentType.PAYMENT_COMPLEMENT_XML.value:
-            content = await upload.read(settings.max_upload_mb * 1024 * 1024 + 1)
+            content = await read_upload(upload)
             await upload.seek(0)
             complement_data = payment.check_complement_xml(invoice, content)
-    except InvalidInputError as exc:
-        return _documents_page(request, db, invoice, user, exc.message, 400)
+        if document_type in INVOICE_FILES and not international and invoice.status != InvoiceStatus.PAID:
+            extracted = await _reextract(db, invoice, document_type, upload)
+    except BusinessRuleError as exc:
+        return error_page(exc.message, exc.status_code)
     if document_type == DocumentType.FOREIGN_INVOICE.value:
         # HU-15: el nombre de archivo del Invoice no se repite entre las facturas del proveedor (bloqueo por proveedor).
         try:
             foreign.ensure_unique_filename(db, invoice, Path(upload.filename or "").name)
         except BusinessRuleError as exc:
-            return _documents_page(request, db, invoice, user, exc.message, 409)
+            return error_page(exc.message, 409)
     try:
         stored = await LocalFileStorage().save_invoice_file(invoice.id, upload)
         metadata, pages, processing = {}, None, ProcessingStatus.PROCESSED
-        if stored.path.suffix == ".pdf":
+        if extracted is not None:
+            result = extracted[0]
+            if stored.path.suffix == ".pdf":
+                metadata, pages = result.pdf_metadata(), result.pdf_analysis["page_count"]
+            else:
+                metadata = result.xml_metadata()
+        elif stored.path.suffix == ".pdf":
             pdf = analyze_pdf(stored.path)
             pages = pdf["page_count"]
             metadata = {k: v for k, v in pdf.items() if k != "text"}
@@ -470,9 +685,7 @@ async def upload_document(
         elif complement_data is not None:
             metadata = complement_data
         elif stored.path.suffix == ".xml":
-            from app.services.validation_engine import _json_safe
-
-            metadata = _json_safe(parse_cfdi(stored.path))
+            metadata = extraction.json_safe(parse_cfdi(stored.path))
     except (ValueError, XMLParseError) as exc:
         if isinstance(exc, XMLParseError):
             logger.warning(
@@ -484,7 +697,7 @@ async def upload_document(
                     "error": str(exc),
                 },
             )
-        return _documents_page(request, db, invoice, user, str(exc), 400)
+        return error_page(str(exc), 400)
     previous = next((d for d in invoice.documents if d.is_current and d.document_type == document_type), None)
     if previous:
         previous.is_current = False
@@ -520,16 +733,67 @@ async def upload_document(
         old={"document_id": previous.id} if previous else None,
         new={"type": document_type, "sha256": stored.sha256},
     )
+    if extracted is not None:
+        # Nuevos datos de la factura con el archivo reemplazado (RD-04): la Validacion 1 del Paso 2 se recalcula.
+        _apply_extracted(db, invoice, extracted[1], user.id)
+        extraction.log_extraction(invoice.id, extracted[0])
     notify_reception = payment.register_complement(db, invoice, document, user.id)
     db.commit()
     if invoice.status != InvoiceStatus.PAID:
-        return RedirectResponse(f"/invoices/{invoice.id}/documents", status_code=303)
+        target = REVIEW_STEP if review else "documents"
+        return RedirectResponse(f"/invoices/{invoice.id}/{target}", status_code=303)
     # Complemento en la factura pagada: despues del commit, el aviso a Recepcion de Facturas (solo por el XML).
     query = {"notice": "complement_saved"}
     if notify_reception:
         delivery = payment.notify_complement(db, invoice, document, user.id)
         query["notification"] = delivery.id if delivery else "error"
     return RedirectResponse(f"/invoices/{invoice.id}/documents?{urlencode(query)}", status_code=303)
+
+
+def _review_page(
+    request: Request, db: Session, invoice: Invoice, user, error: str | None = None, status_code: int = 200
+):
+    """Paso 2 de la factura nacional (HU-24): paginas del PDF, datos extraidos con la Validacion 1 junto a cada dato,
+    orden de compra detectada y archivos de la factura con su carga."""
+    stored = extraction.stored_data(invoice)
+    data = stored.data if stored else {}
+    checks = {result.rule_code: result for result in identity_checks(db, invoice, stored)}
+    pdf_doc = extraction.current_document(invoice, DocumentType.INVOICE_PDF)
+    page_count = (pdf_doc.page_count or (pdf_doc.metadata_json or {}).get("page_count") or 1) if pdf_doc else 0
+    items = requirements.checklist(db, invoice)
+    pending = requirements.pending_required(items)
+    concepts = data.get("concepts") or []
+    context = {
+        "user": user,
+        "invoice": invoice,
+        "stored": stored,
+        "data": data,
+        "checks": checks,
+        "concepts": concepts,
+        "order_reference": detect_order_number(c.get("description") for c in concepts),
+        "pdf_doc": pdf_doc,
+        "pages": list(range(1, min(page_count, document_view.MAX_PAGES) + 1)),
+        "items": items,
+        "complete": pending == 0,
+        "pending_label": requirements.pending_label(pending),
+        "requirement_labels": DOCUMENT_REQUIREMENT_LABELS,
+        "formats_label": requirements.formats_label,
+        "accept": ",".join(dict.fromkeys(ext for item in items for ext in requirements.extensions(item.document_type))),
+        "can_submit": invoice.status in SUBMITTABLE_STATUSES,
+        "error": error,
+    }
+    return templates.TemplateResponse(request, "invoices/review.html", context, status_code=status_code)
+
+
+@router.get("/{invoice_id}/data")
+def review_data(invoice_id: int, request: Request, db: Session = Depends(get_db), user=Depends(provider_only)):
+    """Paso 2 "Revision". No cambia el estatus ni los resultados guardados: la Validacion 1 se calcula al mostrarla."""
+    invoice = _invoice_or_404(db, invoice_id, user)
+    if foreign.is_international(invoice):
+        return RedirectResponse(f"/invoices/{invoice.id}/documents", status_code=303)
+    if not is_editable(invoice):
+        return RedirectResponse(f"/invoices/{invoice.id}", status_code=303)
+    return _review_page(request, db, invoice, user)
 
 
 @router.post("/{invoice_id}/amounts")
@@ -540,17 +804,25 @@ async def update_amounts(
     subtotal: str = Form(""),
     tax: str = Form(""),
     currency: str = Form(""),
+    purchase_order_number: str = Form(""),
     db: Session = Depends(get_db),
     user=Depends(provider_only),
 ):
-    """Edicion de los datos del Invoice mientras la factura es editable (HU-15). El total lo calcula el servidor."""
+    """Edicion de los datos del Invoice y su orden de compra mientras la factura es editable (HU-15, HU-24). El total
+    lo calcula el servidor."""
     await validate_csrf(request)
     invoice = _invoice_or_404(db, invoice_id, user)
     lock_invoice(db, invoice)
     ensure_editable(invoice)
     if not foreign.is_international(invoice):
         raise InvalidInputError(foreign.MSG_NOT_INTERNATIONAL)
-    values = {"invoice_date": invoice_date, "subtotal": subtotal, "tax": tax, "currency": currency}
+    values = {
+        "invoice_date": invoice_date,
+        "subtotal": subtotal,
+        "tax": tax,
+        "currency": currency,
+        "purchase_order_number": purchase_order_number,
+    }
     data, errors = foreign.parse_data(db, values)
     if errors:
         return _documents_page(request, db, invoice, user, status_code=400, amounts=values, amount_errors=errors)
@@ -728,8 +1000,9 @@ async def mark_paid(
     db: Session = Depends(get_db),
     user=Depends(reviewers_only),
 ):
-    """Marca como "Pagada" una factura "Autorizada" (HU Complemento de Pagos): se confirma y despues sale el correo al
-    proveedor, con el aviso del Complemento de Pago si lo requiere; un envio fallido no revierte el pago."""
+    """Programa el pago de una factura "Autorizada" (PAID, "Programado para pago" en Ferromex; HU Complemento de
+    Pagos): se confirma y despues sale el correo al proveedor, con el aviso del Complemento de Pago si lo requiere; un
+    envio fallido no revierte la programacion."""
     await validate_csrf(request)
     invoice = _invoice_or_404(db, invoice_id, user)
     # Sin la confirmacion, una factura que se podria pagar vuelve al detalle con el error; las demas responden 409.
@@ -776,3 +1049,26 @@ async def cancel_invoice(
     delivery = review_service.send_notification(db, invoice, None, user.id)
     result = delivery.id if delivery else "error"
     return RedirectResponse(f"/invoices/{invoice.id}?notification={result}#cancellation-result", status_code=303)
+
+
+@router.post("/{invoice_id}/delete")
+async def delete_invoice(
+    invoice_id: int,
+    request: Request,
+    confirm: str = Form(""),
+    db: Session = Depends(get_db),
+    user=Depends(admin_or_provider),
+):
+    """Elimina una factura en Borrador o Cancelada (spec flujo-facturas). Sin la confirmacion vuelve al detalle con el
+    error (400); en otro estatus, 409. Los archivos se borran del disco despues de confirmar en la base."""
+    await validate_csrf(request)
+    invoice = _invoice_or_404(db, invoice_id, user)
+    folio = invoice.internal_folio
+    try:
+        paths = deletion.delete_invoice(db, invoice, user.id, bool(confirm))
+    except InvalidInputError as exc:
+        db.rollback()
+        return _detail_page(request, db, invoice, user, delete_error=exc.message, status_code=400)
+    db.commit()
+    LocalFileStorage().discard(paths)
+    return RedirectResponse(f"/invoices?{urlencode({'deleted': folio})}", status_code=303)

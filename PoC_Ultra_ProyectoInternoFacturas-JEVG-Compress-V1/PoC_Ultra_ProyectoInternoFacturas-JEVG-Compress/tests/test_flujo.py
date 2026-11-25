@@ -68,7 +68,7 @@ def test_aceptar_con_bloqueo_critico_desde_el_servicio():
 
 
 def test_aceptar_con_bloqueo_critico_desde_http(client):
-    invoice = invoice_by_number("B-EXCEDE")  # FIN-001 FAIL CRITICAL
+    invoice = invoice_by_number("C-RFC-ERROR")  # XML-002 FAIL CRITICAL
     with SessionLocal() as db:
         db.get(Invoice, invoice.id).status = InvoiceStatus.UNDER_REVIEW
         db.commit()
@@ -86,7 +86,7 @@ def test_aceptar_con_bloqueo_critico_desde_http(client):
             assert db.scalar(select(func.count()).select_from(Review).where(Review.invoice_id == invoice.id)) == reviews
     finally:
         with SessionLocal() as db:
-            db.get(Invoice, invoice.id).status = InvoiceStatus.REQUIRES_CORRECTION
+            db.get(Invoice, invoice.id).status = invoice.status
             db.commit()
 
 
@@ -99,7 +99,7 @@ def test_decision_invalida(client):
 
 
 def test_resumen_del_detalle_usa_calculate_score(client):
-    invoice = invoice_by_number("B-EXCEDE")
+    invoice = invoice_by_number("C-RFC-ERROR")
     with SessionLocal() as db:
         results = db.scalars(select(ValidationResult).where(ValidationResult.invoice_id == invoice.id)).all()
     summary = validation_summary(results)

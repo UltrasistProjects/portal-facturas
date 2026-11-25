@@ -58,6 +58,28 @@ FILE_TYPES: dict[str, tuple[str, Callable[[bytes], bool], str]] = {
 ALLOWED_EXTENSIONS = set(FILE_TYPES)
 
 
+async def read_upload(upload: UploadFile) -> bytes:
+    """Contenido del archivo hasta un byte mas que el limite, para detectar el exceso sin leer de mas."""
+    return await upload.read(settings.max_upload_mb * 1024 * 1024 + 1)
+
+
+def check_upload(filename: str | None, content: bytes) -> tuple[str, str]:
+    """(extension, MIME) de un archivo aceptable: extension permitida, no vacio, dentro del limite y con contenido que
+    corresponde a la extension. ValueError con el motivo. Lo usan el guardado y el registro de la factura por
+    archivos (HU-24), que valida antes de crear la factura."""
+    extension = Path(Path(filename or "archivo").name).suffix.lower()
+    if extension not in ALLOWED_EXTENSIONS:
+        raise ValueError("Extension no permitida")
+    mime, matches_content, description = FILE_TYPES[extension]
+    if not content:
+        raise ValueError("El archivo esta vacio")
+    if len(content) > settings.max_upload_mb * 1024 * 1024:
+        raise ValueError(f"El archivo excede {settings.max_upload_mb} MB")
+    if not matches_content(content):
+        raise ValueError(f"El contenido no corresponde a {description}")
+    return extension, mime
+
+
 @dataclass
 class StoredFile:
     original_filename: str
@@ -119,28 +141,30 @@ class LocalFileStorage:
         partial.write_bytes(content)
         partial.replace(path)
 
+    def discard(self, relative_paths: list[str]) -> None:
+        """Borra del disco los archivos de documentos ya eliminados de la base (su contenido en stored_files se borra
+        con ellos) y las carpetas que quedan vacias. Ignora los que no existen y las rutas fuera de la raiz."""
+        folders = set()
+        for relative in relative_paths:
+            path = (self.root / relative).resolve()
+            if self.root not in path.parents:
+                continue
+            path.unlink(missing_ok=True)
+            folders.add(path.parent)
+        for folder in folders:
+            if folder != self.root and folder.is_dir() and not any(folder.iterdir()):
+                folder.rmdir()
+
     async def save_invoice_file(self, invoice_id: int, upload: UploadFile) -> StoredFile:
         return await self._save("invoices", invoice_id, upload)
 
     async def save_supplier_file(self, supplier_id: int, upload: UploadFile) -> StoredFile:
         return await self._save("suppliers", supplier_id, upload)
 
-    async def save_contract_file(self, contract_id: int, upload: UploadFile) -> StoredFile:
-        return await self._save("contracts", contract_id, upload)
-
     async def _save(self, scope: str, entity_id: int, upload: UploadFile) -> StoredFile:
         original = Path(upload.filename or "archivo").name
-        extension = Path(original).suffix.lower()
-        if extension not in ALLOWED_EXTENSIONS:
-            raise ValueError("Extension no permitida")
-        mime, matches_content, description = FILE_TYPES[extension]
-        content = await upload.read(settings.max_upload_mb * 1024 * 1024 + 1)
-        if not content:
-            raise ValueError("El archivo esta vacio")
-        if len(content) > settings.max_upload_mb * 1024 * 1024:
-            raise ValueError(f"El archivo excede {settings.max_upload_mb} MB")
-        if not matches_content(content):
-            raise ValueError(f"El contenido no corresponde a {description}")
+        content = await read_upload(upload)
+        extension, mime = check_upload(original, content)
         stored = f"{uuid4().hex}{extension}"
         folder = (self.root / scope / str(int(entity_id))).resolve()
         if self.root not in folder.parents:

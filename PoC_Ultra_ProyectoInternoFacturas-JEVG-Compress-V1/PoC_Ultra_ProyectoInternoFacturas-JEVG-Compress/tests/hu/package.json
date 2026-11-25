@@ -5,6 +5,7 @@
   "scripts": {
     "test": "playwright test",
     "video": "playwright test -c playwright.video.config.ts",
+    "video-3668": "playwright test -c playwright.video.config.ts recorrido-factura-3668",
     "reporte-pdf": "node generar-reporte-pdf.mjs",
     "verificar-pdf": "../../.venv/bin/python verificar-pdf.py"
   },

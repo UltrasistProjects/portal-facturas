@@ -1,5 +1,4 @@
 import json
-import re
 import socket
 from datetime import datetime, timezone
 from decimal import Decimal
@@ -12,11 +11,11 @@ from app.core.constants import NotificationEvent
 from app.core.database import SessionLocal
 from app.models import Invoice, User, UserSession
 from app.services import notification_templates
+from tests.cfdi import EXAMPLE_NAME, example_cfdi, moral_cfdi, pdf_of, register, register_cfdi
 from tests.conftest import ROOT, TEST_PASSWORDS, csrf, invoice_by_number, login, supplier_by_email
 from tests.idp import query
 
 LOG_FILE = settings.log_dir / "app.log"
-CFDI = (ROOT / "data" / "demo_documents" / "cfdi_demo_correcto.xml").read_text(encoding="utf-8")
 PDF = (ROOT / "data" / "demo_documents" / "factura_demo.pdf").read_bytes()
 
 
@@ -45,34 +44,25 @@ def upload(client, invoice_id: int, document_type: str, filename: str, content: 
 
 
 def invoice_flow(client, number: str, uuid: str) -> int:
-    """Alta, carga de XML y PDF y prevalidacion de una factura nueva del proveedor 1."""
-    supplier = supplier_by_email("proveedor1@poc.local")
-    data = {
-        "supplier_id": supplier.id,
-        "contract_id": invoice_by_number("A-CORRECTA").contract_id,
-        "invoice_number": number,
-        "service_period": "08/2026",
-        "project_name": "Automatizacion Operativa 2026",
-        "csrf_token": csrf(client, "/invoices/new"),
-    }
-    assert client.post("/invoices/new", data=data, follow_redirects=False).status_code == 303
-    invoice_id = invoice_by_number(number).id
-    xml = re.sub(r'UUID="[^"]*"', f'UUID="{uuid}"', CFDI).encode()
-    assert upload(client, invoice_id, "INVOICE_XML", "cfdi.xml", xml).status_code == 303
-    assert upload(client, invoice_id, "INVOICE_PDF", "factura.pdf", PDF).status_code == 303
-    token = csrf(client, f"/invoices/{invoice_id}")
-    assert client.post(f"/invoices/{invoice_id}/validation", data={"csrf_token": token}).status_code == 200
-    return invoice_id
+    """Registro por archivos (PDF y XML) y prevalidacion de una factura nueva del proveedor 1 con ese folio."""
+    data = moral_cfdi(uuid=uuid, folio=number, series=None)
+    response, invoice = register_cfdi(client, data)
+    assert response.status_code == 303
+    token = csrf(client, f"/invoices/{invoice.id}")
+    assert client.post(f"/invoices/{invoice.id}/validation", data={"csrf_token": token}).status_code == 200
+    return invoice.id
 
 
 def test_lineas_json_con_request_id_y_user_id(client):
     login(client, "proveedor1@poc.local")
     offset = log_offset()
-    invoice_id = invoice_flow(client, "LOG-001", "LOG00001-0000-4000-8000-000000000001")
+    invoice_id = invoice_flow(client, "LOG-001", "10600001-0000-4000-8000-000000000001")
     events = events_since(offset)
     provider = user_id("proveedor1@poc.local")
     uploads = [e for e in events if e.get("event") == "document.uploaded"]
     assert len(uploads) == 2
+    (extracted,) = [e for e in events if e.get("event") == "invoice.extracted"]
+    assert (extracted["invoice_id"], extracted["source"], extracted["complete"]) == (invoice_id, "xml", True)
     for entry in uploads:
         assert entry["request_id"] and entry["user_id"] == provider and entry["invoice_id"] == invoice_id
         assert {entry["extension"], entry["document_type"]} <= {".xml", ".pdf", "INVOICE_XML", "INVOICE_PDF"}
@@ -110,21 +100,17 @@ def test_pdf_danado(client):
     assert failure["level"] == "WARNING" and failure["error_type"] and failure["error"]
 
 
-def test_subida_de_documento_de_contrato_registrada(client, new_contracts):
-    contract = new_contracts()
-    login(client)
+def test_extraccion_de_una_factura_registrada(client):
+    """El registro solo con PDF registra la fuente de los datos sin datos fiscales (spec observabilidad)."""
+    login(client, "proveedor2@poc.local")
     offset = log_offset()
-    response = client.post(
-        f"/contracts/{contract.id}/documents",
-        data={"document_type": "SIGNED_CONTRACT", "csrf_token": csrf(client, "/")},
-        files={"upload": ("contrato-confidencial.pdf", PDF, "application/octet-stream")},
-        follow_redirects=False,
-    )
-    assert response.status_code == 303
-    (entry,) = [e for e in events_since(offset) if e.get("event") == "document.uploaded"]
-    assert entry["contract_id"] == contract.id and entry["document_type"] == "SIGNED_CONTRACT"
-    assert entry["extension"] == ".pdf" and entry["size_bytes"] == len(PDF)
-    assert "contrato-confidencial" not in json.dumps(entry)
+    data = example_cfdi()
+    assert register(client, pdf_of(data)).status_code == 303
+    (entry,) = [e for e in events_since(offset) if e.get("event") == "invoice.extracted"]
+    assert (entry["source"], entry["complete"]) == ("pdf_text", True)
+    content = json.dumps(entry)
+    for value in (EXAMPLE_NAME, "GOHS60031745A", "3559.05", data["uuid"]):
+        assert value not in content
 
 
 def test_sin_datos_sensibles_en_el_log(client, restore_notification_recipients):
@@ -135,7 +121,7 @@ def test_sin_datos_sensibles_en_el_log(client, restore_notification_recipients):
     codes = [query(str(response.request.url))["code"] for response in (rejected, accepted)]
     with SessionLocal() as db:
         id_token = db.scalar(select(UserSession.id_token_hint).order_by(UserSession.id.desc()).limit(1))
-    invoice_flow(client, "LOG-002", "LOG00002-0000-4000-8000-000000000002")
+    invoice_flow(client, "LOG-002", "10600002-0000-4000-8000-000000000002")
     client.post("/logout", data={"csrf_token": csrf(client, "/")})
     login(client, "pmo@poc.local")
     # Decision real del PMO (HU-20) sobre la factura de esta prueba, con su correo al proveedor.
@@ -158,7 +144,7 @@ def test_sin_datos_sensibles_en_el_log(client, restore_notification_recipients):
         settings.keycloak_client_secret.get_secret_value(),
         settings.keycloak_admin_client_secret.get_secret_value(),
         "TIC210101ABC",
-        "ULT940623AG0",
+        "IME010718PU3",
         "cfdi.xml",
         "factura.pdf",
         *TEST_PASSWORDS.values(),

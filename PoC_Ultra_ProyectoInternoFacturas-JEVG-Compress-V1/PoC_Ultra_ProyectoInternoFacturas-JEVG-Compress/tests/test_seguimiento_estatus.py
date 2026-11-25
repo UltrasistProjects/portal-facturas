@@ -64,7 +64,7 @@ def test_seguimiento_del_proveedor_sin_revisor_ni_comentarios(client):
     page = client.get(f"/invoices/{invoice.id}").text
     section = history_section(page)
     assert "<h2>Seguimiento</h2>" in section and "Observaciones" in section and "Falta el Vo.Bo. firmado" in section
-    assert "<small>PMO</small>" in section and name_of(PMO) not in page
+    assert "<small>Analista de cuentas por pagar</small>" in section and name_of(PMO) not in page
     assert "Comentario" not in section and "Nota interna del PMO" not in page
     # El proveedor no ve el bloque "Proveedor" del PMO.
     assert 'id="supplier"' not in page
@@ -136,7 +136,7 @@ def test_observaciones_con_acceso_a_corregir(client):
     invoice = decided("REQUIRES_CORRECTION", "Falta el Vo.Bo. firmado")
     login(client, PROVIDER_EMAIL)
     shown = cause(client.get(f"/invoices/{invoice.id}").text)
-    assert "Observaciones del PMO" in shown and "Falta el Vo.Bo. firmado" in shown
+    assert "Observaciones del analista de cuentas por pagar" in shown and "Falta el Vo.Bo. firmado" in shown
     assert "Corrija lo indicado y vuelva a enviar la factura" in shown
     assert f'href="/invoices/{invoice.id}/documents"' in shown
     logout(client)

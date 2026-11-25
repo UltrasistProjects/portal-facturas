@@ -46,13 +46,13 @@ def test_sin_modal_de_decision_para_el_proveedor(client):
     assert 'id="decision-confirm"' not in client.get(f"/invoices/{invoice.id}").text
 
 
-def test_mensaje_del_formato_del_periodo(client):
-    login(client, PROVIDER_EMAIL)
+def test_mensaje_del_formato_de_la_orden_de_compra(client):
+    """El periodo ya no se captura (HU-24); el Invoice internacional pide su orden de compra con su propio mensaje."""
+    login(client, "proveedor3@poc.local")
     page = client.get("/invoices/new").text
-    message = re.escape("Use el formato MM/AAAA, por ejemplo 08/2026.")
-    pattern = re.search(rf'name="service_period"[^>]* pattern="([^"]+)" data-error-pattern="{message}"', page).group(1)
-    # El navegador acepta los mismos formatos que el servidor; el rango del mes lo valida el servidor.
-    for accepted in ("08/2026", "8/2026", "08-2026", "08 / 2026", "2026-08", "2026.8"):
-        assert re.fullmatch(pattern, accepted), accepted
-    for rejected in ("agosto 2026", "082026", "08/26"):
-        assert not re.fullmatch(pattern, rejected), rejected
+    message = re.escape("Capture el número de orden de compra (6 a 10 dígitos).")
+    pattern = re.search(rf'name="purchase_order_number"[^>]* pattern="([^"]+)" data-error-pattern="{message}"', page)
+    for accepted in ("123456", "25704872", "1234567890"):
+        assert re.fullmatch(pattern.group(1), accepted), accepted
+    for rejected in ("12345", "OC/25704872", "12345678901"):
+        assert not re.fullmatch(pattern.group(1), rejected), rejected

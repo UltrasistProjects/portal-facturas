@@ -1,72 +1,57 @@
-"""Moneda de contratos y facturas del catalogo de monedas (ajustes-finales-configuracion; specs catalogos-referencia,
-motor-validacion y flujo-facturas)."""
+"""Moneda de las facturas del catalogo de monedas (ajustes-finales-configuracion; specs catalogos-referencia,
+motor-validacion y flujo-facturas). Los contratos se retiraron del portal (HU-24)."""
 
 import html
-from uuid import uuid4
 
 import pytest
-from sqlalchemy import select, update
+from sqlalchemy import update
 
 from app.core.database import SessionLocal
-from app.models import CatalogEntry, Contract
-from tests.conftest import csrf, invoice_by_number, login, supplier_by_email
-from tests.test_registro_envio import cfdi, create_invoice, load, reload, results, verify
+from app.models import CatalogEntry
+from tests.cfdi import moral_cfdi, register_cfdi, reload, results, verify
+from tests.conftest import csrf, invoice_by_number, login
 
 pytestmark = pytest.mark.usefixtures("restore_validation_rules")
 
 
-def create_contract(client, currency: str):
-    name = f"Moneda {uuid4().hex[:8]}"
-    data = {
-        "supplier_id": supplier_by_email("proveedor2@poc.local").id,
-        "project_name": name,
-        "project_leader": "Lider",
-        "authorized_technology": "Python",
-        "authorized_amount": "100000.00",
-        "currency": currency,
-        "start_date": "2026-01-01",
-        "end_date": "2026-12-31",
-        "csrf_token": csrf(client, "/contracts"),
-    }
-    response = client.post("/contracts", data=data, follow_redirects=False)
-    with SessionLocal() as db:
-        return response, db.scalar(select(Contract).where(Contract.project_name == name))
-
-
-def test_selector_de_monedas_en_el_alta_de_contrato(client):
-    login(client)
-    page = client.get("/contracts").text
-    assert '<select id="contract-currency" name="currency"' in page
-    assert '<option value="MXN" selected>MXN · Peso mexicano</option>' in page and 'value="USD"' in page
-
-
-def test_contrato_con_moneda_del_catalogo(client):
-    login(client)
-    response, contract = create_contract(client, "usd")
-    assert response.status_code == 303 and contract.currency == "USD"
+def test_selector_de_monedas_en_el_registro_internacional(client):
+    login(client, "proveedor3@poc.local")
+    page = client.get("/invoices/new").text
+    assert '<select id="currency" name="currency"' in page
+    assert 'value="MXN"' in page and 'value="USD"' in page
 
 
 @pytest.mark.parametrize("currency", ["XYZ", "EUR"])
-def test_contrato_con_moneda_invalida_por_peticion_directa(client, currency):
+def test_factura_internacional_con_moneda_invalida_por_peticion_directa(client, currency):
     with SessionLocal() as db:
         db.execute(update(CatalogEntry).where(CatalogEntry.code == "EUR").values(is_active=False))
         db.commit()
-    login(client)
-    response, contract = create_contract(client, currency)
-    assert response.status_code == 400 and contract is None
+    login(client, "proveedor3@poc.local")
+    number = f"MON-{currency}"
+    data = {
+        "invoice_number": number,
+        "purchase_order_number": "45009042",
+        "invoice_date": "2026-08-31",
+        "subtotal": "100.00",
+        "tax": "0.00",
+        "currency": currency,
+        "csrf_token": csrf(client, "/invoices/new"),
+    }
+    response = client.post("/invoices/new", data=data, follow_redirects=False)
+    assert response.status_code == 400 and invoice_by_number(number) is None
     assert "Moneda: la clave no está activa en el catálogo" in html.unescape(response.text)
 
 
-def test_factura_nacional_nace_con_la_moneda_de_su_contrato(client):
+def test_factura_nacional_nace_con_la_moneda_del_comprobante(client):
     login(client, "proveedor1@poc.local")
-    invoice = create_invoice(client)
-    with SessionLocal() as db:
-        assert invoice.currency == db.get(Contract, invoice.contract_id).currency
+    response, invoice = register_cfdi(client, moral_cfdi(currency="USD"))
+    assert response.status_code == 303 and invoice.currency == "USD"
 
 
 def test_moneda_del_cfdi_fuera_del_catalogo_no_se_guarda(client):
     login(client, "proveedor1@poc.local")
-    invoice = load(client, create_invoice(client), cfdi(Moneda="GBP"))
+    response, invoice = register_cfdi(client, moral_cfdi(currency="GBP"))
+    assert response.status_code == 303 and invoice.currency == "MXN"
     assert verify(client, invoice).status_code == 303
     xml007 = results(invoice)["XML-007"]
     assert (xml007.status, xml007.detected_value) == ("FAIL", "GBP")
@@ -75,7 +60,7 @@ def test_moneda_del_cfdi_fuera_del_catalogo_no_se_guarda(client):
 
 def test_moneda_del_cfdi_del_catalogo_se_guarda(client):
     login(client, "proveedor1@poc.local")
-    invoice = load(client, create_invoice(client), cfdi(Moneda="USD"))
+    _, invoice = register_cfdi(client, moral_cfdi(currency="USD"))
     assert verify(client, invoice).status_code == 303
     assert reload(invoice).currency == "USD" and results(invoice)["XML-007"].status == "PASS"
 

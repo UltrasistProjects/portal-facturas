@@ -2,6 +2,8 @@
 archivos-minimos-factura, cancelacion-facturas y revision-pmo)."""
 
 import hashlib
+import html
+import json
 import re
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
@@ -14,6 +16,7 @@ from app.core.config import settings
 from app.core.constants import PAYMENT_COMPLEMENT_WINDOW, InvoiceStatus
 from app.core.database import SessionLocal
 from app.models import Document, Invoice, Supplier, User
+from tests.cfdi import PLAIN_PDF, moral_cfdi, register, xml_of
 from tests.conftest import ROOT, csrf, login
 from tests.test_acceso_proveedores import messages
 from tests.test_cancelacion import (
@@ -30,7 +33,6 @@ from tests.test_cancelacion import (
     user_id,
 )
 from tests.test_factura_internacional import INTERNATIONAL
-from tests.test_registro_envio import create, own_contract_id
 
 pytestmark = pytest.mark.usefixtures("restore_notification_recipients", "settle_complements")
 
@@ -42,7 +44,7 @@ PROVIDER = "proveedor2@poc.local"
 OTHER_PROVIDER = INTERNATIONAL
 COMPLEMENT_SOURCE = (ROOT / "data" / "demo_documents" / "complemento_pago_demo.xml").read_text(encoding="utf-8")
 DEMO_RELATED = "DEMO0001-0000-4000-8000-000000000001"
-NOTICE = "Es importante que adjunte su “Complemento de Pago” a dicha factura pagada antes del"
+NOTICE = "Es importante que adjunte su “Complemento de Pago” a dicha factura antes del"
 OVERDUE_PREFIX = "No puede enviar facturas a validación: tiene complementos de pago vencidos de las facturas"
 
 
@@ -95,39 +97,41 @@ def invoice_for(email: str = PROVIDER, status: InvoiceStatus = InvoiceStatus.ACC
         return invoice
 
 
-def add_cfdi(invoice: Invoice, payment_method: str | None = "PPD") -> None:
-    """XML del CFDI vigente con los datos que extrae el motor, y su archivo (los respaldos lo copian)."""
-    stored = f"{uuid4().hex}.xml"
+def add_cfdi(invoice: Invoice, payment_method: str | None = "PPD", printed: bool = False) -> None:
+    """CFDI vigente con los datos que extrae el motor, y su archivo (los respaldos lo copian): el XML o, con
+    `printed`, solo el PDF (HU-24), que guarda los datos leidos en "invoice"."""
+    extension = "pdf" if printed else "xml"
+    stored = f"{uuid4().hex}.{extension}"
     path = f"invoices/{invoice.id}/{stored}"
     target = settings.storage_path / path
     target.parent.mkdir(parents=True, exist_ok=True)
-    content = b'<?xml version="1.0" encoding="UTF-8"?><Comprobante/>'
+    content = PLAIN_PDF if printed else b'<?xml version="1.0" encoding="UTF-8"?><Comprobante/>'
     target.write_bytes(content)
     with SessionLocal() as db:
-        metadata = {"uuid": invoice.uuid, "voucher_type": "I"}
+        data = {"uuid": invoice.uuid, "voucher_type": "I"}
         if payment_method:
-            metadata["payment_method"] = payment_method
+            data["payment_method"] = payment_method
         db.add(
             Document(
                 invoice_id=invoice.id,
                 supplier_id=invoice.supplier_id,
-                document_type="INVOICE_XML",
-                original_filename="cfdi.xml",
+                document_type="INVOICE_PDF" if printed else "INVOICE_XML",
+                original_filename=f"cfdi.{extension}",
                 stored_filename=stored,
                 path=path,
-                mime_type="application/xml",
+                mime_type="application/pdf" if printed else "application/xml",
                 file_size=len(content),
                 sha256=hashlib.sha256(content).hexdigest(),
                 uploaded_by=invoice.uploaded_by,
-                metadata_json=metadata,
+                metadata_json={"invoice": {**data, "source": "pdf_text"}} if printed else data,
             )
         )
         db.commit()
 
 
-def accepted(email: str = PROVIDER, payment_method: str | None = "PPD") -> Invoice:
+def accepted(email: str = PROVIDER, payment_method: str | None = "PPD", printed: bool = False) -> Invoice:
     invoice = invoice_for(email, InvoiceStatus.ACCEPTED, uuid=new_uuid())
-    add_cfdi(invoice, payment_method)
+    add_cfdi(invoice, payment_method, printed)
     return invoice
 
 
@@ -204,7 +208,12 @@ def test_panel_de_pago_en_una_factura_autorizada(client):
     login(client, PMO)
     page = client.get(f"/invoices/{invoice.id}").text
     assert 'id="payment"' in page and f'action="/invoices/{invoice.id}/payment"' in page
-    assert f"Confirmo que la factura {invoice.invoice_number} fue pagada. Se notificará al proveedor." in page
+    # "Programar pago" (Ferromex): el boton abre la ventana con la solicitud en JSON y la confirmacion.
+    assert 'data-bs-target="#payment"' in page and "Confirmar y programar pago" in page
+    assert "Marcar como pagada" not in page
+    request = json.loads(html.unescape(re.search(r'<pre id="payment-json"[^>]*>(.*?)</pre>', page, re.S).group(1)))
+    assert request["tipo"] == "PROGRAMACION_PAGO" and request["factura"]["numero"] == invoice.invoice_number
+    assert request["factura"]["total"] == "116000.00" and request["complemento_pago"]["requerido"] is True
 
 
 def test_sin_panel_de_pago_para_el_proveedor_ni_en_otro_estatus(client):
@@ -233,14 +242,15 @@ def test_marcar_como_pagada_nacional_ppd(client):
     [delivery] = deliveries(invoice.id)
     assert response.headers["location"] == f"/invoices/{invoice.id}?notification={delivery.id}#decision-result"
     [message] = [m for m in messages() if invoice.invoice_number in m["Subject"]]
-    assert message["Subject"] == f"Factura {invoice.invoice_number} pagada"
+    assert message["Subject"] == f"Factura {invoice.invoice_number} programada para pago"
     assert message["To"] == supplier_email()
     body = text_of(message)
-    assert f"Su factura número {invoice.invoice_number} ha sido pagada." in body
+    assert f"Su factura número {invoice.invoice_number} ha sido programada para pago." in body
     assert f"{NOTICE} {business(stored.payment_complement_due_at)}." in body
     page = client.get(response.headers["location"]).text
     assert f"Correo enviado a {supplier_email()}" in page and 'id="payment"' not in page
-    assert f"Pagada el {business(stored.paid_at)}" in page
+    assert f"Programado para pago el {business(stored.paid_at)}" in page
+    assert 'data-bs-target="#payment-request"' in page and "Ver solicitud (JSON)" in page
     assert f"Pendiente: adjúntelo antes del {business(stored.payment_complement_due_at)}" in page
 
 
@@ -257,17 +267,29 @@ def test_pagada_sin_complemento(client, email, method):
     assert stored.status == InvoiceStatus.PAID and stored.payment_complement_due_at is None
     [message] = [m for m in messages() if invoice.invoice_number in m["Subject"]]
     body = text_of(message)
-    assert f"Su factura número {invoice.invoice_number} ha sido pagada." in body
+    assert f"Su factura número {invoice.invoice_number} ha sido programada para pago." in body
     assert "Complemento de Pago" not in body and "\n\n\n" not in body
     page = client.get(f"/invoices/{invoice.id}").text
     assert "Complemento de pago" in page and "No requerido" in page
+
+
+@pytest.mark.parametrize(("method", "required"), [("PPD", True), ("PUE", False)], ids=["ppd", "pue"])
+def test_factura_registrada_solo_con_pdf(client, method, required):
+    """Sin XML (HU-24), el metodo de pago sale de los datos leidos del PDF."""
+    invoice = accepted(payment_method=method, printed=True)
+    login(client, PMO)
+    assert pay(client, invoice.id).status_code == 303
+    stored = reload(invoice.id)
+    assert stored.status == InvoiceStatus.PAID
+    due = stored.paid_at + PAYMENT_COMPLEMENT_WINDOW if required else None
+    assert stored.payment_complement_due_at == due
 
 
 def test_sin_confirmacion(client):
     invoice = accepted()
     login(client, PMO)
     response = pay(client, invoice.id, confirm=False)
-    assert response.status_code == 400 and "Confirme que la factura fue pagada" in response.text
+    assert response.status_code == 400 and "Confirme la programación del pago" in response.text
     assert reload(invoice.id).status == InvoiceStatus.ACCEPTED and deliveries(invoice.id) == []
 
 
@@ -276,7 +298,7 @@ def test_factura_no_autorizada(client):
     login(client, "admin@poc.local")
     response = pay(client, invoice.id)
     assert response.status_code == 409
-    assert "Sólo una factura autorizada se puede marcar como pagada" in response.text
+    assert "Sólo se puede programar el pago de una factura autorizada" in response.text
     assert reload(invoice.id).status == InvoiceStatus.UNDER_REVIEW and deliveries(invoice.id) == []
 
 
@@ -285,7 +307,7 @@ def test_pago_repetido(client):
     login(client, PMO)
     assert pay(client, invoice.id).status_code == 303
     response = pay(client, invoice.id, token=csrf(client, "/"))
-    assert response.status_code == 409 and "La factura ya fue pagada" in response.text
+    assert response.status_code == 409 and "La factura ya está programada para pago" in response.text
     assert len(deliveries(invoice.id)) == 1 and len(audits(invoice.id, "INVOICE_PAID")) == 1
 
 
@@ -308,7 +330,7 @@ def test_servidor_de_correo_caido_y_reenvio(client, monkeypatch):
     [failed] = deliveries(invoice.id)
     assert (failed.event, failed.status) == ("INVOICE_PAID", "FAILED")
     page = client.get(response.headers["location"]).text
-    assert "No se pudo enviar el correo" in page and "El último correo del pago no se envió." in page
+    assert "No se pudo enviar el correo" in page and "El último correo de la programación del pago no se envió." in page
     monkeypatch.setattr(settings, "mail_backend", "file")
     token = csrf(client, f"/invoices/{invoice.id}")
     resent = client.post(f"/invoices/{invoice.id}/notification", data={"csrf_token": token}, follow_redirects=False)
@@ -329,7 +351,7 @@ def test_pagada_es_final(client):
     assert 'id="cancellation"' not in page and "Enviar a validación" not in page
     assert submit(client, invoice.id).status_code == 409
     response = cancel(client, invoice.id)
-    assert response.status_code == 409 and "Una factura pagada no se puede cancelar" in response.text
+    assert response.status_code == 409 and "Una factura programada para pago no se puede cancelar" in response.text
     assert reload(invoice.id).status == InvoiceStatus.PAID and stored_files(invoice.id) == []
 
 
@@ -426,7 +448,7 @@ def test_otro_tipo_en_una_factura_pagada(client):
     login(client, PROVIDER)
     response = upload(client, invoice.id, "PURCHASE_ORDER", "oc.pdf", PDF)
     assert response.status_code == 409
-    assert "En una factura pagada sólo se puede cargar el Complemento de Pago" in response.text
+    assert "En una factura programada para pago sólo se puede cargar el Complemento de Pago" in response.text
     assert stored_files(invoice.id) == []
 
 
@@ -523,8 +545,8 @@ def test_solo_los_complementos_del_proveedor(client):
 def test_alta_permitida_con_complemento_vencido(client):
     paid(hours_ago=73)
     login(client, PROVIDER)
-    response, _ = create(client, contract_id=own_contract_id(PROVIDER))
-    assert response.status_code == 303 and response.headers["location"].endswith("/documents")
+    response = register(client, PLAIN_PDF, xml_of(moral_cfdi()))
+    assert response.status_code == 303 and response.headers["location"].endswith("/data")
 
 
 def test_aviso_en_el_tablero_y_el_listado(client):
@@ -558,10 +580,11 @@ def test_indicador_de_pagadas(client):
     invoice = accepted()
     login(client, PMO)
     before = client.get("/").text
-    count = int(re.search(r'id="kpi-paid"><span>Pagadas</span><strong>(\d+)</strong>', before).group(1))
+    count = int(re.search(r'id="kpi-paid"><span>Programado para pago</span><strong>(\d+)</strong>', before).group(1))
     pay(client, invoice.id)
     after = client.get("/").text
-    assert re.search(r'id="kpi-paid"><span>Pagadas</span><strong>(\d+)</strong>', after).group(1) == str(count + 1)
+    kpi = re.search(r'id="kpi-paid"><span>Programado para pago</span><strong>(\d+)</strong>', after)
+    assert kpi.group(1) == str(count + 1)
 
 
 # --- Historial ----------------------------------------------------------------------------------------------------
@@ -578,10 +601,10 @@ def test_pago_y_complemento_en_el_historial(client):
     page = client.get(f"/invoices/{invoice.id}").text
     history = re.search(r'<section class="panel" id="history">.*?</section>', page, re.DOTALL).group(0)
     assert f"Fecha límite del complemento: {due}" in history
-    assert history.index("Pagada") < history.index("Complemento de pago adjuntado")
+    assert history.index("Programado para pago") < history.index("Complemento de pago adjuntado")
     with SessionLocal() as db:
         pmo_name = db.scalar(select(User.name).where(User.email == PMO))
-    assert pmo_name not in history and "<small>PMO</small>" in history
+    assert pmo_name not in history and "<small>Analista de cuentas por pagar</small>" in history
     logout(client)
     login(client, PMO)
     history = client.get(f"/invoices/{invoice.id}").text

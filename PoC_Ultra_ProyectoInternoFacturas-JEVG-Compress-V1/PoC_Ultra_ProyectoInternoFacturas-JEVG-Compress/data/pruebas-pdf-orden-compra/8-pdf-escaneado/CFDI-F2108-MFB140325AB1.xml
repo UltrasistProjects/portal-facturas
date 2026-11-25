@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<cfdi:Comprobante xmlns:cfdi="http://www.sat.gob.mx/cfd/4" xmlns:tfd="http://www.sat.gob.mx/TimbreFiscalDigital" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.sat.gob.mx/cfd/4 http://www.sat.gob.mx/sitio_internet/cfd/4/cfdv40.xsd" Version="4.0" Serie="F" Folio="2108" Fecha="2026-11-22T09:10:00" FormaPago="99" MetodoPago="PPD" SubTotal="27500.00" Moneda="MXN" Total="31900.00" TipoDeComprobante="I" Exportacion="01" LugarExpedicion="76120" NoCertificado="00001000000500000001" Certificado="" Sello="">
+    <cfdi:Emisor Rfc="MFB140325AB1" Nombre="MANTENIMIENTO FERROVIARIO DEL BAJIO" RegimenFiscal="601"/>
+    <cfdi:Receptor Rfc="IME010718PU3" Nombre="INTERMODAL MEXICO" DomicilioFiscalReceptor="11700" RegimenFiscalReceptor="601" UsoCFDI="G03"/>
+    <cfdi:Conceptos>
+        <cfdi:Concepto ClaveProdServ="78181500" Cantidad="1" ClaveUnidad="E48" Unidad="Servicio" Descripcion="Calibración de báscula de vía, patio Querétaro, certificado 2026-118 (OC/45000615)" ValorUnitario="27500.00" Importe="27500.00" ObjetoImp="02">
+            <cfdi:Impuestos>
+                <cfdi:Traslados>
+                    <cfdi:Traslado Base="27500.00" Impuesto="002" TipoFactor="Tasa" TasaOCuota="0.160000" Importe="4400.00"/>
+                </cfdi:Traslados>
+            </cfdi:Impuestos>
+        </cfdi:Concepto>
+    </cfdi:Conceptos>
+    <cfdi:Impuestos TotalImpuestosTrasladados="4400.00">
+        <cfdi:Traslados>
+            <cfdi:Traslado Base="27500.00" Impuesto="002" TipoFactor="Tasa" TasaOCuota="0.160000" Importe="4400.00"/>
+        </cfdi:Traslados>
+    </cfdi:Impuestos>
+    <cfdi:Complemento>
+        <tfd:TimbreFiscalDigital Version="1.1" UUID="2FD32E72-C1D6-4B5A-B53D-460431DBF574" FechaTimbrado="2026-11-22T09:14:00" RfcProvCertif="SAT970701NN3" SelloCFD="" NoCertificadoSAT="00001000000500000002" SelloSAT=""/>
+    </cfdi:Complemento>
+</cfdi:Comprobante>

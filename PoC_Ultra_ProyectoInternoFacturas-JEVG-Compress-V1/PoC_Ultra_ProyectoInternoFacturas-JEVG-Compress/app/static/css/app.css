@@ -36,6 +36,20 @@
 /* Requisitos de alta del proveedor (HU-21) */
 .requirements-summary{margin:0 22px 4px;font-weight:600}.requirements-panel .document-list{padding:0 22px 12px}.requirements-others{font-size:11px;letter-spacing:.8px;text-transform:uppercase;color:var(--muted);margin:14px 22px 0}.requirement-pending{white-space:nowrap}.authorize-hint{color:var(--muted);font-size:12px}
 /* Requisitos de alta del contrato (HU-22) */
-.status-contract-registered{background:#e8f1ff;color:#155bb9}.status-contract-active{background:#e8f7f0;color:#14724f}.status-contract-inactive{background:#fdecec;color:#ae3030}.contract-file{display:block;font-size:12px;text-decoration:none;margin-top:3px}.contract-amendments{margin:16px 22px}.contract-activation .access-actions{margin-top:16px}
+
 .status-paid{background:#e3f4fb;color:#0f5f80}.payment-form{display:grid;gap:14px;padding:22px}.payment-panel>.alert{margin:22px 22px 0}.complement-panel{border-left:4px solid var(--amber)}.complement-panel.complement-overdue{border-left-color:var(--red)}.complement-panel.complement-received,.complement-panel.complement-not_required{border-left-color:var(--green)}.complement-notice ul{margin:8px 0 0;padding-left:18px}.complement-notice .overdue{color:var(--red);font-weight:700}
 .type-actions{display:flex;flex-wrap:wrap;gap:6px;align-items:flex-start}.inactive-types td .type-actions{margin-top:6px}.delete-confirm summary{list-style:none}.delete-warning{color:var(--red)}.delete-confirm summary::-webkit-details-marker{display:none}.delete-confirm-box{margin-top:8px;padding:10px 12px;border:1px solid #f1c4c4;background:#fdf4f4;border-radius:7px;max-width:260px}.delete-confirm-box p{margin:0 0 8px;font-size:12px}
+/* Paso 2 "Revision" de la factura nacional (HU-24): imagen del PDF a la izquierda y datos leidos a la derecha. */
+.review-layout{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:20px;align-items:start;margin-bottom:20px}
+.review-pages{position:sticky;top:16px;max-height:calc(100vh - 32px);overflow:auto}
+.review-page{display:block;width:100%;border-top:1px solid var(--line)}
+.review-data{display:grid;gap:16px}.review-data .panel{margin:0}
+.review-source{margin:0;color:var(--muted)}
+.data-check{display:inline-flex;align-items:center;gap:4px;margin-left:6px}.data-check.ok{color:var(--green)}.data-check.fail{color:#ae3030}
+.data-check small{font-weight:600}
+.order-items td,.order-items th{white-space:nowrap}
+@media (max-width:1100px){.review-layout{grid-template-columns:1fr}.review-pages{position:static;max-height:none}}
+/* Programar pago (Ferromex): ventana con la solicitud en JSON */
+.payment-modal .payment-form{display:flex;flex-direction:column;min-height:0;max-height:100%;padding:0;gap:0}.payment-modal .payment-form .modal-body{overflow-y:auto}.payment-help{color:var(--muted)}.paid-alert{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}.json-block{border:1px solid var(--line);border-radius:9px;overflow:hidden}.json-toolbar{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 12px;background:#f8fafc;border-bottom:1px solid var(--line);font-size:12px;font-weight:650;color:var(--muted)}.json-code{margin:0;max-height:52vh;overflow:auto;background:var(--navy);color:#d9e8f7;padding:14px 16px;font-family:Consolas,monospace;font-size:12px;line-height:1.55;white-space:pre}
+/* Alta y edicion de ordenes de compra (Ferromex) */
+.po-form .form-panel h2{margin:0 0 4px}.po-header{align-items:start}.po-totals-help{display:flex;align-items:center;gap:12px;flex-wrap:wrap}.po-items td{padding:8px 6px!important;vertical-align:top}.po-items th{white-space:nowrap}.po-items .form-control-sm,.po-items .form-select-sm{min-width:92px}.po-items .po-col-2 .form-control-sm{min-width:220px}.po-items input[type=date]{min-width:132px}.po-actions{margin-top:0;border-top:0;padding-top:0}

@@ -1,4 +1,4 @@
-DATOS A CAPTURAR - PRUEBAS FERROMEX (RECORRIDO COMPLETO)
+DATOS A CAPTURAR - PRUEBAS FERROMEX (RECORRIDO COMPLETO, HU-24: ORDEN DE COMPRA)
 http://127.0.0.1:8000  (portal de la rama ferromex)
 (en el orden de los formularios del portal)
 
@@ -32,7 +32,8 @@ Comprobante de domicilio ....... Comprobante-Domicilio-GAVH810417Q42.pdf        
 Estado de cuenta bancario ...... Estado-Cuenta-Bancario-GAVH810417Q42.pdf        2026-10-31
 Identificación oficial ......... Identificacion-Oficial-GAVH810417Q42.pdf        2025-03-12
 Opinión de cumplimiento (opc.) . Opinion-Cumplimiento-GAVH810417Q42.pdf          2026-11-17
-Propuesta económica (opc.) ..... Propuesta-Economica-GAVH810417Q42.pdf           2026-09-15
+Propuesta económica ............ Propuesta-Economica-GAVH810417Q42.pdf           2026-09-15
+                                 (obligatoria por el alta por cotización/licitación)
 
 (Las fechas son las impresas en cada PDF. Las de cédula, domicilio, estado de
  cuenta y opinión deben tener menos de 3 meses para que no salga la advertencia
@@ -41,39 +42,21 @@ Propuesta económica (opc.) ..... Propuesta-Economica-GAVH810417Q42.pdf         
 Autorizar proveedor  >  Autorizar y enviar credenciales.
 
 ==================================================================
-2. CONTRATO  (Administrador > Contratos > Nuevo)
-==================================================================
-Proveedor ...................... Héctor Garza Villarreal
-Proyecto ....................... Monitoreo de Flota Ferroviaria FERROMEX
-Lider .......................... Mariana Cortés Elizondo
-Tecnologia ..................... React + Python Fast API
-Monto .......................... 45000.00
-Moneda ......................... MXN
-Inicio ......................... 2026-10-01
-Fin ............................ 2027-03-31
-Contrato firmado ............... 2-contrato/Contrato-4-MonitoreoFlota-GAVH810417Q42.pdf
-
-Activar contrato.
-
-==================================================================
-3. FACTURA A-1001: OBSERVACIONES Y LUEGO AUTORIZADA  (Proveedor)
+2. FACTURA A-1001: OBSERVACIONES Y LUEGO AUTORIZADA  (Proveedor)
    carpeta 3-factura-observaciones-autorizada
 ==================================================================
-Contrato activo ................ Monitoreo de Flota Ferroviaria FERROMEX · $45,000.00 MXN
-Numero de factura .............. A-1001
-Periodo de servicio ............ 10/2026
-Proyecto ....................... Monitoreo de Flota Ferroviaria FERROMEX
-Lider de proyecto .............. Mariana Cortés Elizondo
-Orden de compra ................ OC-2026-0451
+Paso 1 · Archivos (Facturas > Registrar factura):
+  PDF de la factura ............ CFDI-A1001-GAVH810417Q42.pdf   (obligatorio)
+  XML del CFDI ................. CFDI-A1001-GAVH810417Q42.xml   (opcional)
 
-CFDI: subtotal $45,000.00 + IVA $7,200.00 = total $52,200.00 MXN
-      UUID 8E21EC7A-43E0-4C56-8644-D1E9325DE2EE
-
-Documentos (primer envío):
-  XML del CFDI ................. CFDI-A1001-GAVH810417Q42.xml   (único obligatorio)
-  PDF del CFDI ................. CFDI-A1001-GAVH810417Q42.pdf
-  Orden de compra .............. OrdenCompra-OC-2026-0451.pdf
+Paso 2 · Revisión (el portal lee los datos; no se capturan):
+  Factura A-1001 · periodo 11/2026 (mes de emisión) · MXN · PPD · forma 99
+  Orden de compra detectada .... 45000451  (concepto "... (OC/45000451)")
+  CFDI: subtotal $45,000.00 + IVA $7,200.00 = total $52,200.00 MXN
+        UUID 8E21EC7A-43E0-4C56-8644-D1E9325DE2EE
   Vo.Bo. del líder ............. VoBo-A1001-v1-con-error-periodo-09-2026.pdf
+
+Paso 3 · Enviar a validación: OC-001 a OC-012 en verde contra la orden 45000451.
 
 PMO > Observaciones:
   "El Vo.Bo. corresponde al periodo 09/2026; adjunte el Vo.Bo. del periodo 10/2026."
@@ -90,27 +73,30 @@ Pago (Administrador > Marcar como pagada; luego el proveedor carga):
   Complemento de pago (PDF) .... REP-P1001-GAVH810417Q42.pdf
 
 ==================================================================
-4. FACTURA A-1002: RECHAZO DIRECTO  (Proveedor)
+3. FACTURA A-1002: NO CUADRA CON SU ORDEN DE COMPRA  (Proveedor)
    carpeta 4-factura-rechazada
 ==================================================================
-Contrato activo ................ Monitoreo de Flota Ferroviaria FERROMEX · $45,000.00 MXN
-Numero de factura .............. A-1002
-Periodo de servicio ............ 11/2026
-Proyecto ....................... Monitoreo de Flota Ferroviaria FERROMEX
-Lider de proyecto .............. Mariana Cortés Elizondo
-Orden de compra ................ OC-2026-0452
-
-CFDI: subtotal $52,000.00 + IVA $8,320.00 = total $60,320.00 MXN
-      UUID 4CCE1C44-89B6-4EB9-9B0F-657760BAEE08
-
-Documentos:
+Paso 1 · Archivos:
+  PDF de la factura ............ CFDI-A1002-GAVH810417Q42.pdf
   XML del CFDI ................. CFDI-A1002-GAVH810417Q42.xml
-  PDF del CFDI ................. CFDI-A1002-GAVH810417Q42.pdf
-  Orden de compra .............. OrdenCompra-OC-2026-0452.pdf
+
+Paso 2 · Revisión:
+  Orden de compra detectada .... 45000452 (total $45,000.00 + IVA $7,200.00)
+  CFDI: subtotal $52,000.00 + IVA $8,320.00 = total $60,320.00 MXN
+        UUID 4CCE1C44-89B6-4EB9-9B0F-657760BAEE08
   Vo.Bo. del líder ............. VoBo-A1002.pdf
 
-El portal marcará FIN-001 y FIN-006 (subtotal $52,000 > autorizado $45,000).
+Paso 3 · Enviar a validación: el envío no procede.
+  OC-005  Subtotal 52000.00 distinto del total de la orden de compra 45000.00
+  OC-006  IVA 8320.00 distinto de los impuestos de la orden de compra 7200.00
+  OC-009  Concepto 1: importe 52000.00 vs 45000.00
 
-PMO > Rechazar:
-  "El importe facturado ($52,000.00 + IVA) excede el monto autorizado del contrato
-   y de la orden de compra OC-2026-0452 ($45,000.00 + IVA)."
+==================================================================
+4. FACTURA 3668 DEL EJEMPLO, SOLO CON PDF  (proveedor2@poc.local)
+==================================================================
+Proveedor ...................... SOCORRO PATRICIA GONZALEZ HERNANDEZ · GOHS60031745A
+PDF de la factura .............. data/demo_documents/factura_3668.pdf   (sin XML)
+Vo.Bo. del líder ............... data/demo_documents/vobo_demo.txt
+Revisión: factura 3668 · periodo 01/2026 · UUID A328F91A-DDDD-4624-89AC-877819F5B540
+          orden de compra 25704872 · subtotal $3,559.05 + IVA $569.45 = $4,128.50 MXN
+Enviar a validación: OC-001 a OC-012 en verde; queda ligada a la orden 25704872.

@@ -94,11 +94,25 @@ a {
 }
 
 .brand-logo {
-  width: 72px;
-  max-height: 38px;
+  width: 220px;
+  max-height: 64px;
   object-fit: contain;
   display: block;
   flex: 0 0 auto;
+}
+
+/* Panel de marca: logo centrado y 1.5 veces mayor, con el nombre y el lema debajo */
+.login-panel > .brand {
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  text-align: center;
+}
+
+.login-panel > .brand .brand-logo {
+  width: 330px;
+  max-width: 100%;
+  max-height: 96px;
 }
 
 .login-copy {
@@ -328,5 +342,9 @@ a {
 
   .login-mobile-brand small {
     color: var(--muted);
+  }
+
+  .login-mobile-brand .brand-logo {
+    width: 150px;
   }
 }

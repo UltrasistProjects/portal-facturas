@@ -30,6 +30,7 @@ DOMAIN_TABLES = {
     "validation_rules",
     "catalog_entries",
     "stored_files",
+    "purchase_orders",
 }
 NOTIFICATION_TABLES = {"notification_mailboxes", "notification_copies", "email_deliveries"}
 VALIDATION_TABLES = {"validation_settings", "catalog_entries"}
@@ -38,7 +39,7 @@ BASELINE_TABLES = (
     - {"invoice_document_types", "supplier_document_types", "contract_document_types", "notification_templates"}
     - NOTIFICATION_TABLES
     - VALIDATION_TABLES
-    - {"validation_rules", "stored_files"}
+    - {"validation_rules", "stored_files", "purchase_orders"}
 ) | {"login_attempts"}
 
 
@@ -407,16 +408,17 @@ def test_instalacion_nueva_con_reglas_y_catalogos(empty_db):
         " ORDER BY origin DESC, rule_code",
     )
     assert rules == [
-        ("NATIONAL", "XML-002", "ULT940623AG0", True, 1, None),
+        # Receptor INTERMODAL MEXICO desde 0023 (HU-24, P-01).
+        ("NATIONAL", "XML-002", "IME010718PU3", True, 1, None),
         ("NATIONAL", "XML-003", "PPD", True, 1, None),
         ("NATIONAL", "XML-004", "99", True, 1, None),
         ("NATIONAL", "XML-005", ["G03", "I04"], True, 1, None),
-        ("NATIONAL", "XML-009", "FERROMEX", True, 1, None),
-        ("NATIONAL", "XML-010", "03930", True, 1, None),
-        ("NATIONAL", "XML-011", "601", False, 1, None),
+        ("NATIONAL", "XML-009", "INTERMODAL MEXICO", True, 1, None),
+        ("NATIONAL", "XML-010", "11700", True, 1, None),
+        ("NATIONAL", "XML-011", "601", True, 1, None),
         ("INTERNATIONAL", "INT-001", None, True, 1, None),
-        ("INTERNATIONAL", "INT-002", "FERROMEX", True, 1, None),
-        ("INTERNATIONAL", "INT-003", "03930", True, 1, None),
+        ("INTERNATIONAL", "INT-002", "INTERMODAL MEXICO", True, 1, None),
+        ("INTERNATIONAL", "INT-003", "11700", True, 1, None),
         ("INTERNATIONAL", "INT-004", "", False, 1, None),
     ]
     counts = dict(query(empty_db, "SELECT catalog, count(*) FROM catalog_entries WHERE is_active GROUP BY catalog"))
@@ -1328,3 +1330,85 @@ def test_tamano_de_archivo_en_base_coincide_con_su_contenido(empty_db):
             "INSERT INTO stored_files (path, content, size, sha256, created_at)"
             " VALUES ('invoices/1/a.pdf', '\\x2550', 3, repeat('0', 64), now())",
         )
+
+
+# --- Orden de compra en lugar del contrato (HU-24) ----------------------------------------------------------------
+
+PURCHASE_ORDERS = "0023_ferromex_purchase_orders"
+ORDER_ITEMS = (
+    '{"items": [{"Txt.brv": "BATERIA", "Ctd.Pedido": "1", "Unidad.Pedido": "PZA", "Prc.Neto": "10.00",'
+    ' "Moneda": "MXN"}]}'
+)
+
+
+def invoice_document_levels(url: str) -> dict:
+    rows = query(
+        url,
+        "SELECT code, national_requirement, international_requirement FROM invoice_document_types"
+        " WHERE code IN ('INVOICE_XML', 'PURCHASE_ORDER', 'CONTRACT', 'CONTRACT_ANNEX')",
+    )
+    return {code: (national, international) for code, national, international in rows}
+
+
+def test_upgrade_con_contratos_y_facturas_existentes(empty_db):
+    config = alembic_config(empty_db)
+    command.upgrade(config, STORED_FILES)
+    insert_supplier_documents(empty_db)
+    insert_contract(empty_db)
+    execute(
+        empty_db,
+        "INSERT INTO contract_amendments (contract_id, previous_amount, new_amount, reason, created_by, created_at)"
+        " SELECT c.id, 1000, 1200, 'Ampliacion', u.id, now() FROM contracts c, users u",
+    )
+    add_invoice(empty_db, "CON-CONTRATO", "UNDER_REVIEW")
+    execute(empty_db, "UPDATE invoices SET contract_id = (SELECT id FROM contracts)")
+    command.upgrade(config, "head")
+    command.check(config)
+    # Los contratos se conservan sin uso (P-02): tablas, filas y la liga de la factura.
+    assert {"contracts", "contract_amendments", "contract_document_types", "purchase_orders"} <= tables(empty_db)
+    assert query(empty_db, "SELECT count(*) FROM contract_amendments") == [(1,)]
+    assert query(empty_db, "SELECT contract_id IS NOT NULL, purchase_order_id FROM invoices") == [(True, None)]
+    assert invoice_document_levels(empty_db) == {
+        "INVOICE_XML": ("OPTIONAL", "NOT_APPLICABLE"),
+        "PURCHASE_ORDER": ("NOT_APPLICABLE", "NOT_APPLICABLE"),
+        "CONTRACT": ("NOT_APPLICABLE", "NOT_APPLICABLE"),
+        "CONTRACT_ANNEX": ("NOT_APPLICABLE", "NOT_APPLICABLE"),
+    }
+    # Las facturas nuevas no tienen proyecto.
+    add_invoice(empty_db, "SIN-PROYECTO", "DRAFT")
+    execute(empty_db, "UPDATE invoices SET project_name = NULL WHERE invoice_number = 'SIN-PROYECTO'")
+
+
+def test_downgrade_de_ordenes_de_compra_sin_datos(empty_db):
+    config = alembic_config(empty_db)
+    command.upgrade(config, PURCHASE_ORDERS)
+    command.downgrade(config, STORED_FILES)
+    assert "purchase_orders" not in tables(empty_db)
+    assert invoice_document_levels(empty_db)["INVOICE_XML"] == ("REQUIRED", "NOT_APPLICABLE")
+    assert query(
+        empty_db,
+        "SELECT parameter, is_active FROM validation_rules WHERE rule_code IN ('XML-002', 'XML-011')"
+        " ORDER BY rule_code",
+    ) == [("ULT940623AG0", True), ("601", False)]
+    command.upgrade(config, "head")
+    command.check(config)
+
+
+@pytest.mark.parametrize("linked", [False, True])
+def test_downgrade_de_ordenes_de_compra_con_datos(empty_db, linked):
+    config = alembic_config(empty_db)
+    command.upgrade(config, PURCHASE_ORDERS)
+    insert_supplier_documents(empty_db)
+    execute(
+        empty_db,
+        "INSERT INTO purchase_orders (convenio, rfc, supplier_name, order_date, total, taxes, data, created_at,"
+        f" updated_at) VALUES (25704872, 'GOHS60031745A', 'Proveedor', '2025-12-09', 10, 1.6, '{ORDER_ITEMS}',"
+        " now(), now())",
+    )
+    if linked:
+        add_invoice(empty_db, "LIGADA", "UNDER_REVIEW")
+        execute(empty_db, "UPDATE invoices SET purchase_order_id = (SELECT id FROM purchase_orders)")
+    with pytest.raises(NotImplementedError, match="Restaure un respaldo"):
+        command.downgrade(config, STORED_FILES)
+    assert "purchase_orders" in tables(empty_db)
+    assert query(empty_db, "SELECT version_num FROM alembic_version") == [(PURCHASE_ORDERS,)]

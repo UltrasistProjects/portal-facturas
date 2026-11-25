@@ -335,104 +335,6 @@ def load_requirements(*supplier_ids: int) -> None:
         add_expedient_documents(supplier_id, [t.code for t in types])
 
 
-def contract_document(db, contract_id: int, code: str, filename: str | None = None):
-    """Documento vigente de un contrato (HU-22), con su archivo en storage/ para que siga siendo descargable y su hash
-    coincida (los respaldos lo verifican). Es solo del contrato: sin supplier_id ni invoice_id."""
-    from sqlalchemy import select
-
-    from app.core.config import settings
-    from app.core.constants import ProcessingStatus
-    from app.models import Document, User
-
-    filename = filename or f"{code.lower()}.pdf"
-    content = f"%PDF-1.4\n%{code}\n".encode()
-    path = f"contracts/{contract_id}/{secrets.token_hex(8)}.pdf"
-    target = settings.storage_path / path
-    target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_bytes(content)
-    document = Document(
-        contract_id=contract_id,
-        document_type=code,
-        original_filename=filename,
-        stored_filename=target.name,
-        path=path,
-        mime_type="application/pdf",
-        file_size=len(content),
-        sha256=hashlib.sha256(content).hexdigest(),
-        uploaded_by=db.scalar(select(User.id).where(User.email == "admin@poc.local")),
-        processing_status=ProcessingStatus.PROCESSED,
-        metadata_json={"scope": "contract"},
-        is_current=True,
-    )
-    db.add(document)
-    db.flush()
-    return document
-
-
-def active_contract(db, supplier_id: int, **values):
-    """Contrato Activo con su contrato firmado (HU-22), listo para facturar: el alta crea contratos Registrado y DOC-005
-    exige el contrato firmado. Se agrega a la sesion `db` sin confirmarla."""
-    from app.core.constants import SIGNED_CONTRACT_DOCUMENT, ContractStatus
-    from app.models import Contract
-
-    contract = Contract(supplier_id=supplier_id, status=ContractStatus.ACTIVE, **values)
-    db.add(contract)
-    db.flush()
-    contract_document(db, contract.id, SIGNED_CONTRACT_DOCUMENT)
-    return contract
-
-
-@pytest.fixture()
-def new_contracts():
-    """Fabrica de contratos de prueba (HU-22), por omision Registrado y del proveedor demo persona moral (Autorizado),
-    con los documentos de las claves indicadas. `track` agrega a la limpieza los contratos creados por HTTP. Al
-    terminar borra sus documentos y a ellos mismos: la base de la sesion es compartida. Los contratos no deben tener
-    facturas."""
-    from datetime import date
-    from decimal import Decimal
-
-    from sqlalchemy import delete, update
-
-    from app.core.constants import ContractStatus
-    from app.core.database import SessionLocal
-    from app.models import Contract, Document
-
-    created: list[int] = []
-
-    def make(codes=(), supplier_id: int | None = None, status=ContractStatus.REGISTERED, **overrides):
-        token = secrets.token_hex(3).upper()
-        values = {
-            "supplier_id": supplier_id or supplier_by_email("proveedor1@poc.local").id,
-            "project_name": f"Contrato HU22 {token}",
-            "project_leader": "Lider de pruebas",
-            "authorized_technology": "Power Platform",
-            "authorized_amount": Decimal("1000.00"),
-            "currency": "MXN",
-            "start_date": date(2026, 1, 1),
-            "end_date": date(2026, 12, 31),
-            "status": status,
-            **overrides,
-        }
-        with SessionLocal() as db:
-            contract = Contract(**values)
-            db.add(contract)
-            db.flush()
-            for code in codes:
-                contract_document(db, contract.id, code)
-            db.commit()
-            created.append(contract.id)
-            return contract
-
-    make.track = created.append
-    yield make
-    with SessionLocal() as db:
-        documents = Document.contract_id.in_(created)
-        db.execute(update(Document).where(documents).values(replaced_document_id=None))
-        db.execute(delete(Document).where(documents))
-        db.execute(delete(Contract).where(Contract.id.in_(created)))
-        db.commit()
-
-
 @pytest.fixture()
 def registered_suppliers():
     """Fabrica de proveedores Registrado (HU-02), por omision con sus requisitos de alta completos (HU-21) para poder
@@ -505,10 +407,14 @@ def restore_validation_rules():
 
     seed = migration_module("0007_validation_rules_catalogs")
     entries = {**seed.ENTRIES, **migration_module("0009_supplier_profile").ENTRIES}
+    # 0023 cambia el receptor a INTERMODAL MEXICO y activa XML-011 (HU-24, P-01).
+    receiver = migration_module("0023_ferromex_purchase_orders")
     with SessionLocal() as db:
         for origin, code, name, parameter, active in migration_module("0020_validation_rules").rule_values(
             seed.SETTINGS
         ):
+            parameter = receiver.RECEIVER.get((origin, code), parameter)
+            active = active or (origin, code) in receiver.ACTIVATED
             db.execute(
                 update(ValidationRule)
                 .where(ValidationRule.origin == origin, ValidationRule.rule_code == code)
@@ -532,3 +438,11 @@ def restore_validation_rules():
                     .values(name=name, is_active=True, updated_by=None)
                 )
         db.commit()
+
+
+@pytest.fixture()
+def purchase_orders():
+    """Fabrica de ordenes de compra de prueba (HU-24); ver tests/cfdi.py."""
+    from tests.cfdi import order_factory
+
+    yield from order_factory()

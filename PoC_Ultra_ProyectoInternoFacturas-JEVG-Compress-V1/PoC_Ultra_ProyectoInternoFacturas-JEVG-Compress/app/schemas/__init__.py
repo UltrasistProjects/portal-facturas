@@ -11,7 +11,6 @@ from pydantic import (
     ValidationError,
     ValidationInfo,
     field_validator,
-    model_validator,
 )
 
 from app.core.constants import (
@@ -54,8 +53,6 @@ FIELD_LABELS = {
     "contact_name": "Nombre del contacto",
     "contact_phone": "Telefono del contacto",
     "invoice_number": "Numero de factura",
-    "service_period": "Periodo de servicio (MM/AAAA)",
-    "project_name": "Proyecto",
     "project_leader": "Lider de proyecto",
     "authorized_technology": "Tecnologia autorizada",
     "authorized_amount": "Monto autorizado",
@@ -271,74 +268,6 @@ class SupplierCreate(SupplierProfile):
         return value.strip().lower() if isinstance(value, str) else value
 
 
-class ContractCreate(BaseModel):
-    model_config = ConfigDict(str_strip_whitespace=True)
-    supplier_id: int
-    project_name: str = Field(min_length=2, max_length=200)
-    project_leader: str = Field(min_length=2, max_length=150)
-    authorized_technology: str = Field(min_length=2, max_length=250)
-    authorized_amount: Decimal = Field(gt=0, decimal_places=2)
-    currency: str = Field(pattern=r"^[A-Za-z]{3}$")
-    start_date: date
-    end_date: date
-
-    @field_validator("currency")
-    @classmethod
-    def upper_currency(cls, value: str) -> str:
-        return value.upper()
-
-    @model_validator(mode="after")
-    def valid_period(self):
-        if self.end_date < self.start_date:
-            raise ValueError("la fecha de fin no puede ser anterior a la de inicio")
-        return self
-
-
-class ContractAmendmentCreate(BaseModel):
-    model_config = ConfigDict(str_strip_whitespace=True)
-    new_amount: Decimal = Field(gt=0, decimal_places=2)
-    reason: str = Field(min_length=3, max_length=500)
-
-
-# Periodo de servicio capturado: mes y año en cualquier orden comun (8/2026, 08-2026, 08 / 2026, 2026-08). Se guarda
-# siempre como MM/AAAA, el mismo formato con el que CON-003 lo compara contra la vigencia del contrato.
-PERIOD_MONTH_YEAR = re.compile(r"(\d{1,2})\s*[/.\-]\s*(\d{4})")
-PERIOD_YEAR_MONTH = re.compile(r"(\d{4})\s*[/.\-]\s*(\d{1,2})")
-MSG_PERIOD = "use el formato MM/AAAA, por ejemplo 08/2026"
-
-
-def normalize_period(value: str) -> str:
-    """Periodo en MM/AAAA; ValueError si no es un mes valido."""
-    text = (value or "").strip()
-    if match := PERIOD_MONTH_YEAR.fullmatch(text):
-        month, year = match.groups()
-    elif match := PERIOD_YEAR_MONTH.fullmatch(text):
-        year, month = match.groups()
-    else:
-        raise ValueError(MSG_PERIOD)
-    if not 1 <= int(month) <= 12:
-        raise ValueError("el mes debe estar entre 01 y 12")
-    return f"{int(month):02d}/{year}"
-
-
-class InvoiceCreate(BaseModel):
-    invoice_number: str = Field(min_length=1, max_length=100)
-    service_period: str
-    project_name: str = Field(min_length=2, max_length=200)
-    purchase_order_number: str | None = None
-    project_leader: str | None = None
-    subtotal: Decimal = Decimal("0")
-    tax: Decimal = Decimal("0")
-    total: Decimal = Decimal("0")
-    currency: str = "MXN"
-    model_config = ConfigDict(str_strip_whitespace=True)
-
-    @field_validator("service_period")
-    @classmethod
-    def month_and_year(cls, value: str) -> str:
-        return normalize_period(value)
-
-
 def _amount_text(value):
     """Importe capturado en un formulario: admite el separador de miles "," y el simbolo "$"."""
     if isinstance(value, str):
@@ -357,6 +286,8 @@ class ForeignInvoiceData(BaseModel):
     subtotal: Decimal = Field(gt=0, max_digits=16, decimal_places=2)
     tax: Decimal = Field(ge=0, max_digits=16, decimal_places=2)
     currency: str = Field(pattern=r"^[A-Z]{3}$")
+    # Orden de compra del Invoice (HU-24): foreign_invoice_service valida su formato con su propio mensaje.
+    purchase_order_number: str | None = None
     model_config = ConfigDict(str_strip_whitespace=True)
 
     @field_validator("invoice_date", mode="before")
@@ -469,25 +400,9 @@ class SupplierDocumentTypeCreate(SupplierDocumentTypeUpdate):
         return parse_requirement(value)
 
 
-class ContractDocumentTypeUpdate(NamedDocumentType):
-    """Campos editables de un requisito del contrato del Administrador (HU-22): nombre y descripcion. Si admite
-    varios archivos se fija al crearlo."""
-
-
-class ContractDocumentTypeCreate(ContractDocumentTypeUpdate):
-    # "No aplica" y un solo archivo por defecto: crear un requisito no cambia nada hasta que el Administrador decida.
-    requirement: DocumentRequirement = DocumentRequirement.NOT_APPLICABLE
-    allows_multiple: bool = False
-
-    @field_validator("requirement", mode="before")
-    @classmethod
-    def known_requirement(cls, value):
-        return parse_requirement(value)
-
-
 def document_type_message(exc: ValidationError) -> str:
-    """Mensajes de los tipos de documento soporte y de los requisitos de alta y del contrato: frases completas, sin
-    prefijo de campo."""
+    """Mensajes de los tipos de documento soporte y de los requisitos de alta: frases completas, sin prefijo de
+    campo."""
     return " ".join(dict.fromkeys(str(error.get("ctx", {}).get("error", error["msg"])) for error in exc.errors()))
 
 

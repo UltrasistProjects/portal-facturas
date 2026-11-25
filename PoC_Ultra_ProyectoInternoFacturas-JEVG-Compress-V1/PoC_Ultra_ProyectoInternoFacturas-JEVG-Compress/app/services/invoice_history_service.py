@@ -9,7 +9,7 @@ from datetime import datetime
 from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
-from app.core.constants import STATUS_LABELS, InvoiceStatus, ReviewDecision
+from app.core.constants import PMO_LABEL, STATUS_LABELS, InvoiceStatus, ReviewDecision
 from app.core.timeutils import to_business
 from app.models import AuditLog, Invoice, Review, User
 
@@ -18,8 +18,9 @@ CANCELLED = STATUS_LABELS[InvoiceStatus.CANCELLED]
 PAID = STATUS_LABELS[InvoiceStatus.PAID]
 COMPLEMENT_UPLOADED = "Complemento de pago adjuntado"
 DATE_FORMAT = "%d/%m/%Y %H:%M"
-# El proveedor ve la decision y el pago atribuidos al PMO, sin el nombre de quien los registro (EP-02 DT-07).
-PROVIDER_REVIEWER = "PMO"
+# El proveedor ve la decision y el pago atribuidos al PMO ("Analista de cuentas por pagar" en la rama ferromex), sin
+# el nombre de quien los registro (EP-02 DT-07).
+PROVIDER_REVIEWER = PMO_LABEL
 # La decision se muestra con la etiqueta del estatus al que lleva (modelo de estatus del ERS).
 DECISION_LABELS = {
     ReviewDecision.ACCEPTED: STATUS_LABELS[InvoiceStatus.ACCEPTED],

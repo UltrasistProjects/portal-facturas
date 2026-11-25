@@ -1,25 +1,38 @@
-"""Registro y envio de la factura nacional (HU-12, HU-13; EP-01 DT-01 a DT-05)."""
+"""Registro y envio de la factura nacional (HU-12, HU-13; EP-01 DT-01 a DT-05), por archivos y contra su orden de
+compra (HU-24)."""
 
 import re
 import secrets
-from datetime import date, datetime, timezone
-from decimal import Decimal
+from datetime import datetime, timezone
 
 import pytest
-from sqlalchemy import delete, select, update
+from sqlalchemy import select, update
 
 from app.core.database import SessionLocal
-from app.models import AuditLog, Contract, Invoice, Supplier, User, ValidationResult, ValidationRule
-from tests.conftest import ROOT, csrf, invoice_by_number, login, supplier_by_email
+from app.models import AuditLog, Invoice, Supplier, User, ValidationRule
+from tests.cfdi import (
+    MORAL_EMAIL,
+    PHYSICAL_EMAIL,
+    PLAIN_PDF,
+    SUPPORT,
+    moral_cfdi,
+    new_uuid,
+    number_of,
+    ready_invoice,
+    register,
+    register_cfdi,
+    reload,
+    results,
+    submit,
+    token,
+    upload,
+    verify,
+    xml_of,
+)
+from tests.conftest import invoice_by_number, login, supplier_by_email
 
-DEMO = ROOT / "data" / "demo_documents"
-CFDI = (DEMO / "cfdi_demo_correcto.xml").read_text(encoding="utf-8")
-EXCEEDED = (DEMO / "cfdi_demo_monto_excedido.xml").read_text(encoding="utf-8")
-PDF = (DEMO / "factura_demo.pdf").read_bytes()
-SUPPORT = b"Documento soporte de prueba"
-PROVIDER = "proveedor1@poc.local"
-OTHER_PROVIDER = "proveedor2@poc.local"
-PROJECT = "Automatizacion Operativa 2026"
+PROVIDER = MORAL_EMAIL
+OTHER_PROVIDER = PHYSICAL_EMAIL
 LABELS = [
     "Borrador",
     "Cargada",
@@ -28,96 +41,8 @@ LABELS = [
     "Rechazada",
     "Observaciones",
     "Cancelada",
-    "Pagada",
+    "Programado para pago",
 ]  # Sin los pasos de ClickBalance, retirados con HU-20; Cancelada, de HU-14; Pagada, de la HU Complemento de Pagos
-
-
-def unique(prefix: str = "HU12") -> str:
-    return f"{prefix}-{secrets.token_hex(4).upper()}"
-
-
-def new_uuid() -> str:
-    return f"{secrets.token_hex(4)}-0000-4000-8000-{secrets.token_hex(6)}".upper()
-
-
-def cfdi(uuid: str | None = None, source: str = CFDI, **attributes) -> bytes:
-    """CFDI demo con un UUID nuevo y atributos del Receptor o del Comprobante cambiados."""
-    xml = re.sub(r'UUID="[^"]*"', f'UUID="{uuid or new_uuid()}"', source)
-    for name, value in attributes.items():
-        xml = re.sub(rf'(<cfdi:(?:Receptor|Comprobante)[^>]*\b{name}=")[^"]*"', rf'\g<1>{value}"', xml)
-    return xml.encode()
-
-
-def own_contract_id(email: str = PROVIDER) -> int:
-    supplier = supplier_by_email(email)
-    with SessionLocal() as db:
-        return db.scalar(select(Contract.id).where(Contract.supplier_id == supplier.id).order_by(Contract.id))
-
-
-def token(client) -> str:
-    # Toda pagina autenticada lleva el token en el formulario de cierre de sesion.
-    return csrf(client, "/invoices")
-
-
-def create(client, number: str | None = None, **overrides):
-    number = number or unique()
-    data = {
-        "contract_id": own_contract_id(),
-        "invoice_number": number,
-        "service_period": "08/2026",
-        "project_name": PROJECT,
-        "csrf_token": token(client),
-        **overrides,
-    }
-    return client.post("/invoices/new", data=data, follow_redirects=False), number
-
-
-def create_invoice(client) -> Invoice:
-    response, number = create(client)
-    assert response.status_code == 303, response.text
-    return invoice_by_number(number)
-
-
-def upload(client, invoice: Invoice, document_type: str, filename: str, content: bytes):
-    return client.post(
-        f"/invoices/{invoice.id}/documents",
-        data={"document_type": document_type, "csrf_token": token(client)},
-        files={"upload": (filename, content, "application/octet-stream")},
-        follow_redirects=False,
-    )
-
-
-def load(client, invoice: Invoice, xml: bytes, vobo: bool = True) -> Invoice:
-    documents = [("INVOICE_XML", "cfdi.xml", xml), ("INVOICE_PDF", "factura.pdf", PDF)]
-    documents.append(("PURCHASE_ORDER", "orden.txt", SUPPORT))
-    if vobo:
-        documents.append(("APPROVAL", "vobo.txt", SUPPORT))
-    for document_type, filename, content in documents:
-        assert upload(client, invoice, document_type, filename, content).status_code == 303
-    return reload(invoice)
-
-
-def uploaded_invoice(client, xml: bytes | None = None) -> Invoice:
-    return load(client, create_invoice(client), xml or cfdi())
-
-
-def submit(client, invoice: Invoice):
-    return client.post(f"/invoices/{invoice.id}/submit", data={"csrf_token": token(client)}, follow_redirects=False)
-
-
-def verify(client, invoice: Invoice):
-    return client.post(f"/invoices/{invoice.id}/validation", data={"csrf_token": token(client)}, follow_redirects=False)
-
-
-def reload(invoice: Invoice) -> Invoice:
-    with SessionLocal() as db:
-        return db.get(Invoice, invoice.id)
-
-
-def results(invoice: Invoice) -> dict[str, ValidationResult]:
-    with SessionLocal() as db:
-        rows = db.scalars(select(ValidationResult).where(ValidationResult.invoice_id == invoice.id))
-        return {row.rule_code: row for row in rows}
 
 
 def audits(invoice: Invoice, action: str) -> list[AuditLog]:
@@ -143,16 +68,17 @@ def provider(client):
 # --- Registro: "Borrador" y "Cargada" -------------------------------------------------------------------------------
 
 
-def test_alta_en_borrador_lleva_a_la_carga_documental(provider):
-    response, number = create(provider)
-    invoice = invoice_by_number(number)
+def test_alta_en_borrador_lleva_a_la_revision(provider, purchase_orders):
+    data = moral_cfdi(purchase_orders().convenio)
+    response, invoice = register_cfdi(provider, data)
     assert response.status_code == 303
-    assert response.headers["location"] == f"/invoices/{invoice.id}/documents"
+    assert response.headers["location"] == f"/invoices/{invoice.id}/data"
     assert invoice.status == "DRAFT"
+    assert invoice.contract_id is None and invoice.project_name is None and invoice.project_leader is None
 
 
-def test_borrador_pasa_a_cargada_al_completar_los_obligatorios(provider):
-    invoice = load(provider, create_invoice(provider), cfdi(), vobo=False)
+def test_borrador_pasa_a_cargada_al_completar_los_obligatorios(provider, purchase_orders):
+    invoice, _ = ready_invoice(provider, purchase_orders, vobo=False)
     assert invoice.status == "DRAFT"
     page = provider.get(f"/invoices/{invoice.id}/documents").text
     assert "Falta 1 archivo obligatorio" in page
@@ -164,9 +90,10 @@ def test_borrador_pasa_a_cargada_al_completar_los_obligatorios(provider):
     assert "Factura cargada. Ya puede enviarla a validación" in provider.get(f"/invoices/{invoice.id}/documents").text
 
 
-def test_reemplazo_en_cargada(provider):
-    invoice = uploaded_invoice(provider)
-    assert upload(provider, invoice, "INVOICE_XML", "cfdi2.xml", cfdi()).status_code == 303
+def test_reemplazo_en_cargada(provider, purchase_orders):
+    invoice, order = ready_invoice(provider, purchase_orders)
+    data = moral_cfdi(order.convenio, uuid=invoice.uuid, folio=invoice.invoice_number.split("-")[1])
+    assert upload(provider, invoice, "INVOICE_XML", "cfdi2.xml", xml_of(data)).status_code == 303
     assert reload(invoice).status == "UPLOADED"
 
 
@@ -178,8 +105,8 @@ def test_etiquetas_del_filtro_de_estatus(provider):
 # --- Envio ------------------------------------------------------------------------------------------------------------
 
 
-def test_envio_exitoso_con_advertencias(provider):
-    invoice = uploaded_invoice(provider)
+def test_envio_exitoso_con_advertencias(provider, purchase_orders):
+    invoice, order = ready_invoice(provider, purchase_orders)
     # Recibida despues del dia 20: DAT-001 es WARNING y no impide el envio.
     received_on(invoice, 25)
     response = submit(provider, invoice)
@@ -187,6 +114,7 @@ def test_envio_exitoso_con_advertencias(provider):
     assert response.headers["location"] == f"/invoices/{invoice.id}?notice=submitted"
     sent = reload(invoice)
     assert sent.status == "UNDER_REVIEW" and sent.submitted_at is not None
+    assert sent.purchase_order_id == order.id
     stored = results(invoice)
     assert stored["DAT-001"].status == "WARNING"
     assert not [code for code, r in stored.items() if r.status == "FAIL"]
@@ -194,30 +122,40 @@ def test_envio_exitoso_con_advertencias(provider):
     page = provider.get(response.headers["location"]).text
     assert "Factura enviada a validación" in page and "Enviada" in page
     # Ya no admite cambios de documentos.
-    assert upload(provider, invoice, "INVOICE_PDF", "otra.pdf", PDF).status_code == 409
+    assert upload(provider, invoice, "INVOICE_PDF", "otra.pdf", PLAIN_PDF).status_code == 409
 
 
 @pytest.mark.parametrize(
-    ("attributes", "code", "expected", "detected"),
+    ("receiver", "code", "expected", "detected"),
     [
-        ({"DomicilioFiscalReceptor": "06600"}, "XML-010", "03930", "06600"),
-        ({"Rfc": "XAXX010101000"}, "XML-002", "ULT940623AG0", "XAXX010101000"),
+        ({"postal_code": "06600"}, "XML-010", "11700", "06600"),
+        ({"rfc": "XAXX010101000"}, "XML-002", "IME010718PU3", "XAXX010101000"),
     ],
 )
-def test_envio_que_no_procede(provider, attributes, code, expected, detected):
-    invoice = uploaded_invoice(provider, cfdi(**attributes))
+def test_envio_que_no_procede(provider, purchase_orders, receiver, code, expected, detected):
+    invoice, _ = ready_invoice(provider, purchase_orders, receiver=receiver)
     response = submit(provider, invoice)
     assert response.status_code == 409
     assert "El envío no procedió" in response.text and "Reglas que impiden el envío" in response.text
     assert code in response.text and expected in response.text and detected in response.text
-    assert reload(invoice).status == "UPLOADED"
+    stored = reload(invoice)
+    assert stored.status == "UPLOADED" and stored.purchase_order_id is None
     assert results(invoice)[code].status == "FAIL"
     assert not audits(invoice, "INVOICE_SUBMITTED")
 
 
+def test_diferencia_contra_la_orden_de_compra(provider, purchase_orders):
+    invoice, order = ready_invoice(provider, purchase_orders, concept={"unit_value": "100500.00"})
+    response = submit(provider, invoice)
+    assert response.status_code == 409
+    rule = results(invoice)["OC-005"]
+    assert (rule.status, rule.expected_value, rule.detected_value) == ("FAIL", "100000.00", "100500.00")
+    assert reload(invoice).purchase_order_id is None
+
+
 @pytest.mark.usefixtures("restore_validation_rules")
-def test_el_envio_usa_las_reglas_vigentes(provider):
-    invoice = uploaded_invoice(provider)
+def test_el_envio_usa_las_reglas_vigentes(provider, purchase_orders):
+    invoice, _ = ready_invoice(provider, purchase_orders)
     assert verify(provider, invoice).status_code == 303
     assert results(invoice)["XML-004"].status == "PASS"
     with SessionLocal() as db:
@@ -229,8 +167,8 @@ def test_el_envio_usa_las_reglas_vigentes(provider):
     assert reload(invoice).status == "UPLOADED"
 
 
-def test_envio_desde_borrador(provider):
-    invoice = load(provider, create_invoice(provider), cfdi(), vobo=False)
+def test_envio_desde_borrador(provider, purchase_orders):
+    invoice, _ = ready_invoice(provider, purchase_orders, vobo=False)
     response = submit(provider, invoice)
     assert response.status_code == 409
     assert "Faltan archivos obligatorios: Vo.Bo. del líder de proyecto. Cárguelos antes de enviar" in response.text
@@ -256,43 +194,43 @@ def pmo_decides(client, invoice: Invoice, decision: str) -> None:
     login(client, PROVIDER)
 
 
-def test_observaciones_se_corrigen_y_se_reenvian(provider):
-    invoice = uploaded_invoice(provider)
+def test_observaciones_se_corrigen_y_se_reenvian(provider, purchase_orders):
+    invoice, order = ready_invoice(provider, purchase_orders)
     assert submit(provider, invoice).status_code == 303
     pmo_decides(provider, invoice, "REQUIRES_CORRECTION")
     assert reload(invoice).status == "REQUIRES_CORRECTION"
     assert "Observaciones" in provider.get(f"/invoices/{invoice.id}").text
-    # La carga no recalcula "Observaciones".
-    assert upload(provider, invoice, "INVOICE_PDF", "corregida.pdf", PDF).status_code == 303
+    # La carga no recalcula "Observaciones"; un PDF sin datos del CFDI no cambia los del XML.
+    assert upload(provider, invoice, "INVOICE_PDF", "corregida.pdf", PLAIN_PDF).status_code == 303
     assert reload(invoice).status == "REQUIRES_CORRECTION"
+    # El reenvio no choca con su propia liga a la orden de compra (OC-012).
     assert submit(provider, invoice).status_code == 303
-    assert reload(invoice).status == "UNDER_REVIEW"
+    sent = reload(invoice)
+    assert sent.status == "UNDER_REVIEW" and sent.purchase_order_id == order.id
     assert len(audits(invoice, "INVOICE_SUBMITTED")) == 2
 
 
 # --- Duplicados (RN-HU13-01) ------------------------------------------------------------------------------------------
 
 
-def test_uuid_de_otro_proveedor_no_revela_sus_datos(provider):
+def test_uuid_de_otro_proveedor_no_revela_sus_datos(provider, purchase_orders):
     taken = new_uuid()
     other = supplier_by_email(OTHER_PROVIDER)
-    number = unique("AJENA")
+    number = f"AJENA-{secrets.token_hex(4).upper()}"
     with SessionLocal() as db:
         foreign = Invoice(
             internal_folio=f"FAC-AJENA-{secrets.token_hex(3)}",
             supplier_id=other.id,
             uploaded_by=db.scalar(select(User.id).where(User.email == OTHER_PROVIDER)),
-            contract_id=own_contract_id(OTHER_PROVIDER),
             invoice_number=number,
             uuid=taken,
             service_period="08/2026",
-            project_name="Servicios de Analitica 2026",
             status="UNDER_REVIEW",
         )
         db.add(foreign)
         db.commit()
         folio = foreign.internal_folio
-    invoice = uploaded_invoice(provider, cfdi(taken))
+    invoice, _ = ready_invoice(provider, purchase_orders, uuid=taken)
     response = submit(provider, invoice)
     assert response.status_code == 409
     assert results(invoice)["FIN-004"].status == "FAIL"
@@ -301,10 +239,10 @@ def test_uuid_de_otro_proveedor_no_revela_sus_datos(provider):
         assert secret not in response.text
 
 
-def test_uuid_de_una_factura_rechazada(provider):
+def test_uuid_de_una_factura_rechazada(provider, purchase_orders):
     rejected = invoice_by_number("C-RFC-ERROR")
     assert rejected.status == "REJECTED" and rejected.uuid
-    invoice = uploaded_invoice(provider, cfdi(rejected.uuid))
+    invoice, _ = ready_invoice(provider, purchase_orders, uuid=rejected.uuid)
     assert submit(provider, invoice).status_code == 409
     rule = results(invoice)["FIN-004"]
     assert (rule.status, rule.severity) == ("FAIL", "CRITICAL")
@@ -319,15 +257,16 @@ def test_internos_sin_alta_carga_verificacion_ni_envio(client, email):
     login(client, email)
     csrf_token = token(client)
     assert client.get("/invoices/new").status_code == 403
-    data = {"contract_id": invoice.contract_id, "invoice_number": unique("INT"), "service_period": "08/2026"}
-    response = client.post("/invoices/new", data={**data, "project_name": PROJECT, "csrf_token": csrf_token})
+    data = moral_cfdi()
+    response = register(client, PLAIN_PDF, xml_of(data))
     assert response.status_code == 403
-    assert invoice_by_number(data["invoice_number"]) is None
+    assert invoice_by_number(number_of(data)) is None
     assert client.get(f"/invoices/{invoice.id}/documents").status_code == 403
+    assert client.get(f"/invoices/{invoice.id}/data").status_code == 403
     response = client.post(
         f"/invoices/{invoice.id}/documents",
         data={"document_type": "INVOICE_PDF", "csrf_token": csrf_token},
-        files={"upload": ("f.pdf", PDF, "application/pdf")},
+        files={"upload": ("f.pdf", PLAIN_PDF, "application/pdf")},
     )
     assert response.status_code == 403
     for action in ("validation", "submit"):
@@ -340,7 +279,7 @@ def test_detalle_del_pmo_sin_acciones_del_proveedor(client):
     login(client, "pmo@poc.local")
     page = client.get(f"/invoices/{invoice_by_number('A-CORRECTA').id}")
     assert page.status_code == 200
-    for action in ("Verificar", "Gestionar documentos", "Enviar a validación", "Nueva factura"):
+    for action in ("Verificar", "Gestionar documentos", "Enviar a validación", "Nueva factura", "Revisión"):
         assert action not in page.text
 
 
@@ -351,63 +290,23 @@ def test_envio_de_la_factura_de_otro_proveedor(client):
     assert reload(invoice).status == "UPLOADED"
 
 
-# --- Contratos del proveedor (DT-05) ----------------------------------------------------------------------------------
+# --- El proveedor de la factura es el del usuario (DT-05) ------------------------------------------------------------
 
 
-def test_formulario_sin_contratos_de_otros_proveedores(provider):
-    foreign = own_contract_id(OTHER_PROVIDER)
+def test_formulario_sin_contratos_ni_proveedor(provider):
     page = provider.get("/invoices/new").text
-    assert "Servicios de Analitica 2026" not in page
-    assert f'<option value="{foreign}"' not in page
-    assert "75,000.00" not in page
-    assert f'<option value="{own_contract_id()}"' in page
-    assert 'name="supplier_id"' not in page
+    assert 'name="pdf"' in page and 'name="xml"' in page
+    for field in ("contract_id", "supplier_id", "service_period", "project_name", "project_leader", "invoice_number"):
+        assert f'name="{field}"' not in page
 
 
-def test_supplier_id_manipulado_se_ignora(provider):
+def test_supplier_id_manipulado_se_ignora(provider, purchase_orders):
     other = supplier_by_email(OTHER_PROVIDER)
-    response, number = create(provider, supplier_id=other.id)
+    data = moral_cfdi(purchase_orders().convenio)
+    response = register(provider, PLAIN_PDF, xml_of(data), supplier_id=str(other.id), contract_id="1")
     assert response.status_code == 303
-    assert invoice_by_number(number).supplier_id == supplier_by_email(PROVIDER).id
-
-
-def test_contrato_de_otro_proveedor(provider):
-    response, number = create(provider, contract_id=own_contract_id(OTHER_PROVIDER))
-    assert response.status_code == 400
-    assert "Contrato no corresponde al proveedor" in response.text
-    assert invoice_by_number(number) is None
-
-
-@pytest.fixture()
-def inactive_contract():
-    supplier = supplier_by_email(PROVIDER)
-    with SessionLocal() as db:
-        contract = Contract(
-            supplier_id=supplier.id,
-            project_name="Proyecto concluido",
-            project_leader="Lider",
-            authorized_technology="N/A",
-            authorized_amount=Decimal("1000.00"),
-            currency="MXN",
-            start_date=date(2025, 1, 1),
-            end_date=date(2025, 12, 31),
-            status="INACTIVE",
-        )
-        db.add(contract)
-        db.commit()
-        contract_id = contract.id
-    yield contract_id
-    with SessionLocal() as db:
-        db.execute(delete(Contract).where(Contract.id == contract_id))
-        db.commit()
-
-
-def test_contrato_inactivo(provider, inactive_contract):
-    assert "Proyecto concluido" not in provider.get("/invoices/new").text
-    response, number = create(provider, contract_id=inactive_contract)
-    assert response.status_code == 400
-    assert "El contrato no está activo" in response.text
-    assert invoice_by_number(number) is None
+    invoice = invoice_by_number(number_of(data))
+    assert invoice.supplier_id == supplier_by_email(PROVIDER).id and invoice.contract_id is None
 
 
 @pytest.fixture()
@@ -428,25 +327,25 @@ def test_proveedor_inactivo_no_registra(client):
     page = client.get("/invoices/new")
     assert page.status_code == 409
     assert "Su proveedor no está autorizado para registrar facturas" in page.text
-    number = unique("INACTIVO")
-    data = {"contract_id": own_contract_id(OTHER_PROVIDER), "invoice_number": number, "service_period": "08/2026"}
-    response = client.post("/invoices/new", data={**data, "project_name": PROJECT, "csrf_token": token(client)})
+    data = moral_cfdi()
+    response = register(client, PLAIN_PDF, xml_of(data))
     assert response.status_code == 409
-    assert invoice_by_number(number) is None
+    assert invoice_by_number(number_of(data)) is None
 
 
 # --- Verificar --------------------------------------------------------------------------------------------------------
 
 
-def test_verificar_no_cambia_el_estatus(provider):
-    invoice = uploaded_invoice(provider, cfdi(source=EXCEEDED))
+def test_verificar_no_cambia_el_estatus(provider, purchase_orders):
+    invoice, _ = ready_invoice(provider, purchase_orders, concept={"unit_value": "118000.00"})
     response = verify(provider, invoice)
     assert response.status_code == 303
-    assert reload(invoice).status == "UPLOADED"
-    assert results(invoice)["FIN-001"].status == "FAIL"
+    stored = reload(invoice)
+    assert stored.status == "UPLOADED" and stored.purchase_order_id is None
+    assert results(invoice)["OC-005"].status == "FAIL"
     page = provider.get(f"/invoices/{invoice.id}").text
     blocking = page.split('id="blocking"')[1].split("</section>")[0]
-    assert "FIN-001" in blocking
+    assert "OC-005" in blocking
 
 
 def test_verificar_una_factura_enviada(provider):
@@ -459,24 +358,36 @@ def test_verificar_una_factura_enviada(provider):
 # --- Archivos obligatorios en la transicion a "Enviada" (ajustes-finales-configuracion) ---------------------------
 
 
-def test_envio_por_peticion_directa_con_varios_faltantes(provider):
-    invoice = create_invoice(provider)
-    assert upload(provider, invoice, "INVOICE_XML", "cfdi.xml", cfdi()).status_code == 303
+@pytest.fixture()
+def additional_required():
+    from app.models import InvoiceDocumentType
+
+    additional = InvoiceDocumentType.code == "ADDITIONAL"
+    with SessionLocal() as db:
+        db.execute(update(InvoiceDocumentType).where(additional).values(national_requirement="REQUIRED"))
+        db.commit()
+    yield
+    with SessionLocal() as db:
+        db.execute(update(InvoiceDocumentType).where(additional).values(national_requirement="OPTIONAL"))
+        db.commit()
+
+
+def test_envio_por_peticion_directa_con_varios_faltantes(provider, purchase_orders, additional_required):
+    invoice, _ = ready_invoice(provider, purchase_orders, vobo=False)
     response = submit(provider, invoice)
     assert response.status_code == 409
     assert (
-        "Faltan archivos obligatorios: PDF del CFDI, Orden de compra, Vo.Bo. del líder de proyecto. "
-        "Cárguelos antes de enviar"
+        "Faltan archivos obligatorios: Vo.Bo. del líder de proyecto, Documentación adicional. Cárguelos antes de enviar"
     ) in response.text
 
 
-def test_transicion_directa_sin_archivos_obligatorios(provider):
+def test_transicion_directa_sin_archivos_obligatorios(provider, purchase_orders):
     """La regla vive en el servicio de transicion: ni una llamada directa envia sin los obligatorios (409)."""
     from app.core.constants import InvoiceStatus
     from app.core.errors import BusinessRuleError
     from app.services.invoice_service import transition_invoice
 
-    invoice = load(provider, create_invoice(provider), cfdi(), vobo=False)
+    invoice, _ = ready_invoice(provider, purchase_orders, vobo=False)
     with SessionLocal() as db:
         db.execute(update(Invoice).where(Invoice.id == invoice.id).values(status="REQUIRES_CORRECTION"))
         db.commit()
@@ -505,17 +416,17 @@ def approval_deleted():
         db.commit()
 
 
-def test_tipo_eliminado_deja_de_exigirse_al_enviar(provider, approval_deleted):
-    invoice = load(provider, create_invoice(provider), cfdi(), vobo=False)
+def test_tipo_eliminado_deja_de_exigirse_al_enviar(provider, purchase_orders, approval_deleted):
+    invoice, _ = ready_invoice(provider, purchase_orders, vobo=False)
     assert reload(invoice).status == "UPLOADED"
     assert submit(provider, invoice).status_code == 303
     assert reload(invoice).status == "UNDER_REVIEW"
 
 
-def test_requisito_nuevo_no_afecta_a_una_factura_enviada(provider):
+def test_requisito_nuevo_no_afecta_a_una_factura_enviada(provider, purchase_orders):
     from app.models import InvoiceDocumentType
 
-    invoice = uploaded_invoice(provider)
+    invoice, _ = ready_invoice(provider, purchase_orders)
     assert submit(provider, invoice).status_code == 303
     contract = InvoiceDocumentType.code == "CONTRACT"
     with SessionLocal() as db:
@@ -527,5 +438,5 @@ def test_requisito_nuevo_no_afecta_a_una_factura_enviada(provider):
         assert reload(invoice).status == "ACCEPTED"
     finally:
         with SessionLocal() as db:
-            db.execute(update(InvoiceDocumentType).where(contract).values(national_requirement="OPTIONAL"))
+            db.execute(update(InvoiceDocumentType).where(contract).values(national_requirement="NOT_APPLICABLE"))
             db.commit()

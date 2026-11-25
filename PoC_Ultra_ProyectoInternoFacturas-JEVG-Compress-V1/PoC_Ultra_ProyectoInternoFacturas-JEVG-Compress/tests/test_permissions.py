@@ -27,7 +27,8 @@ def test_pmo_y_proveedor_no_acceden_a_requisitos_de_alta(client):
         assert client.get("/admin/supplier-requirements").status_code == 403
 
 
-def test_pmo_y_proveedor_no_acceden_a_requisitos_del_contrato(client):
-    for email in ("proveedor1@poc.local", "pmo@poc.local"):
+def test_requisitos_del_contrato_retirados(client):
+    """La pantalla de requisitos del contrato se retiro con HU-24: no existe para ningun rol."""
+    for email in ("proveedor1@poc.local", "pmo@poc.local", "admin@poc.local"):
         login(client, email)
-        assert client.get("/admin/contract-requirements").status_code == 403
+        assert client.get("/admin/contract-requirements").status_code == 404

@@ -2,10 +2,6 @@ document.querySelectorAll('input[type=file]').forEach(input => input.addEventLis
   const label = input.closest('label')?.querySelector('.file-name');
   if (label) label.textContent = input.files[0]?.name || 'Ningun archivo seleccionado';
 }));
-// Alta de factura: el servidor solo envia los contratos del proveedor del usuario; se copian proyecto y lider.
-const contract = document.querySelector('#contract');
-function syncProject() { const o = contract?.selectedOptions[0]; if (o) { document.querySelector('#project').value = o.dataset.project || ''; document.querySelector('#leader').value = o.dataset.leader || ''; } }
-contract?.addEventListener('change', syncProject); syncProject();
 
 // Doble envio: varios POST responden despues de mandar su correo (la cancelacion tarda segundos) y un segundo clic en
 // ese lapso repetiria la operacion, que el servidor ya encuentra hecha (409). Tras el primer envio el formulario ignora
