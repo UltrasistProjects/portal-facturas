@@ -355,13 +355,13 @@ def test_edicion_guarda_y_audita_solo_los_cambios(client, registered_suppliers):
     assert changes[-1].new_value == {"contact_phone": "55 0000 1111"}
 
 
-def test_edicion_no_cambia_la_identidad_fiscal_ni_el_correo(client, registered_suppliers):
+def test_edicion_no_cambia_origen_tipo_ni_correo(client, registered_suppliers):
+    """El RFC si se edita (rama ferromex): lo cubre test_ajustes_ferromex."""
     (supplier,) = registered_suppliers()
     login(client)
     form = {
         "business_name": supplier.business_name,
         **SUPPLIER_PROFILE_FORM,
-        "rfc": "XAXX010101000",
         "email": "otro@proveedor.mx",
         "supplier_type": "PERSONA_FISICA",
         "origin": "INTERNATIONAL",

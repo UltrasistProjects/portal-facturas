@@ -62,8 +62,13 @@ async def _submitted(request: Request, names: tuple[str, ...]) -> dict[str, str]
 def _profile_values(supplier: Supplier) -> dict[str, str]:
     """Valores actuales del proveedor para el formulario de edicion, como llegarian del formulario: una casilla
     marcada es "true" y una sin marcar, vacia."""
-    values = {name: getattr(supplier, name) for name in PROFILE_FIELDS}
+    values = {name: getattr(supplier, name) for name in _editable_fields(supplier)}
     return {name: _form_value(value) for name, value in values.items()}
+
+
+def _editable_fields(supplier: Supplier) -> tuple[str, ...]:
+    """Campos del formulario de edicion: el RFC solo en el proveedor nacional (rama ferromex)."""
+    return (*PROFILE_FIELDS, "rfc") if supplier.rfc else PROFILE_FIELDS
 
 
 def _form_value(value) -> str:
@@ -290,9 +295,13 @@ async def update_supplier(
     supplier = db.get(Supplier, supplier_id)
     if not supplier:
         raise HTTPException(404, "Proveedor no encontrado")
-    submitted = await _submitted(request, PROFILE_FIELDS)
+    submitted = await _submitted(request, _editable_fields(supplier))
+    values = dict(submitted)
+    # El RFC sin cambios no se vuelve a validar: uno anterior a estas reglas no impide editar lo demas.
+    if values.get("rfc", "").upper() == (supplier.rfc or ""):
+        values.pop("rfc", None)
     try:
-        data = SupplierUpdate(**submitted, supplier_type=supplier.supplier_type)
+        data = SupplierUpdate(**values, supplier_type=supplier.supplier_type)
         supplier_service.update_supplier(db, supplier, data, user.id)
     except ValidationError as exc:
         return await run_in_threadpool(

@@ -26,6 +26,7 @@ from app.core.constants import (
     SupplierType,
 )
 from app.core.countries import COUNTRIES
+from app.core.rfc import rfc_error
 from app.core.timeutils import to_business
 from app.core.types import to_money
 
@@ -204,8 +205,22 @@ class SupplierProfile(BaseModel):
 
 
 class SupplierUpdate(SupplierProfile):
-    """Edicion del Administrador. La identidad fiscal (origen, RFC, identificador extranjero, pais y tipo de persona)
-    y el correo, que es el usuario del portal (HU-03), no se editan."""
+    """Edicion del Administrador. Del proveedor nacional se edita tambien el RFC (rama ferromex), con las reglas de la
+    carga masiva y la longitud de su tipo de persona; sin RFC se conserva el actual. El origen, el identificador
+    extranjero, el pais, el tipo de persona y el correo, que es el usuario del portal (HU-03), no se editan."""
+
+    rfc: str | None = None
+
+    @field_validator("rfc")
+    @classmethod
+    def valid_rfc(cls, value: str | None, info: ValidationInfo) -> str | None:
+        if value is None:
+            return None
+        value = value.strip().upper()
+        problem = rfc_error(value, info.data.get("supplier_type"))
+        if problem:
+            raise ValueError(problem)
+        return value
 
 
 class SupplierCreate(SupplierProfile):

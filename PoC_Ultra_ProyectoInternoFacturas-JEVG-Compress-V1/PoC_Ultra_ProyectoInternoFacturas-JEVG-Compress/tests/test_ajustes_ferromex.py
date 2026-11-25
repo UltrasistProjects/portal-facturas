@@ -2,7 +2,10 @@
 proveedor en su expediente, reporte resumen en PDF y la plantilla del pago programado (migracion 0024). El flujo de
 "Programar pago" lo cubre test_pago_facturas."""
 
+import html
 import re
+import secrets
+import string
 from decimal import Decimal
 from uuid import uuid4
 
@@ -16,7 +19,7 @@ from app.core.database import SessionLocal
 from app.models import AuditLog, Invoice, PurchaseOrder, Supplier, User
 from scripts import pgtools
 from tests.cfdi import EXAMPLE_RFC, MORAL_EMAIL, MORAL_RFC, PHYSICAL_EMAIL, item, new_convenio
-from tests.conftest import alembic_config, csrf, login, supplier_by_email
+from tests.conftest import SUPPLIER_PROFILE_FORM, alembic_config, csrf, login, supplier_by_email
 from tests.test_factura_internacional import INTERNATIONAL
 from tests.test_migraciones import execute, query
 
@@ -457,3 +460,89 @@ def test_migracion_conserva_la_plantilla_personalizada(empty_db):
     )
     command.upgrade(config, PAYMENT)
     assert query(empty_db, SUBJECT) == [("Pago {{numero_factura}}",)]
+
+
+# --- RFC editable del proveedor -----------------------------------------------------------------------------------
+
+
+def new_rfc(length: int = 12) -> str:
+    """RFC con formato valido y letras al azar (unico en la prueba): moral de 12, fisica de 13."""
+    letters = "".join(secrets.choice(string.ascii_uppercase) for _ in range(length - 9))
+    return f"{letters}260101{secrets.choice(string.ascii_uppercase)}{secrets.randbelow(90) + 10}"
+
+
+def edit_profile(client, supplier, **changes):
+    form = {"business_name": supplier.business_name, **SUPPLIER_PROFILE_FORM, **changes}
+    data = {**form, "csrf_token": csrf(client, "/")}
+    return client.post(f"/suppliers/{supplier.id}/profile", data=data, follow_redirects=False)
+
+
+def stored_supplier(supplier_id: int) -> Supplier:
+    with SessionLocal() as db:
+        return db.get(Supplier, supplier_id)
+
+
+def test_edicion_del_rfc_con_sus_ordenes_de_compra(client, registered_suppliers, purchase_orders):
+    old = new_rfc()
+    (supplier,) = registered_suppliers(rfc=old)
+    order = purchase_orders(rfc=old, supplier_name=supplier.business_name, supplier_id=supplier.id)
+    login(client, ADMIN)
+    form = client.get(f"/suppliers/{supplier.id}").text
+    assert f'name="rfc" value="{old}"' in form and 'minlength="12" maxlength="12"' in form
+    assert "El origen, el tipo de persona y el correo no se editan." in form
+    rfc = new_rfc()
+    assert edit_profile(client, supplier, rfc=f" {rfc.lower()} ").status_code == 303
+    assert stored_supplier(supplier.id).rfc == rfc
+    assert order_by_convenio(order.convenio).rfc == rfc
+    with SessionLocal() as db:
+        stmt = select(AuditLog).where(AuditLog.action == "SUPPLIER_UPDATED", AuditLog.entity_id == str(supplier.id))
+        [entry] = db.scalars(stmt)
+    assert entry.old_value["rfc"] == old and entry.new_value["rfc"] == rfc
+    assert entry.new_value["purchase_orders"] == 1
+    assert f'<dt>RFC</dt><dd class="mono">{rfc}</dd>' in client.get(f"/suppliers/{supplier.id}").text
+
+
+@pytest.mark.parametrize(
+    ("rfc", "message"),
+    [
+        ("ABC12", "RFC: tiene un formato inválido"),
+        ("ABC261301AB1", "RFC: tiene un formato inválido"),  # mes 13
+        ("XAXX010101000", "RFC: no se permite un RFC genérico"),
+        ("ABCD260101AB1", "RFC: una persona moral debe tener un RFC de 12 caracteres"),
+    ],
+    ids=["formato", "fecha", "generico", "longitud"],
+)
+def test_rfc_invalido_conserva_lo_capturado(client, registered_suppliers, rfc, message):
+    old = new_rfc()
+    (supplier,) = registered_suppliers(rfc=old)
+    login(client, ADMIN)
+    response = edit_profile(client, supplier, rfc=rfc, contact_name="Contacto Capturado")
+    assert response.status_code == 400
+    page = html.unescape(response.text)
+    assert message in page and f'value="{rfc}"' in page and 'value="Contacto Capturado"' in page
+    assert stored_supplier(supplier.id).rfc == old
+
+
+def test_rfc_de_otro_proveedor(client, registered_suppliers):
+    (supplier,) = registered_suppliers(rfc=new_rfc())
+    login(client, ADMIN)
+    response = edit_profile(client, supplier, rfc=MORAL_RFC)
+    assert response.status_code == 409 and "Ya existe un proveedor con ese RFC." in html.unescape(response.text)
+    assert stored_supplier(supplier.id).rfc == supplier.rfc
+
+
+def test_rfc_sin_cambios_no_se_valida(client, registered_suppliers):
+    """Un RFC previo a estas reglas (el de la fabrica no tiene fecha valida) no impide editar lo demas."""
+    (supplier,) = registered_suppliers()
+    login(client, ADMIN)
+    assert edit_profile(client, supplier, rfc=supplier.rfc, business_name="Nombre Nuevo SA de CV").status_code == 303
+    saved = stored_supplier(supplier.id)
+    assert (saved.rfc, saved.business_name) == (supplier.rfc, "Nombre Nuevo SA de CV")
+
+
+def test_proveedor_internacional_sin_rfc_editable(client):
+    foreign = supplier_by_email(INTERNATIONAL)
+    login(client, ADMIN)
+    page = client.get(f"/suppliers/{foreign.id}").text
+    assert 'name="rfc"' not in page
+    assert "El identificador fiscal, el país, el origen, el tipo de persona y el correo no se editan." in page

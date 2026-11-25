@@ -28,6 +28,8 @@ from sqlalchemy.orm import Session
 
 from app.core.constants import FOREIGN_TAX_ID_FORMAT, PHONE_FORMAT, SupplierOrigin, SupplierStatus, SupplierType
 from app.core.countries import COUNTRIES
+from app.core.rfc import GENERIC_RFCS, RFC_LENGTH, RFC_PATTERN
+from app.core.rfc import valid_rfc_date as _valid_rfc_date
 from app.models import Supplier, User
 from app.services.audit_service import audit
 from app.services.supplier_template import HEADERS, MAX_FILE_MB, MAX_ROWS, SHEET_NAME
@@ -58,9 +60,6 @@ PERSON_TYPES = {
     "moral": SupplierType.PERSONA_MORAL,
 }
 AGREEMENT = {"si": True, "no": False, "": False}
-RFC_PATTERN = re.compile(r"^[A-ZÑ&]{3,4}[0-9]{6}[A-Z0-9]{3}$")
-GENERIC_RFCS = {"XAXX010101000", "XEXX010101000"}
-RFC_LENGTH = {SupplierType.PERSONA_MORAL: (12, "moral"), SupplierType.PERSONA_FISICA: (13, "física")}
 TAX_ID_PATTERN = re.compile(FOREIGN_TAX_ID_FORMAT)
 PHONE_PATTERN = re.compile(PHONE_FORMAT)
 SPACES = re.compile(r"\s+")
@@ -339,17 +338,6 @@ def _national_identity(row: Row, rfc, tax_id, country, person_type) -> None:
         row.error("Identificador fiscal extranjero", "debe quedar vacío para proveedores nacionales")
     if country and country != "MX":
         row.error("País", "debe quedar vacío o ser MX para proveedores nacionales")
-
-
-def _valid_rfc_date(digits: str) -> bool:
-    year, month, day = int(digits[:2]), int(digits[2:4]), int(digits[4:])
-    for century in (1900, 2000):
-        try:
-            date(century + year, month, day)
-            return True
-        except ValueError:
-            continue
-    return False
 
 
 def _international_identity(row: Row, rfc, tax_id, country) -> None:

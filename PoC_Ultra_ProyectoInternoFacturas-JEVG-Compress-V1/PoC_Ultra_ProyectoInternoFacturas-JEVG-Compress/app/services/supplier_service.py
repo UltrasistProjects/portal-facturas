@@ -5,12 +5,12 @@ Estas funciones no confirman la transaccion: lo hace el router.
 
 from datetime import date
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 from app.core.constants import CatalogType, SupplierStatus
 from app.core.errors import BusinessRuleError, InvalidInputError
-from app.models import CatalogEntry, Supplier, User
+from app.models import CatalogEntry, PurchaseOrder, Supplier, User
 from app.schemas import SupplierCreate, SupplierProfile, SupplierUpdate
 from app.services.audit_service import audit
 from app.services.catalog_service import active_entries
@@ -104,9 +104,23 @@ def create_supplier(db: Session, data: SupplierCreate, user_id: int) -> Supplier
 
 
 def update_supplier(db: Session, supplier: Supplier, data: SupplierUpdate, user_id: int) -> bool:
-    """Guarda los datos editados y audita solo los campos que cambian. True si hubo cambios."""
+    """Guarda los datos editados y audita solo los campos que cambian. True si hubo cambios.
+
+    Un RFC nuevo (proveedor nacional) no puede ser de otro proveedor; sus ordenes de compra, que se ligan por RFC,
+    pasan al RFC nuevo y la auditoria registra cuantas."""
     _check_activity(db, data, supplier.main_activity)
     old, new = {}, {}
+    if data.rfc and supplier.rfc and data.rfc != supplier.rfc:
+        if db.scalar(select(Supplier.id).where(Supplier.rfc == data.rfc, Supplier.id != supplier.id)):
+            raise BusinessRuleError(MSG_RFC_IN_USE)
+        orders = db.execute(
+            update(PurchaseOrder).where(PurchaseOrder.rfc == supplier.rfc).values(rfc=data.rfc),
+            execution_options={"synchronize_session": False},
+        ).rowcount
+        old["rfc"], new["rfc"] = supplier.rfc, data.rfc
+        if orders:
+            new["purchase_orders"] = orders
+        supplier.rfc = data.rfc
     for name in PROFILE_FIELDS:
         before, after = getattr(supplier, name), getattr(data, name)
         if before != after:
