@@ -101,12 +101,19 @@ a {
   flex: 0 0 auto;
 }
 
-/* Panel de marca: logo centrado y 1.5 veces mayor, con el nombre y el lema debajo */
+/* Panel de marca: logo centrado y 1.5 veces mayor, con el nombre y el lema debajo. El logo y el texto del panel
+   forman un solo bloque centrado en la pantalla (los margenes automaticos reparten el espacio arriba y abajo). */
+.login-panel {
+  align-items: center;
+}
+
 .login-panel > .brand {
   flex-direction: column;
   align-items: center;
   gap: 14px;
   text-align: center;
+  width: min(580px, 100%);
+  margin: auto 0 48px;
 }
 
 .login-panel > .brand .brand-logo {
@@ -116,8 +123,8 @@ a {
 }
 
 .login-copy {
-  margin: auto 0;
-  max-width: 580px;
+  margin: 0 0 auto;
+  width: min(580px, 100%);
 }
 
 .eyebrow {
