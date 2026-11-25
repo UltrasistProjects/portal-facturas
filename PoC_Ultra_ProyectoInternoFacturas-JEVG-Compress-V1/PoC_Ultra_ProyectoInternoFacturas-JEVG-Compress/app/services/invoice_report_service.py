@@ -167,7 +167,7 @@ def _header(page, data: ReportData) -> float:
     if LOGO.exists():
         page.insert_image(fitz.Rect(MARGIN, 20, MARGIN + 160, 72), filename=str(LOGO), keep_proportion=True)
     right = PAGE.width - MARGIN
-    _text(page, right, 44, "Invoice Portal", 15, BOLD, WHITE, "right")
+    _text(page, right, 44, "Portal de Facturas", 15, BOLD, WHITE, "right")
     _text(page, right, 62, "PORTAL DE PROVEEDORES", 8, BOLD, (0.58, 0.67, 0.77), "right")
     y = 128
     _text(page, MARGIN, y, TITLE, 20, BOLD)
@@ -281,7 +281,7 @@ def _table(page, y: float, title: str, headers, rows, widths, aligns) -> float:
 
 def render(data: ReportData) -> bytes:
     document = fitz.open()
-    document.set_metadata({"title": TITLE, "author": "Portal de Proveedores FERROMEX", "creator": "Invoice Portal"})
+    document.set_metadata({"title": TITLE, "author": "Portal de Proveedores FERROMEX", "creator": "Portal de Facturas"})
     page = document.new_page(width=PAGE.width, height=PAGE.height)
     y = _header(page, data)
     y = _kpis(page, data, y)

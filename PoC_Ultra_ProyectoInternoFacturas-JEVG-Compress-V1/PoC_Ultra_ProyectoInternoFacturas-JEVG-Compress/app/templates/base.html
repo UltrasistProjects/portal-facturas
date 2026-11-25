@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% block title %}Invoice Portal{% endblock %}</title>
+  <title>{% block title %}Portal de Facturas{% endblock %}</title>
   <link rel="icon" type="image/png" href="{{ url_for('static', path='/img/favicon.png') }}">
   <link rel="stylesheet" href="{{ url_for('static', path='/vendor/bootstrap.min.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', path='/vendor/bootstrap-icons.min.css') }}">
@@ -12,7 +12,7 @@
 {% if user %}
 <div class="app-shell">
   <aside class="sidebar">
-    <a class="brand" href="/"><img class="brand-logo" src="{{ url_for('static', path='/img/Ferromexlogo.png') }}" alt="Ferromex"><span>Invoice Portal<small>Prevalidacion</small></span></a>
+    <a class="brand" href="/"><img class="brand-logo" src="{{ url_for('static', path='/img/Ferromexlogo.png') }}" alt="Ferromex"><span>Portal de Facturas<small>Prevalidacion</small></span></a>
     <nav>
       <a href="/" class="nav-item"><i class="bi bi-grid"></i> Dashboard</a>
       <a href="/invoices" class="nav-item"><i class="bi bi-receipt"></i> Facturas</a>

@@ -25,7 +25,7 @@ def test_paginas_principales_renderizan(client):
     for path in paths:
         response = client.get(path)
         assert response.status_code == 200, path
-        assert "Invoice Portal" in response.text
+        assert "Portal de Facturas" in response.text
 
 
 def rule_status(db, invoice_id: int, code: str) -> str:
