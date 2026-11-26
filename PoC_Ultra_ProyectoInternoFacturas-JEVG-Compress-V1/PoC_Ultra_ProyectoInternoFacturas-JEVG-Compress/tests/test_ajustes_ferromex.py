@@ -462,6 +462,29 @@ def test_migracion_conserva_la_plantilla_personalizada(empty_db):
     assert query(empty_db, SUBJECT) == [("Pago {{numero_factura}}",)]
 
 
+# --- Migracion 0025: sin seguimiento del Complemento de Pago --------------------------------------------------------
+
+WITHOUT_COMPLEMENT = "0025_ferromex_sin_complemento"
+COMPLEMENT_TYPES = (
+    "SELECT code, is_active, deleted_at IS NOT NULL, deleted_by FROM invoice_document_types"
+    " WHERE code LIKE 'PAYMENT_COMPLEMENT_%' ORDER BY code"
+)
+
+
+def test_migracion_da_de_baja_los_tipos_del_complemento(empty_db):
+    config = alembic_config(empty_db)
+    command.upgrade(config, PAYMENT)
+    active = [("PAYMENT_COMPLEMENT_PDF", True, False, None), ("PAYMENT_COMPLEMENT_XML", True, False, None)]
+    assert query(empty_db, COMPLEMENT_TYPES) == active
+    command.upgrade(config, WITHOUT_COMPLEMENT)
+    assert query(empty_db, COMPLEMENT_TYPES) == [
+        ("PAYMENT_COMPLEMENT_PDF", False, True, None),
+        ("PAYMENT_COMPLEMENT_XML", False, True, None),
+    ]
+    command.downgrade(config, PAYMENT)
+    assert query(empty_db, COMPLEMENT_TYPES) == active
+
+
 # --- RFC editable del proveedor -----------------------------------------------------------------------------------
 
 

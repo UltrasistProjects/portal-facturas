@@ -1,14 +1,16 @@
-"""Eliminacion de facturas en Borrador o Canceladas (spec flujo-facturas): la excepcion a la prohibicion de borrado
-fisico de facturas (spec integridad-datos). La eliminan el Administrador o el proveedor duenio; el PMO no."""
+"""Eliminacion de facturas (spec flujo-facturas): la excepcion a la prohibicion de borrado fisico de facturas (spec
+integridad-datos). El Administrador elimina cualquiera en cualquier estatus; el proveedor duenio, las suyas en Borrador
+o Canceladas; el PMO, ninguna."""
 
 import hashlib
+from datetime import datetime, timezone
 
 import pytest
 from sqlalchemy import func, select, update
 
 from app.core.constants import InvoiceStatus, ReviewDecision
 from app.core.database import SessionLocal
-from app.models import AuditLog, Document, FileContent, Invoice, Review, ValidationResult
+from app.models import AuditLog, Document, FileContent, Invoice, Review, User, ValidationResult
 from app.services import invoice_deletion_service as deletion
 from app.services.file_service import LocalFileStorage
 from tests.cfdi import MORAL_EMAIL, PHYSICAL_EMAIL, SUPPORT, example_cfdi, register_cfdi, upload, verify
@@ -17,25 +19,31 @@ from tests.test_cancelacion import cancel, stored_files, user_id
 
 PMO, ADMIN = "pmo@poc.local", "admin@poc.local"
 BUTTON = "?eliminar=1#deletion"
+WARNING = 'class="alert alert-warning deletion-warning"'
+# Estatus en que el proveedor ya no elimina su factura y el Administrador si.
+OTROS_ESTATUS = [
+    InvoiceStatus.UPLOADED,
+    InvoiceStatus.UNDER_REVIEW,
+    InvoiceStatus.REQUIRES_CORRECTION,
+    InvoiceStatus.ACCEPTED,
+    InvoiceStatus.REJECTED,
+    InvoiceStatus.PAID,
+]
 # Facturas que crea cada prueba; sin_restos elimina al terminar las que sigan en la base.
 CREADAS: list[int] = []
 
 
 @pytest.fixture(autouse=True)
 def sin_restos():
-    """La base de la sesion es compartida y otras pruebas cuentan las facturas de proveedor2 (test_flujo): al terminar
-    se eliminan, con el propio servicio, las facturas que la prueba dejo, en el estatus que hayan quedado."""
+    """La base de la sesion es compartida y otras pruebas cuentan las facturas de proveedor2 (test_flujo): al
+    terminar el Administrador elimina, con el propio servicio, las facturas que la prueba dejo, en el estatus que
+    hayan quedado."""
     yield
-    admin = user_id(ADMIN)
     for invoice_id in CREADAS:
         with SessionLocal() as db:
             if db.get(Invoice, invoice_id) is None:
                 continue
-            db.execute(
-                update(Invoice)
-                .where(Invoice.id == invoice_id)
-                .values(status=InvoiceStatus.DRAFT, cancelled_at=None, cancelled_by=None, cancellation_deadline=None)
-            )
+            admin = db.scalar(select(User).where(User.email == ADMIN))
             paths = deletion.delete_invoice(db, db.get(Invoice, invoice_id), admin, confirmed=True)
             db.commit()
         LocalFileStorage().discard(paths)
@@ -75,6 +83,16 @@ def restos(invoice_id: int) -> dict:
 
 
 NADA = {"factura": False, "documentos": 0, "validaciones": 0, "revisiones": 0}
+
+
+def cambiar_estatus(invoice_id: int, status: InvoiceStatus) -> None:
+    """Lleva la factura al estatus; "Programado para pago" exige fecha y autor del pago (ck_invoices_payment)."""
+    values = {"status": status}
+    if status == InvoiceStatus.PAID:
+        values |= {"paid_at": datetime.now(timezone.utc), "paid_by": user_id(PMO)}
+    with SessionLocal() as db:
+        db.execute(update(Invoice).where(Invoice.id == invoice_id).values(**values))
+        db.commit()
 
 
 def bitacora(invoice_id: int) -> list[AuditLog]:
@@ -141,10 +159,35 @@ def test_proveedor_elimina_su_factura_cancelada(client):
 def test_administrador_elimina_la_de_un_proveedor(client):
     invoice, _ = borrador(client)
     login(client, ADMIN)
-    assert BUTTON in client.get(f"/invoices/{invoice.id}").text
+    detail = client.get(f"/invoices/{invoice.id}").text
+    # En Borrador no hay advertencia: la factura no ha seguido su curso.
+    assert BUTTON in detail and WARNING not in detail
     assert eliminar(client, invoice).status_code == 303
     assert restos(invoice.id) == NADA
     assert bitacora(invoice.id)[-1].user_id == user_id(ADMIN)
+
+
+@pytest.mark.parametrize("status", OTROS_ESTATUS)
+def test_administrador_elimina_en_cualquier_estatus(client, status):
+    invoice, _ = borrador(client)
+    assert verify(client, invoice).status_code == 303
+    cambiar_estatus(invoice.id, status)
+    with SessionLocal() as db:
+        db.add(Review(invoice_id=invoice.id, reviewer_id=user_id(PMO), decision=ReviewDecision.ACCEPTED))
+        db.commit()
+    login(client, ADMIN)
+    detail = client.get(f"/invoices/{invoice.id}").text
+    assert BUTTON in detail and 'id="deletion">' in detail and WARNING in detail
+    before = restos(invoice.id)
+    assert before["documentos"] == 2 and before["validaciones"] > 0 and before["revisiones"] == 1
+
+    response = eliminar(client, invoice)
+    assert response.status_code == 303
+    assert response.headers["location"] == f"/invoices?deleted={invoice.internal_folio}"
+    assert restos(invoice.id) == NADA and stored_files(invoice.id) == []
+    eliminada = bitacora(invoice.id)[-1]
+    assert eliminada.action == "INVOICE_DELETED" and eliminada.user_id == user_id(ADMIN)
+    assert eliminada.old_value["status"] == status.value
 
 
 def test_pmo_no_elimina(client):
@@ -164,21 +207,10 @@ def test_otro_proveedor_no_la_encuentra(client):
     assert restos(invoice.id)["factura"]
 
 
-@pytest.mark.parametrize(
-    "status",
-    [
-        InvoiceStatus.UPLOADED,
-        InvoiceStatus.UNDER_REVIEW,
-        InvoiceStatus.REQUIRES_CORRECTION,
-        InvoiceStatus.ACCEPTED,
-        InvoiceStatus.REJECTED,
-    ],
-)
-def test_otro_estatus_no_se_elimina(client, status):
+@pytest.mark.parametrize("status", OTROS_ESTATUS)
+def test_el_proveedor_no_elimina_en_otro_estatus(client, status):
     invoice, _ = borrador(client)
-    with SessionLocal() as db:
-        db.execute(update(Invoice).where(Invoice.id == invoice.id).values(status=status))
-        db.commit()
+    cambiar_estatus(invoice.id, status)
     detail = client.get(f"/invoices/{invoice.id}").text
     assert BUTTON not in detail and 'id="deletion"' not in detail
     response = eliminar(client, invoice)

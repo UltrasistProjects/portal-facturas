@@ -1,6 +1,7 @@
 """Alta y habilitacion de usuarios con la regla rol-proveedor (spec administracion-usuarios; changes
 usuario-proveedor-vinculado y add-keycloak-authentication: las cuentas viven en el Keycloak simulado)."""
 
+import html
 from types import SimpleNamespace
 from uuid import uuid4
 
@@ -72,7 +73,8 @@ def test_proveedor_con_su_proveedor(client, email, keycloak):
         {"Proveedor"},
         [UPDATE_PASSWORD],
     )
-    assert account.password in response.text and response.headers["cache-control"] == "no-store"
+    # La contrasena temporal puede traer "&" (u otro caracter que la plantilla escapa).
+    assert html.escape(account.password) in response.text and response.headers["cache-control"] == "no-store"
 
 
 @pytest.mark.parametrize("role", ["PMO", "Administrador"])

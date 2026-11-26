@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session, joinedload
 from app.core.constants import PMO_LABEL, STATUS_LABELS, InvoiceStatus, ReviewDecision
 from app.core.timeutils import to_business
 from app.models import AuditLog, Invoice, Review, User
+from app.services.payment_service import complement_type_active as _complement_tracked
 
 SUBMITTED = "Enviada a validación"
 CANCELLED = STATUS_LABELS[InvoiceStatus.CANCELLED]
@@ -72,7 +73,8 @@ def history(db: Session, invoice: Invoice, for_provider: bool = False) -> list[H
             for at, name in _audited(db, invoice, "INVOICE_CANCELLED")
         ]
     if invoice.paid_at:
-        due = invoice.payment_complement_due_at
+        # La fecha limite del complemento, solo mientras el portal le da seguimiento (tipo activo; Ferromex no).
+        due = invoice.payment_complement_due_at if _complement_tracked(db) else None
         detail = f"Fecha límite del complemento: {to_business(due).strftime(DATE_FORMAT)}" if due else None
         events += [
             HistoryEvent(at, PAID, PROVIDER_REVIEWER if for_provider else name, detail)

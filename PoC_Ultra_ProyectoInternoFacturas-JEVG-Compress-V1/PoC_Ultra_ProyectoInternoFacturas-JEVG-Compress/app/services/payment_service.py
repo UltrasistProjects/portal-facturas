@@ -75,7 +75,9 @@ def invoice_uuid(invoice: Invoice) -> str | None:
 
 def complement_type_active(db: Session) -> bool:
     """El tipo "Complemento de pago (XML)" sigue en Archivos minimos: es la unica forma de adjuntar el complemento.
-    Si el Administrador lo elimino, ninguna factura lo requiere al pagarse y los vencidos no bloquean el envio."""
+    Si el Administrador lo elimino, el portal deja de dar seguimiento al complemento: ninguna factura lo requiere al
+    pagarse, los vencidos no bloquean el envio y no se muestran avisos, paneles ni fechas limite. En Ferromex la
+    migracion 0025 lo da de baja."""
     stmt = select(InvoiceDocumentType.is_active).where(InvoiceDocumentType.code == DocumentType.PAYMENT_COMPLEMENT_XML)
     return bool(db.scalar(stmt))
 
@@ -92,6 +94,11 @@ def requires_complement(invoice: Invoice) -> bool:
 def complement_required(invoice: Invoice) -> bool:
     """La factura "Pagada" quedo con fecha limite del complemento al pagarse."""
     return invoice.status == InvoiceStatus.PAID and invoice.payment_complement_due_at is not None
+
+
+def accepts_complement(db: Session, invoice: Invoice) -> bool:
+    """La factura "Pagada" recibe su Complemento de Pago: lo requiere y el portal le da seguimiento (tipo activo)."""
+    return complement_required(invoice) and complement_type_active(db)
 
 
 def is_pending(invoice: Invoice) -> bool:
@@ -172,7 +179,7 @@ def schedule_request(db: Session, invoice: Invoice, user: User | None = None, at
     supplier = invoice.supplier
     order = invoice.purchase_order
     required = requires_complement(invoice) and complement_type_active(db)
-    due = invoice.payment_complement_due_at
+    due = invoice.payment_complement_due_at if required else None
     if due is None and required and at is not None and invoice.paid_at is None:
         due = at + PAYMENT_COMPLEMENT_WINDOW
     identity = (
@@ -217,7 +224,8 @@ def schedule_request(db: Session, invoice: Invoice, user: User | None = None, at
             if order
             else ({"convenio": invoice.purchase_order_number} if invoice.purchase_order_number else None)
         ),
-        "complemento_pago": {"requerido": required, "fecha_limite": _iso(due)},
+        # Solo si la factura requiere complemento; sin seguimiento del complemento (Ferromex) la solicitud no lo trae.
+        **({"complemento_pago": {"requerido": True, "fecha_limite": _iso(due)}} if required else {}),
     }
 
 
@@ -228,9 +236,10 @@ def schedule_request_json(db: Session, invoice: Invoice, user: User | None = Non
 # --- Complemento --------------------------------------------------------------------------------------------------
 
 
-def ensure_paid_upload(invoice: Invoice, document_type: str) -> None:
-    """En una factura "Pagada" solo se carga el Complemento de Pago, y solo si lo requiere (409)."""
-    if not complement_required(invoice):
+def ensure_paid_upload(db: Session, invoice: Invoice, document_type: str) -> None:
+    """En una factura "Pagada" solo se carga el Complemento de Pago, y solo si lo requiere y el portal le da
+    seguimiento (409)."""
+    if not accepts_complement(db, invoice):
         raise BusinessRuleError(MSG_NOT_REQUIRED)
     if document_type not in PAYMENT_COMPLEMENT_TYPES:
         raise BusinessRuleError(MSG_ONLY_COMPLEMENT)
@@ -337,8 +346,9 @@ class ComplementStatus:
     text: str
 
 
-def complement_status(invoice: Invoice, now: datetime | None = None) -> ComplementStatus | None:
-    if invoice.status != InvoiceStatus.PAID:
+def complement_status(db: Session, invoice: Invoice, now: datetime | None = None) -> ComplementStatus | None:
+    """Panel "Complemento de pago" del detalle: solo en una factura "Pagada" y con seguimiento del complemento."""
+    if invoice.status != InvoiceStatus.PAID or not complement_type_active(db):
         return None
     if not complement_required(invoice):
         return ComplementStatus("not_required", "No requerido")
@@ -362,8 +372,9 @@ class PendingComplement:
 
 
 def pending_notice(db: Session, supplier_id: int | None) -> list[PendingComplement]:
-    """Aviso del tablero y del listado del proveedor: primero los vencidos, cada grupo por fecha limite."""
-    if supplier_id is None:
+    """Aviso del tablero y del listado del proveedor: primero los vencidos, cada grupo por fecha limite. Sin
+    seguimiento del complemento (tipo eliminado), ninguno."""
+    if supplier_id is None or not complement_type_active(db):
         return []
     now = _now()
     rows = [

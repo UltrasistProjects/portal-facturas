@@ -1,7 +1,8 @@
-"""Eliminacion de una factura en "Borrador" o "Cancelada" (spec flujo-facturas): la unica excepcion a la prohibicion
-de borrado fisico de facturas (spec integridad-datos).
+"""Eliminacion de una factura (spec flujo-facturas): la unica excepcion a la prohibicion de borrado fisico de facturas
+(spec integridad-datos).
 
-La eliminan el Administrador, cualquiera, o el proveedor duenio de la factura; el PMO no. Se borran la factura, sus
+El Administrador elimina cualquier factura en cualquier estatus; el proveedor duenio, solo las suyas en "Borrador" o
+"Cancelada"; el PMO, ninguna. Se borran la factura, sus
 documentos (tambien su contenido en stored_files), sus resultados de validacion y sus revisiones. La bitacora conserva
 las entradas de la factura y agrega INVOICE_DELETED con sus datos; el registro de correos tambien se conserva. El UUID y
 el numero quedan libres: la misma factura se puede volver a registrar. El servicio no hace commit: el endpoint confirma
@@ -22,6 +23,7 @@ from app.services.invoice_service import lock_invoice
 logger = logging.getLogger(__name__)
 
 ENTITY = "Invoice"
+# Estatus en que el proveedor elimina su factura; el Administrador no tiene esta restriccion.
 DELETABLE_STATUSES = frozenset({InvoiceStatus.DRAFT, InvoiceStatus.CANCELLED})
 MSG_NOT_DELETABLE = "Sólo se puede eliminar una factura en Borrador o Cancelada"
 MSG_CONFIRM = "Confirme que desea eliminar la factura"
@@ -33,21 +35,22 @@ def may_delete(user) -> bool:
 
 
 def can_delete(user, invoice: Invoice) -> bool:
-    """El detalle ofrece "Eliminar" al Administrador y al proveedor duenio de una factura en Borrador o Cancelada."""
-    if invoice.status not in DELETABLE_STATUSES:
-        return False
+    """El detalle ofrece "Eliminar" al Administrador, en cualquier estatus, y al proveedor duenio de una factura en
+    Borrador o Cancelada."""
     if user.role == Role.ADMINISTRADOR:
         return True
-    return user.role == Role.PROVEEDOR and invoice.supplier_id == user.supplier_id
+    return (
+        user.role == Role.PROVEEDOR and invoice.supplier_id == user.supplier_id and invoice.status in DELETABLE_STATUSES
+    )
 
 
-def delete_invoice(db: Session, invoice: Invoice, user_id: int, confirmed: bool) -> list[str]:
+def delete_invoice(db: Session, invoice: Invoice, user, confirmed: bool) -> list[str]:
     """Borra la factura y lo que depende de ella. Bloquea la fila antes de comprobar el estatus: un envio, una carga o
-    una cancelacion simultaneos terminan antes, y si la factura ya no esta en Borrador o Cancelada responde 409; sin la
-    confirmacion, 400. Devuelve las rutas relativas de sus archivos, que quien llama borra del disco despues del
-    commit."""
+    una decision simultaneos terminan antes, y si el proveedor ya no puede eliminarla (dejo de estar en Borrador o
+    Cancelada) responde 409; sin la confirmacion, 400. Devuelve las rutas relativas de sus archivos, que quien llama
+    borra del disco despues del commit."""
     lock_invoice(db, invoice)
-    if invoice.status not in DELETABLE_STATUSES:
+    if not can_delete(user, invoice):
         raise BusinessRuleError(MSG_NOT_DELETABLE)
     if not confirmed:
         raise InvalidInputError(MSG_CONFIRM)
@@ -73,7 +76,7 @@ def delete_invoice(db: Session, invoice: Invoice, user_id: int, confirmed: bool)
     # Sentencia DELETE explicita: el borrado por la unidad de trabajo del ORM sigue prohibido (before_flush).
     db.execute(delete(Invoice).where(Invoice.id == invoice_id), execution_options={"synchronize_session": False})
     db.expunge(invoice)
-    audit(db, "INVOICE_DELETED", ENTITY, invoice_id, user_id, old=snapshot)
+    audit(db, "INVOICE_DELETED", ENTITY, invoice_id, user.id, old=snapshot)
     logger.info(
         "invoice.deleted", extra={"event": "invoice.deleted", "invoice_id": invoice_id, "status": snapshot["status"]}
     )

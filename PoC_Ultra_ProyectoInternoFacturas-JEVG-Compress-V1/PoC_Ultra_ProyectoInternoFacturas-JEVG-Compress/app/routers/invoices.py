@@ -65,7 +65,8 @@ logger = logging.getLogger(__name__)
 # Registro, carga documental, verificacion y envio: solo el proveedor (EP-01 DT-04). El PMO y el Administrador
 # conservan el listado, el detalle y las descargas.
 provider_only = require_roles(Role.PROVEEDOR)
-# Eliminacion de una factura en Borrador o Cancelada: el Administrador o el proveedor duenio; el PMO no.
+# Eliminacion de una factura: el Administrador en cualquier estatus o el proveedor duenio en Borrador o Cancelada; el
+# PMO no.
 admin_or_provider = require_roles(Role.ADMINISTRADOR, Role.PROVEEDOR)
 MSG_SUPPLIER_NOT_ACTIVE = "Su proveedor no está autorizado para registrar facturas"
 MSG_USER_WITHOUT_SUPPLIER = "Su usuario no está vinculado a un proveedor. Contacte al Administrador"
@@ -479,11 +480,15 @@ def _detail_page(
             "payment_json": payment.schedule_request_json(db, invoice, user, datetime.now(timezone.utc))
             if can_pay or (reviewer and paid)
             else None,
-            "complement": payment.complement_status(invoice),
-            "can_attach_complement": not reviewer and payment.is_pending(invoice),
+            "complement": payment.complement_status(db, invoice),
+            "can_attach_complement": (
+                not reviewer and payment.is_pending(invoice) and payment.complement_type_active(db)
+            ),
             "payment_error": payment_error,
-            # Eliminacion de una factura en Borrador o Cancelada: el Administrador o el proveedor duenio.
+            # Eliminacion: el Administrador en cualquier estatus; el proveedor duenio, en Borrador o Cancelada. Fuera
+            # de esos dos estatus el panel lo advierte.
             "can_delete": deletion.can_delete(user, invoice),
+            "delete_warning": invoice.status not in deletion.DELETABLE_STATUSES,
             "delete_error": delete_error,
             "delete_open": delete_open or bool(delete_error),
             "invoice_readable": (invoice_doc.metadata_json or {}).get("has_extractable_text") if invoice_doc else None,
@@ -543,7 +548,7 @@ def _documents_page(
         "amount_errors": amount_errors or [],
         "currencies": catalog_service.active_entries(db, CatalogType.CURRENCY) if international else [],
         "paid": paid,
-        "complement": payment.complement_status(invoice),
+        "complement": payment.complement_status(db, invoice),
         "delivery": _status_delivery(db, invoice, notification, reviewer=False) if paid else None,
         "delivery_error": paid and notification == "error",
     }
@@ -565,7 +570,7 @@ def documents_page(
     user=Depends(provider_only),
 ):
     invoice = _invoice_or_404(db, invoice_id, user)
-    if invoice.status == InvoiceStatus.PAID and not payment.complement_required(invoice):
+    if invoice.status == InvoiceStatus.PAID and not payment.accepts_complement(db, invoice):
         raise BusinessRuleError(payment.MSG_NOT_REQUIRED)
     if not _accepts_documents(invoice):
         return RedirectResponse(f"/invoices/{invoice.id}", status_code=303)
@@ -635,7 +640,7 @@ async def upload_document(
     lock_invoice(db, invoice)
     if invoice.status == InvoiceStatus.PAID:
         # Una factura pagada solo recibe su Complemento de Pago (409 si no lo requiere o si es otro tipo).
-        payment.ensure_paid_upload(invoice, document_type)
+        payment.ensure_paid_upload(db, invoice, document_type)
     else:
         ensure_editable(invoice)
     international = foreign.is_international(invoice)
@@ -1056,13 +1061,14 @@ async def delete_invoice(
     db: Session = Depends(get_db),
     user=Depends(admin_or_provider),
 ):
-    """Elimina una factura en Borrador o Cancelada (spec flujo-facturas). Sin la confirmacion vuelve al detalle con el
-    error (400); en otro estatus, 409. Los archivos se borran del disco despues de confirmar en la base."""
+    """Elimina una factura (spec flujo-facturas): el Administrador, en cualquier estatus; el proveedor, la suya en
+    Borrador o Cancelada (en otro estatus, 409). Sin la confirmacion vuelve al detalle con el error (400). Los archivos
+    se borran del disco despues de confirmar en la base."""
     await validate_csrf(request)
     invoice = _invoice_or_404(db, invoice_id, user)
     folio = invoice.internal_folio
     try:
-        paths = deletion.delete_invoice(db, invoice, user.id, bool(confirm))
+        paths = deletion.delete_invoice(db, invoice, user, bool(confirm))
     except InvalidInputError as exc:
         db.rollback()
         return _detail_page(request, db, invoice, user, delete_error=exc.message, status_code=400)

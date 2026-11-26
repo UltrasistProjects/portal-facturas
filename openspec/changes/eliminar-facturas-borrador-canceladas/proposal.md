@@ -4,7 +4,7 @@ Una factura en "Borrador" nunca se envió y una "Cancelada" ya no sigue su curso
 
 ## What Changes
 
-- Botón **Eliminar** en el detalle de una factura en "Borrador" o "Cancelada", para el Administrador (cualquier factura) y para el proveedor dueño. El PMO no lo tiene.
+- Botón **Eliminar** en el detalle de una factura: para el Administrador, cualquier factura en cualquier estatus (ajuste del 2026-11-25); para el proveedor dueño, en "Borrador" o "Cancelada". El PMO no lo tiene.
 - `POST /invoices/{id}/delete` con confirmación obligatoria: borra la factura con sus documentos (y su contenido en `stored_files`), sus resultados de validación y sus revisiones, y los archivos del disco después de confirmar en la base.
 - La bitácora conserva las entradas de la factura y agrega `INVOICE_DELETED` con sus datos. El registro de correos se conserva.
 - El UUID y el número quedan libres.

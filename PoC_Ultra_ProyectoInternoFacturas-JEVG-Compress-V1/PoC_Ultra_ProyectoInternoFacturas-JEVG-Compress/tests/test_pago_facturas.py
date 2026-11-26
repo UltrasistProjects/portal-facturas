@@ -251,6 +251,8 @@ def test_marcar_como_pagada_nacional_ppd(client):
     assert f"Correo enviado a {supplier_email()}" in page and 'id="payment"' not in page
     assert f"Programado para pago el {business(stored.paid_at)}" in page
     assert 'data-bs-target="#payment-request"' in page and "Ver solicitud (JSON)" in page
+    # La ventana de la solicitud ya registrada (Ferromex): la factura se entrego a SAP.
+    assert 'id="payment-request-title">Factura enviada a SAP</h2>' in page and "Pago programado</h2>" not in page
     assert f"Pendiente: adjúntelo antes del {business(stored.payment_complement_due_at)}" in page
 
 
@@ -616,10 +618,11 @@ def test_pago_y_complemento_en_el_historial(client):
 
 @pytest.fixture()
 def complement_type_deleted():
-    """Elimina (baja logica) el tipo "Complemento de pago (XML)" y lo restaura al terminar."""
+    """Elimina (baja logica) los tipos del Complemento de Pago, como la migracion 0025 de Ferromex, y los restaura al
+    terminar."""
     from app.models import InvoiceDocumentType, now_utc
 
-    complement = InvoiceDocumentType.code == "PAYMENT_COMPLEMENT_XML"
+    complement = InvoiceDocumentType.code.in_(("PAYMENT_COMPLEMENT_XML", "PAYMENT_COMPLEMENT_PDF"))
     with SessionLocal() as db:
         db.execute(update(InvoiceDocumentType).where(complement).values(is_active=False, deleted_at=now_utc()))
         db.commit()
@@ -640,6 +643,11 @@ def test_pago_sin_complemento_si_su_tipo_esta_eliminado(client):
     assert stored.status == InvoiceStatus.PAID and stored.payment_complement_due_at is None
     [entry] = audits(invoice.id, "INVOICE_PAID")
     assert entry.new_value["requires_complement"] is False
+    # Sin seguimiento del complemento la solicitud a SAP no lo menciona y el detalle no tiene su panel.
+    assert "complemento_pago" not in entry.new_value["schedule_request"]
+    page = client.get(f"/invoices/{invoice.id}").text
+    assert 'id="payment-request-title">Factura enviada a SAP</h2>' in page
+    assert 'id="complement"' not in page and "complemento_pago" not in page
 
 
 def test_vencido_no_bloquea_si_el_tipo_esta_eliminado(client, complement_type_deleted):
@@ -649,3 +657,24 @@ def test_vencido_no_bloquea_si_el_tipo_esta_eliminado(client, complement_type_de
     response = submit(client, invoice.id)
     assert response.status_code == 409 and OVERDUE_PREFIX not in response.text
     assert "Faltan archivos obligatorios" in response.text
+
+
+def test_sin_seguimiento_no_se_muestra_el_complemento(client, complement_type_deleted):
+    """Ferromex: con los tipos dados de baja, una factura que quedo con el complemento pendiente (fecha limite ya
+    registrada) no genera avisos, panel, fecha limite ni carga del complemento."""
+    pending = paid(hours_ago=10)
+    overdue = paid(hours_ago=75)
+    login(client, PROVIDER)
+    for url in ("/", "/invoices"):
+        page = client.get(url).text
+        assert "complement-notice" not in page and "Tiene complementos de pago pendientes" not in page
+    detail = client.get(f"/invoices/{pending.id}").text
+    assert 'id="complement"' not in detail and "Fecha límite del complemento" not in detail
+    assert "Adjuntar Complemento de Pago" not in detail
+    assert client.get(f"/invoices/{overdue.id}/documents").status_code == 409
+    response = upload(client, pending.id, "PAYMENT_COMPLEMENT_XML", "c.xml", complement_xml(pending.uuid))
+    assert response.status_code == 409 and reload(pending.id).payment_complement_received_at is None
+    logout(client)
+    login(client, PMO)
+    page = client.get(f"/invoices/{pending.id}").text
+    assert 'id="payment-request"' in page and "complemento_pago" not in page

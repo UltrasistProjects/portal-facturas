@@ -129,6 +129,23 @@ def keycloak():
     keycloak_admin.set_identity_admin(previous)
 
 
+def _track_payment_complements() -> None:
+    """La migracion 0025 (Ferromex) da de baja los tipos del Complemento de Pago y el portal deja de darle seguimiento.
+    La suite prueba ese seguimiento con los tipos activos, como si el Administrador los hubiera reactivado en Archivos
+    minimos; las pruebas del portal sin seguimiento los dan de baja (test_pago_facturas, test_ajustes_ferromex)."""
+    from sqlalchemy import text
+
+    from app.core.database import engine
+
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "UPDATE invoice_document_types SET is_active = true, deleted_at = NULL, deleted_by = NULL"
+                " WHERE code IN ('PAYMENT_COMPLEMENT_XML', 'PAYMENT_COMPLEMENT_PDF')"
+            )
+        )
+
+
 @pytest.fixture(scope="session", autouse=True)
 def test_database(keycloak):
     before = _workspace_snapshot()
@@ -142,6 +159,7 @@ def test_database(keycloak):
         from scripts.seed_db import main as seed
 
         seed(passwords=TEST_PASSWORDS)
+        _track_payment_complements()
         yield
     finally:
         engine.dispose()
