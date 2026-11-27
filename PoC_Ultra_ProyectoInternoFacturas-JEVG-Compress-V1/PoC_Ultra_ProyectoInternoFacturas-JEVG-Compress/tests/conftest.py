@@ -44,6 +44,9 @@ os.environ.update(
         # Ninguna prueba envia correos reales: el transporte de archivo escribe en el directorio temporal.
         "MAIL_BACKEND": "file",
         "MAIL_OUTBOX_DIR": str(TEST_ROOT / "outbox"),
+        # Sin IA: ninguna prueba llama a Azure ni a OpenAI aunque el .env las active (las de IA simulan sus respuestas).
+        "AI_ENABLED": "false",
+        "DOCUMENT_AI_PROVIDER": "mock",
         # Keycloak simulado (tests/idp.py): el host no existe y ninguna prueba sale a la red.
         "KEYCLOAK_SERVER_URL": "http://keycloak.test",
         "KEYCLOAK_REALM": "ferromex-portal",

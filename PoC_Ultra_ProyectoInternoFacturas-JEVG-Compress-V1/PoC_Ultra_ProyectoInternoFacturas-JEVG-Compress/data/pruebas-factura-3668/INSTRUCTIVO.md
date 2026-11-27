@@ -32,6 +32,7 @@ Todas las rutas son relativas a la carpeta de la app (`PoC_Ultra_ProyectoInterno
 | Carpeta | Archivo | Para qué |
 |---|---|---|
 | `1-factura` | `CFDI-3668-GOHS60031745A.pdf` | La factura 3668 (PDF con texto) |
+| | `CFDI-3668-GOHS60031745A-escaneado.pdf` | La misma factura, sólo imagen (sin texto): para la variante con IA de la sección 3 |
 | | `VoBo-3668-v1-orden-equivocada.pdf` | Vo.Bo. que cita la orden 25704827: provoca las Observaciones |
 | | `VoBo-3668-v2-corregido.pdf` | Vo.Bo. con la orden correcta, 25704872 |
 | `2-pago` | `REP-P-3701-GOHS60031745A.xml` | Complemento de pago (CFDI tipo P) que liquida la 3668 |
@@ -123,6 +124,8 @@ La factura queda en **Borrador**: falta el Vo.Bo.
 
 **Qué decir:** la proveedora no capturó ningún dato. El portal leyó el PDF con la maqueta del documento de negocio: los RFC sin etiqueta, el bloque CLIENTE, los datos del timbre y el detalle del concepto. La orden de compra la tomó del concepto, "(OC/25704872)".
 
+**Variante con IA** (portal con `AI_ENABLED=true` y `DOCUMENT_AI_PROVIDER=document_intelligence_openai`; README, "Lectura de la factura con IA"). Registra `1-factura/CFDI-3668-GOHS60031745A-escaneado.pdf`, que no tiene texto: sin IA da 422 y pide el XML. Con la IA se registra con los mismos datos de la tabla y la Revisión dice "Datos tomados de: **OCR + IA (Azure Document Intelligence + OpenAI)**", con el panel "Lectura con IA" (confianza baja del OCR en la Fecha). Con el PDF con texto, el panel además compara la lectura de la IA con la del texto y dice "Coincide con la lectura del texto del PDF.". El resto del flujo no cambia: la IA sólo lee, las reglas y el PMO deciden. El registro tarda unos 15 segundos.
+
 ## 4. Vo.Bo. y envío (Proveedora)
 
 1. En la misma Revisión, en **Cargar o reemplazar un archivo**:
@@ -204,9 +207,17 @@ El complemento es el P-3701: pago del 02/02/2026 por transferencia, $4,128.50 MX
   - la orden `EXAMPLE_ORDER` de `scripts/seed_db.py`;
   - este instructivo;
   - `tests/test_set_factura_3668.py`.
+
+  Después, regenera la versión escaneada (sólo imagen) con PyMuPDF:
+
+  ```bash
+  python scripts/rasterize_pdf.py data/pruebas-factura-3668/1-factura/CFDI-3668-GOHS60031745A.pdf
+  ```
 - **Verificación automática.** `tests/test_set_factura_3668.py` recorre este instructivo con sus mismos archivos y valores. `tests/test_extraccion_factura.py` comprueba que del PDF salen los mismos datos que del XML de la 3668. Si fallan, el instructivo ya no describe lo que hace el portal:
 
   ```bash
   .venv/bin/python -m pytest tests/test_set_factura_3668.py tests/test_extraccion_factura.py --no-cov -q
   ```
+
+  `tests/test_lectura_ia.py` recorre la variante con IA con Document Intelligence y OpenAI simulados, y `tests/test_integracion_ia.py`, con los servicios reales (`-m integration`; se salta sin llaves).
 - **Video.** `tests/hu/video/recorrido-factura-3668.spec.ts` graba este mismo recorrido con Playwright en `evidencias/video/recorrido-factura-3668.webm`. Para grabarlo, reinicia la base (sección 1), deja el portal arrancado con los correos en archivos y ejecuta `npm run video-3668` en `tests/hu`. Al terminar, la factura ya quedó registrada: reinicia la base otra vez antes de la prueba manual.

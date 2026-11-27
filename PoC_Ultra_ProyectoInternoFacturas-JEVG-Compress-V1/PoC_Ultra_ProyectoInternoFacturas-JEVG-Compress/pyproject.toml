@@ -17,7 +17,9 @@ known-third-party = ["alembic"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 # Umbral = cobertura medida tras migrar a PostgreSQL (93.76 %), redondeada hacia abajo; nunca menor que 80.
-addopts = "--cov=app --cov-report=term-missing:skip-covered --cov-report=xml --cov-fail-under=93"
+# Las pruebas `integration` llaman a los servicios reales de IA: se corren a mano con -m integration --no-cov.
+addopts = "-m 'not integration' --cov=app --cov-report=term-missing:skip-covered --cov-report=xml --cov-fail-under=93"
+markers = ["integration: llama a servicios externos reales (Azure Document Intelligence, OpenAI); se salta sin llaves"]
 filterwarnings = [
     # PyMuPDF (SWIG) emite estas advertencias al importarse en Python 3.12+.
     "ignore:builtin type Swig.* has no __module__ attribute:DeprecationWarning",

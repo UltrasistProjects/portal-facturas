@@ -10,7 +10,7 @@ La solución separa cuatro responsabilidades:
 
 1. **Reglas Python:** XML y PDF del CFDI, RFC, documentos, fechas, montos, duplicados, orden de compra y transiciones.
 2. **Extracción documental:** parser CFDI con `lxml` y PDF con PyMuPDF.
-3. **AI semántica:** interfaz `DocumentAnalyzer`; por defecto usa un mock local reproducible.
+3. **AI semántica:** interfaz `DocumentAnalyzer`; por defecto usa un mock local reproducible. Para la prueba de concepto, la factura se lee con Azure Document Intelligence y OpenAI ([Lectura de la factura con IA](#lectura-de-la-factura-con-ia)); las reglas determinísticas siguen decidiendo.
 4. **Human in the loop:** sólo un usuario `PMO` o `Administrador` puede registrar la decisión final.
 
 La AI recomienda o aporta evidencia; el Rule Engine determina la prevalidación técnica y el usuario administrativo toma la decisión final. Un LLM nunca cambia una factura a `ACCEPTED`.
@@ -21,7 +21,7 @@ La AI recomienda o aporta evidencia; el Rule Engine determina la prevalidación 
 - Windows PowerShell/CMD o Linux/macOS con shell POSIX.
 - **Docker con Compose v2** para PostgreSQL y Keycloak: Docker Desktop en Windows y macOS; Docker Engine o Podman (con `podman compose` o el alias `docker`) en Linux. Sólo PostgreSQL y Keycloak corren en contenedores; la aplicación corre en el host.
 - Puertos `55432` (PostgreSQL) y `58080` (Keycloak) libres en `127.0.0.1` (configurables con `POSTGRES_PORT` y `KEYCLOAK_PORT` en `.env`; el 5432 y el 5433 suelen estar ocupados por otras instancias).
-- No requiere Node.js, Azure ni conexión a servicios externos para operar.
+- No requiere Node.js, Azure ni conexión a servicios externos para operar (la lectura con IA es opcional).
 
 ## Instalación en Windows PowerShell
 
@@ -272,7 +272,7 @@ app/
   routers/       auth, dashboard, facturas, proveedores, órdenes de compra y admin
   rules/         reglas DOC/XML/PRV/SUP/FIN/DAT/OC/INT
   services/      storage, XML, PDF (extracción de la factura), órdenes de compra, score, auditoría, workflow y correo
-    ai/          interfaz, mock y adaptadores Azure
+    ai/          interfaz, mock, Document Intelligence, OpenAI y su cadena
   templates/     interfaz Jinja server-rendered
   static/        CSS y JavaScript Vanilla
 alembic/         migraciones explícitas (una revisión por cambio de modelo)
@@ -464,9 +464,9 @@ El Administrador define en **Requisitos mínimos › Alta de proveedor** (`/admi
 El proveedor nacional registra su factura en tres pasos (HU-24): **Archivos → Revisión → Envío**.
 
 - **Archivos** (`/invoices/new`): carga el PDF de la factura (obligatorio) y su XML (opcional). No captura número, periodo, proyecto ni contrato. El portal valida extensión, contenido y tamaño, extrae los datos y crea la factura en "Borrador". El número es `Serie-Folio` del CFDI (o el impreso) y el periodo, el mes de la fecha de emisión.
-  - Con XML, los datos salen del XML; sin XML, del texto de la representación impresa del CFDI 4.0 (`invoice_extraction_service.parse_printed_cfdi`, por etiquetas: "FOLIO FISCAL (UUID)", "CLIENTE", "CONCEPTOS", "SUBTOTAL", etc.). Un PDF sin texto se envía al analizador documental configurado; el de demo no lo lee.
+  - Con XML, los datos salen del XML; sin XML, del texto de la representación impresa del CFDI 4.0 (`invoice_extraction_service.parse_printed_cfdi`, por etiquetas: "FOLIO FISCAL (UUID)", "CLIENTE", "CONCEPTOS", "SUBTOTAL", etc.). Un PDF sin texto se envía al analizador documental configurado; el de demo no lo lee. Con la IA activa, todo PDF se lee con Azure Document Intelligence y OpenAI y, si fallan, como sin IA ([Lectura de la factura con IA](#lectura-de-la-factura-con-ia)).
   - PDF y XML con UUID distinto: 409. Sin datos esenciales y sin XML: 422 "No pudimos leer los datos de la factura en el PDF. Adjunte el XML.". Número repetido: 409.
-  - Los datos y su fuente (`xml`, `pdf_text`, `ocr`) quedan en `metadata_json` del documento; el log registra `invoice.extracted` sin datos fiscales.
+  - Los datos y su fuente (`xml`, `pdf_text`, `ocr`, `ai_ocr`, `ocr_di`, `ai_text`) quedan en `metadata_json` del documento; el log registra `invoice.extracted` sin datos fiscales.
 - **Revisión** (`/invoices/{id}/data`): las páginas del PDF a la izquierda y los datos leídos a la derecha (factura, proveedor, cliente, conceptos con la orden de compra detectada y totales). Junto a cada dato validado aparece la Validación 1 (`PRV-001..003` y las reglas XML): ✓, o ✗ con el valor esperado. Se calcula al abrir la página, no cambia el estatus ni guarda resultados. Desde ahí se cargan los soportes (Vo.Bo.) y se reemplaza el PDF o el XML, que vuelve a extraer los datos (`INVOICE_DATA_EXTRACTED`).
 - **Envío:** "Enviar a validación" ejecuta todas las reglas, incluida la Validación 2 contra la orden de compra.
 
@@ -719,26 +719,66 @@ Para producción use `APP_ENV=production`: la aplicación no arranca sin `SESSIO
 
 No distribuya copias comprimidas a mano del directorio de trabajo.
 
-## AI Mock Mode
+## Lectura de la factura con IA
 
-La configuración predeterminada es:
+Para la prueba de concepto, el PDF de la factura nacional se lee con **Azure Document Intelligence** (OCR, layout y campos del modelo de facturas con su confianza) y **OpenAI** (estructura ese contenido en un JSON con las claves de `parse_cfdi`, con salida estructurada y esquema JSON estricto). Al final, la normalización determinística deja los mismos tipos que el XML: `Decimal`, RFC y UUID validados, fecha ISO y claves del SAT. Un dato que no aparece en el documento queda vacío: el UUID, los RFC, el folio y los importes que el modelo devuelve se comprueban contra el texto del OCR y, si no aparecen, se descartan.
 
-```dotenv
-AI_ENABLED=false
-DOCUMENT_AI_PROVIDER=mock
+La IA **sólo extrae**: el motor de validación, las reglas contra la orden de compra y la decisión del analista no cambian, y la IA no aprueba ni rechaza nada.
+
+Con la IA activa, **todo PDF de factura** pasa por la cadena, tenga o no capa de texto:
+
+- un PDF escaneado (sólo imagen), que sin IA da 422, se registra;
+- la Revisión muestra "Datos tomados de: **OCR + IA (Azure Document Intelligence + OpenAI)**" y el panel "Lectura con IA";
+- si el PDF tiene texto, el panel compara la lectura de la IA con la del parser determinístico y señala los datos que no coinciden (UUID, serie y folio, RFC, fecha, importes, moneda, claves de pago, uso de CFDI y la orden de compra de los conceptos). También indica los campos con confianza baja del OCR (menos de 80 %);
+- el XML sigue mandando sobre el PDF y la comparación de UUID entre PDF y XML se mantiene (409 si no coinciden).
+
+**Retroceso.** Con `AI_ENABLED=false`, o si un servicio falla (llave inválida, endpoint o deployment inexistente, cuota, tiempo agotado o respuesta inválida), el portal se comporta como sin IA: parser determinístico y, sin texto, pide el XML. Nunca responde 500 por la IA. El log registra `ai.document_intelligence`, `ai.openai` y `ai.invoice_read` con el proveedor, la duración, el resultado y el motivo (`auth`, `not_found`, `quota`, `timeout`, `network`, `service`, `failed`, `invalid_response`, `not_configured`), sin llaves, datos fiscales ni contenido del documento.
+
+**Evidencia.** `metadata_json["ai"]` del PDF guarda el proveedor, el modelo de Document Intelligence y el deployment o modelo de OpenAI, las versiones de API, la duración de cada paso y del total, los tokens, la confianza por campo, si coincide con el valor final, los campos descartados y las discrepancias con el parser. Nunca guarda llaves.
+
+### Configuración
+
+| Variable | Ejemplo | Uso |
+|---|---|---|
+| `AI_ENABLED` | `true` | `false` (por omisión): sin IA. |
+| `DOCUMENT_AI_PROVIDER` | `document_intelligence_openai` | `mock` (por omisión), `document_intelligence` (sólo OCR: campos del modelo y, para lo que falta, el parser sobre el texto del OCR), `openai` (sólo la capa de texto del PDF; un escaneado pide el XML) o `document_intelligence_openai` (la cadena de la prueba de concepto). `foundry` es el nombre anterior de `openai`. |
+| `AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT` | `https://<recurso>.cognitiveservices.azure.com` | Endpoint del recurso. |
+| `AZURE_DOCUMENT_INTELLIGENCE_KEY` | *(secreto)* | Llave del recurso. |
+| `AZURE_DOCUMENT_INTELLIGENCE_MODEL` | `prebuilt-invoice` | Modelo de facturas (campos con confianza). `prebuilt-layout` es más rápido, pero sin campos. |
+| `AZURE_DOCUMENT_INTELLIGENCE_API_VERSION` | `2024-11-30` | Versión de la API REST. |
+| `AZURE_DOCUMENT_INTELLIGENCE_TIMEOUT` | `20` | Segundos para enviar el PDF y obtener el resultado (el servicio es asíncrono: se envía y se consulta). |
+| `AZURE_OPENAI_ENDPOINT` | `https://<recurso>.openai.azure.com` | Azure OpenAI (API de Responses). |
+| `AZURE_OPENAI_API_KEY` | *(secreto)* | Llave del recurso. |
+| `AZURE_OPENAI_DEPLOYMENT` | `gpt-5-mini` | El deployment es el modelo; no está fijo en el código. |
+| `AZURE_OPENAI_API_VERSION` | `2025-04-01-preview` | Sin valor se usa la API v1 (`/openai/v1/responses`). |
+| `OPENAI_API_KEY`, `OPENAI_MODEL` | *(secreto)*, `gpt-5-mini` | API de OpenAI: sólo se usa si Azure OpenAI no está configurado. |
+| `OPENAI_BASE_URL` | `https://api.openai.com/v1` | Base de la API de OpenAI. |
+| `OPENAI_REASONING_EFFORT` | `minimal` | Esfuerzo de razonamiento (modelos `gpt-5*`, `o*`); vacío para modelos que no lo admiten, como `gpt-4.1`. |
+| `OPENAI_TIMEOUT` | `15` | Segundos de espera de OpenAI. |
+
+Los tiempos límite por omisión (20 s + 15 s) dejan el registro completo holgadamente por debajo de los 60 s por petición de Vercel. Latencia medida con la factura 3668 (una página, gpt-5-mini con razonamiento `minimal`): Document Intelligence 7 a 10 s, OpenAI 5 a 6 s, cadena 13 a 15 s y registro completo (`POST /invoices/new`) unos 15 s. Con una llave inválida, el retroceso tarda medio segundo.
+
+Las llamadas usan las API REST con `httpx` (ya es dependencia del portal): no hay SDK de Azure ni de OpenAI. Las llaves nunca se registran ni se muestran (`SecretStr`), y el `.env` no se versiona.
+
+### Pruebas
+
+- La suite no sale a la red: `tests/ai_fakes.py` simula Document Intelligence y OpenAI con un `httpx.MockTransport` y la suite fuerza `AI_ENABLED=false`, aunque el `.env` la active.
+- `tests/test_integracion_ia.py` corre contra los servicios reales con la factura 3668 y su versión escaneada. Está marcada `integration`, la suite normal la excluye y se salta sin llaves: `python -m pytest -m integration --no-cov -s tests/test_integracion_ia.py`.
+- `python scripts/rasterize_pdf.py <pdf>` genera la versión escaneada (sólo imagen) de un PDF; la de la 3668 está en `data/pruebas-factura-3668/1-factura/CFDI-3668-GOHS60031745A-escaneado.pdf`.
+
+Prueba manual con la IA y sin enviar correos reales (el `.env` puede tener SMTP real):
+
+```powershell
+$env:AI_ENABLED="true"; $env:DOCUMENT_AI_PROVIDER="document_intelligence_openai"
+$env:MAIL_BACKEND="file"; $env:MAIL_OUTBOX_DIR="./evidencias/_correos"
+.\run_local.ps1
 ```
 
-`LocalMockAnalyzer` no usa red y no inventa datos: no lee PDF sin texto (`extract_invoice` responde "no disponible"), así que una factura escaneada pide su XML. El portal funciona íntegramente sin Azure.
+Registre como `proveedor2@poc.local` sólo el PDF escaneado de la 3668, revise la fuente "OCR + IA", adjunte `VoBo-3668-v2-corregido.pdf` y envíela: valida contra la orden 25704872 sin reglas fallidas.
 
-## Preparación Azure
+### Sin IA
 
-Los adaptadores de `app/services/ai/` validan configuración y fallan de forma controlada:
-
-- `AzureDocumentIntelligenceAnalyzer`: OCR de la representación impresa del CFDI (`extract_invoice`).
-- `AzureContentUnderstandingAnalyzer`: extracción semiestructurada y clasificación.
-- `AzureFoundryAnalyzer`: extracción asistida por modelo (punto de extensión).
-
-Complete las variables Azure en `.env`, implemente la llamada HTTP/SDK dentro del adaptador y seleccione el proveedor. Ningún router, regla financiera ni modelo importa SDKs Azure directamente. Las keys nunca deben incluirse en Git.
+Con la configuración por omisión (`AI_ENABLED=false`, `DOCUMENT_AI_PROVIDER=mock`), `LocalMockAnalyzer` no usa red ni inventa datos: no lee PDF sin texto, así que una factura escaneada pide su XML. El portal funciona íntegramente sin Azure. `AzureContentUnderstandingAnalyzer` sigue siendo un punto de extensión que sólo comprueba su configuración.
 
 ## Datos de demostración
 
@@ -752,7 +792,7 @@ Los XML y PDF de las facturas demo los genera `scripts/cfdi_demo.py` (también `
 - Sin integración con ClickBalance ni SAP: el flujo del portal termina en "Autorizada" y las órdenes de compra se siembran o se capturan en el portal ("Nueva orden de compra" y "Editar"; con facturas ligadas no cambian el convenio ni el proveedor); no se consultan en SAP. "Programar pago" sólo muestra la solicitud en JSON: no la envía a ningún sistema.
 - El parser de la representación impresa del CFDI se probó con PDF sintéticos (la 3668 reconstruida, en la maqueta simple y en la del documento de negocio; los del recorrido manual y los de la prueba de lectura del PDF); falta probarlo con PDF reales de FERROMEX. No hay facturas parciales ni con varias órdenes de compra.
 - Sin pagos, banca, firma, SharePoint, Blob, Azure SQL, SSO con proveedores externos, despliegue Azure, Kubernetes o colas.
-- Los adaptadores Azure son contratos preparados, no llamadas productivas.
+- La lectura con IA se probó con la factura 3668 (con texto y escaneada); falta calibrarla con facturas reales de FERROMEX. Es síncrona (sin cola): un PDF de muchas páginas puede agotar el tiempo límite y entonces el portal lee como sin IA. Azure Content Understanding sigue siendo un punto de extensión.
 - Las Reglas de validación y los catálogos son editables, pero los pesos del score siguen en el código y no se pueden crear reglas nuevas desde la interfaz. Los catálogos se usan en la validación del CFDI.
 - Las reglas `INT` del Invoice internacional buscan texto literal y aún no se calibran con invoices reales; no hay extracción automática de datos del Invoice.
 - Los correos (credenciales, decisión del PMO, cancelación) se envían de forma síncrona, sin cola ni reintentos automáticos; un envío fallido se reenvía a mano. No hay recordatorio antes de que venza el plazo de 72 horas de una cancelación.
