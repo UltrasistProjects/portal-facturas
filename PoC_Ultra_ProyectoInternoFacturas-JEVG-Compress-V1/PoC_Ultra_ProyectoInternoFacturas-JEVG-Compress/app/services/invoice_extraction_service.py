@@ -23,6 +23,7 @@ from typing import Any
 from app.core.constants import DocumentType
 from app.core.errors import BusinessRuleError
 from app.rules.purchase_order_rules import detect_order_number
+from app.services import ai_usage_service as ai_usage
 from app.services.ai import AnalyzerUnavailable, DocumentAnalyzer, get_document_analyzer
 from app.services.pdf_service import analyze_pdf
 from app.services.xml_service import parse_cfdi
@@ -373,10 +374,14 @@ def _read_with_ai(analyzer: DocumentAnalyzer, path: Path, parsed: dict | None) -
         reading = analyzer.read_invoice(path)
     except AnalyzerUnavailable as exc:
         duration = _log_ai(provider, started, "fallback", reason=exc.reason, error=str(exc), fallback=fallback)
-        return None, None, {"provider": provider, "outcome": "error", "reason": exc.reason, "duration_ms": duration}
+        evidence = {"provider": provider, "outcome": "error", "reason": exc.reason, "duration_ms": duration}
+        ai_usage.record(evidence, parsed is not None, fallback, exc.steps)
+        return None, None, evidence
     except Exception as exc:  # noqa: BLE001 - un defecto del analizador no debe impedir registrar la factura
         duration = _log_ai(provider, started, "fallback", reason="error", error_type=type(exc).__name__)
-        return None, None, {"provider": provider, "outcome": "error", "reason": "error", "duration_ms": duration}
+        evidence = {"provider": provider, "outcome": "error", "reason": "error", "duration_ms": duration}
+        ai_usage.record(evidence, parsed is not None, fallback)
+        return None, None, evidence
     evidence = {"provider": provider, **reading.evidence}
     if parsed is not None:
         evidence["compared_with"] = SOURCE_PDF_TEXT
@@ -391,6 +396,7 @@ def _read_with_ai(analyzer: DocumentAnalyzer, path: Path, parsed: dict | None) -
         discrepancies=len(evidence.get("discrepancies") or []),
         fallback=None if complete else fallback,
     )
+    ai_usage.record(evidence, parsed is not None, reading.source if complete else fallback)
     return (reading.data, reading.source, evidence) if complete else (None, None, evidence)
 
 

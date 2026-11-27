@@ -23,6 +23,8 @@ class AnalyzerUnavailable(RuntimeError):  # noqa: N818 - nombre de dominio: el a
     def __init__(self, message: str, reason: str = NOT_CONFIGURED):
         super().__init__(message)
         self.reason = reason
+        # Pasos que si se completaron antes de la falla (p. ej. el OCR cuando falla OpenAI), para medir el consumo.
+        self.steps: list[dict[str, Any]] = []
 
 
 @dataclass

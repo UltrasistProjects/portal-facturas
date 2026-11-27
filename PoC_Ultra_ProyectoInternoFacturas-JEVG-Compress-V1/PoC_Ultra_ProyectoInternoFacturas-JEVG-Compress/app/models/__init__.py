@@ -628,6 +628,33 @@ class EmailDelivery(Base):
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=now_utc, index=True)
 
 
+class AiUsage(Base):
+    """Una lectura de factura con IA (Document Intelligence y OpenAI), exitosa o no: la pantalla de consumo suma sus
+    paginas, tokens y duraciones. Se guarda aunque el registro de la factura falle despues. Sin datos fiscales, sin
+    contenido del documento y sin llaves."""
+
+    __tablename__ = "ai_usage"
+    __table_args__ = (CheckConstraint("outcome IN ('ok', 'incomplete', 'error')", name="ck_ai_usage_outcome"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=now_utc, index=True)
+    provider: Mapped[str] = mapped_column(String(60))
+    outcome: Mapped[str] = mapped_column(String(20))
+    reason: Mapped[str | None] = mapped_column(String(30))
+    # El PDF traia capa de texto (se comparo con el parser) y la fuente de los datos que quedaron.
+    has_text: Mapped[bool] = mapped_column(Boolean, default=False)
+    source: Mapped[str | None] = mapped_column(String(20))
+    duration_ms: Mapped[int] = mapped_column(default=0)
+    ocr_model: Mapped[str | None] = mapped_column(String(60))
+    ocr_pages: Mapped[int | None]
+    ocr_duration_ms: Mapped[int | None]
+    llm_service: Mapped[str | None] = mapped_column(String(30))
+    llm_model: Mapped[str | None] = mapped_column(String(100))
+    llm_duration_ms: Mapped[int | None]
+    input_tokens: Mapped[int | None]
+    output_tokens: Mapped[int | None]
+    discrepancies: Mapped[int | None]
+
+
 class ValidationRule(Base):
     """Regla de Validacion configurable de un origen de proveedor (ajustes-finales-configuracion): su nombre, su valor
     esperado y su baja logica. La definicion (lo que compara, severidad y tipo del valor) vive en
@@ -695,6 +722,7 @@ __all__ = [
     "NotificationMailbox",
     "NotificationCopy",
     "EmailDelivery",
+    "AiUsage",
     "ValidationRule",
     "CatalogEntry",
 ]
