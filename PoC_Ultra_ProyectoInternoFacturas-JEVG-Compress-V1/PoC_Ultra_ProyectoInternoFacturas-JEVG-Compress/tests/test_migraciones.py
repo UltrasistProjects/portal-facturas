@@ -27,7 +27,6 @@ DOMAIN_TABLES = {
     "notification_mailboxes",
     "notification_copies",
     "email_deliveries",
-    "ai_usage",
     "validation_rules",
     "catalog_entries",
     "stored_files",

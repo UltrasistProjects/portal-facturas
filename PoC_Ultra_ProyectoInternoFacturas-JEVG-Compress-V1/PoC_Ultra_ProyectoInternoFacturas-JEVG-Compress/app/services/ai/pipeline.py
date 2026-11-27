@@ -74,11 +74,7 @@ class DocumentIntelligenceOpenAIAnalyzer(DocumentAnalyzer):
         analysis = self.ocr.analyze_document(path)
         if not analysis["content"].strip():
             raise AnalyzerUnavailable("Azure Document Intelligence no encontro texto en el PDF", "no_text")
-        try:
-            raw, step = self.llm.structure(analysis["content"])
-        except AnalyzerUnavailable as exc:
-            exc.steps = [step_evidence(analysis)]  # el OCR ya se consumio: cuenta en la pantalla de consumo
-            raise
+        raw, step = self.llm.structure(analysis["content"])
         data = normalize.invoice(raw)
         ungrounded = normalize.ground(data, analysis["content"])
         normalize.finish(data)

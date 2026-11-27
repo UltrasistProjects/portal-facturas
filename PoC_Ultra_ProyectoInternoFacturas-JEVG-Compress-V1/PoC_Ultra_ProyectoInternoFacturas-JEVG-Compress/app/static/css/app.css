@@ -55,4 +55,3 @@
 .po-form .form-panel h2{margin:0 0 4px}.po-header{align-items:start}.po-totals-help{display:flex;align-items:center;gap:12px;flex-wrap:wrap}.po-items td{padding:8px 6px!important;vertical-align:top}.po-items th{white-space:nowrap}.po-items .form-control-sm,.po-items .form-select-sm{min-width:92px}.po-items .po-col-2 .form-control-sm{min-width:220px}.po-items input[type=date]{min-width:132px}.po-actions{margin-top:0;border-top:0;padding-top:0}
 /* RFC editable del proveedor (Ferromex) */
 .rfc-input{max-width:260px;text-transform:uppercase}
-.status-ai-ok{background:#e8f7f0;color:#14724f}.status-ai-incomplete{background:#fff3d8;color:#966000}.status-ai-error{background:#fdecec;color:#ae3030}.ai-kpis .kpi-card small{display:block;margin-top:3px}#ai-configuration,#ai-checks .data-list{margin:0 22px 22px!important}#ai-configuration dd{overflow-wrap:anywhere}

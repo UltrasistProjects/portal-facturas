@@ -31,7 +31,6 @@ from app.models import AuditLog, EmailDelivery, Supplier, User
 from app.repositories.pagination import back_to, list_query, paginate, search
 from app.routers.common import templates
 from app.schemas import UserCreate, validation_message
-from app.services import ai_usage_service as ai_usage
 from app.services import catalog_service as catalogs
 from app.services import document_requirements_service as requirements
 from app.services import identity_service as identity
@@ -841,45 +840,6 @@ async def send_test_notification(
             request, db, user, test_address=address, test_errors=exc.errors, status_code=exc.status_code
         )
     return RedirectResponse(f"{NOTIFICATIONS_URL}?test={delivery.id}", status_code=303)
-
-
-# Consumo de la lectura con IA: paginas de OCR, tokens de OpenAI, duraciones y resultados de cada lectura.
-
-
-def _ai_usage_page(request: Request, db: Session, user, page: int = 1, checks: list | None = None):
-    readings = ai_usage.readings_page(db, page)
-    context = {
-        "user": user,
-        **ai_usage.overview(db),
-        "configuration": ai_usage.configuration(),
-        "checks": checks,
-        "readings": readings.items,
-        "page": readings,
-        "base_query": "",
-        "window_days": ai_usage.WINDOW_DAYS,
-        "outcome_labels": ai_usage.OUTCOME_LABELS,
-        "provider_labels": ai_usage.PROVIDER_LABELS,
-        "reason_labels": ai_usage.REASON_LABELS,
-        "format_datetime": templates_service.format_datetime,
-    }
-    return templates.TemplateResponse(request, "admin/ai_usage.html", context)
-
-
-@router.get("/ai-usage")
-def ai_usage_overview(
-    request: Request, page: int = 1, db: Session = Depends(get_db), user=Depends(require_roles(Role.ADMINISTRADOR))
-):
-    return _ai_usage_page(request, db, user, page)
-
-
-@router.post("/ai-usage/check")
-async def ai_usage_check(
-    request: Request, db: Session = Depends(get_db), user=Depends(require_roles(Role.ADMINISTRADOR))
-):
-    """Prueba la conexion con Document Intelligence y OpenAI (una llamada minima a cada uno)."""
-    await validate_csrf(request)
-    checks = await run_in_threadpool(ai_usage.check_services)
-    return _ai_usage_page(request, db, user, checks=checks)
 
 
 # Catalogos de referencia (HU-07). La logica vive en catalog_service; estas rutas solo traducen HTTP. Las rutas

@@ -760,14 +760,6 @@ Los tiempos límite por omisión (20 s + 15 s) dejan el registro completo holgad
 
 Las llamadas usan las API REST con `httpx` (ya es dependencia del portal): no hay SDK de Azure ni de OpenAI. Las llaves nunca se registran ni se muestran (`SecretStr`), y el `.env` no se versiona.
 
-### Consumo de IA
-
-**Administración → Consumo de IA** (`/admin/ai-usage`, sólo el Administrador) muestra cuántas lecturas se hicieron hoy, en los últimos 30 días y en total; cuántas leyeron la factura y cuántas no; las páginas de OCR de Document Intelligence; los tokens de entrada y salida de OpenAI; y la duración promedio y máxima. Debajo hay un desglose por día, la configuración vigente (sin llaves) y la lista de lecturas con su resultado y su motivo. **Probar conexión** hace una llamada mínima a cada servicio.
-
-Cada lectura queda en la tabla `ai_usage` (migración `0026_ai_usage`), también las que no terminan en una factura registrada (un número repetido, un escaneado que no se pudo leer), porque igual consumen los servicios. Si OpenAI falla después del OCR, las páginas de Document Intelligence también cuentan. No se guardan datos fiscales ni contenido del documento.
-
-El costo estimado aparece si se definen los precios de su contrato: `AI_PRICE_OCR_1K_PAGES_USD` (por mil páginas), `AI_PRICE_INPUT_1M_TOKENS_USD` y `AI_PRICE_OUTPUT_1M_TOKENS_USD` (por millón de tokens). El portal no trae precios por omisión.
-
 ### Pruebas
 
 - La suite no sale a la red: `tests/ai_fakes.py` simula Document Intelligence y OpenAI con un `httpx.MockTransport` y la suite fuerza `AI_ENABLED=false`, aunque el `.env` la active.

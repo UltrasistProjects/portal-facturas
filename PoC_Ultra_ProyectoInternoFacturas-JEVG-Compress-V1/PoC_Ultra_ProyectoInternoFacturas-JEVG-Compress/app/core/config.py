@@ -1,4 +1,3 @@
-from decimal import Decimal
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal
@@ -66,10 +65,6 @@ class Settings(BaseSettings):
     # Esfuerzo de razonamiento de los modelos que lo admiten (minimal, low, medium, high); vacio: no se envia.
     openai_reasoning_effort: str = "minimal"
     openai_timeout: float = Field(default=15, gt=0, le=45)
-    # Precios en USD para estimar el costo en "Consumo de IA" (los de su contrato y region). Vacios: no se estima.
-    ai_price_ocr_1k_pages_usd: Decimal | None = Field(default=None, ge=0)
-    ai_price_input_1m_tokens_usd: Decimal | None = Field(default=None, ge=0)
-    ai_price_output_1m_tokens_usd: Decimal | None = Field(default=None, ge=0)
     # Correo (HU-08). None significa "derivar de app_env": smtp en produccion y file (no envia) en los demas.
     mail_backend: Literal["smtp", "file"] | None = None
     mail_from: str = ""
@@ -157,13 +152,6 @@ class Settings(BaseSettings):
     @classmethod
     def ai_endpoint(cls, value: str) -> str:
         return value.strip().rstrip("/")
-
-    @field_validator(
-        "ai_price_ocr_1k_pages_usd", "ai_price_input_1m_tokens_usd", "ai_price_output_1m_tokens_usd", mode="before"
-    )
-    @classmethod
-    def optional_price(cls, value):
-        return None if isinstance(value, str) and not value.strip() else value
 
     @field_validator("document_ai_provider", "openai_reasoning_effort")
     @classmethod
