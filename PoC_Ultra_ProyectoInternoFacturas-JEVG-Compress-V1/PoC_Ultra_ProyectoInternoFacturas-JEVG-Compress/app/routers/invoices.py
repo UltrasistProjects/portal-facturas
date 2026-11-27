@@ -769,6 +769,8 @@ def _review_page(
         "user": user,
         "invoice": invoice,
         "stored": stored,
+        "ai_labels": extraction.AI_FIELD_LABELS,
+        "ai_low_confidence": extraction.LOW_CONFIDENCE,
         "data": data,
         "checks": checks,
         "concepts": concepts,

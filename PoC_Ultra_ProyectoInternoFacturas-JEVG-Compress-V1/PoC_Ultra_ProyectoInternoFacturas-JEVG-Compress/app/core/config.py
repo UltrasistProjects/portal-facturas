@@ -39,16 +39,32 @@ class Settings(BaseSettings):
     session_https_only: bool | None = None
     business_timezone: str = "America/Mexico_City"
     backup_retention: int = Field(default=14, ge=1)
+    # Lectura de la factura con IA (app/services/ai). Con ai_enabled=false, o si un servicio falla, el portal lee el
+    # PDF con el parser deterministico y, sin texto, pide el XML. Los tiempos limite suman holgadamente menos que los
+    # 60 s por peticion de Vercel. Las llaves nunca se registran ni se muestran.
     ai_enabled: bool = False
+    # mock | document_intelligence | openai | document_intelligence_openai | content_understanding
     document_ai_provider: str = "mock"
     azure_document_intelligence_endpoint: str = ""
-    azure_document_intelligence_key: str = ""
+    azure_document_intelligence_key: SecretStr = SecretStr("")
+    azure_document_intelligence_model: str = "prebuilt-invoice"
+    azure_document_intelligence_api_version: str = "2024-11-30"
+    # Segundos para enviar el PDF y obtener el resultado (el servicio es asincrono: se envia y se consulta).
+    azure_document_intelligence_timeout: float = Field(default=20, gt=0, le=45)
     azure_content_understanding_endpoint: str = ""
-    azure_content_understanding_key: str = ""
+    azure_content_understanding_key: SecretStr = SecretStr("")
+    # Azure OpenAI (API de Responses): el deployment es el modelo.
     azure_openai_endpoint: str = ""
-    azure_openai_api_key: str = ""
+    azure_openai_api_key: SecretStr = SecretStr("")
     azure_openai_deployment: str = ""
     azure_openai_api_version: str = ""
+    # API de OpenAI: se usa solo si Azure OpenAI no esta configurado.
+    openai_api_key: SecretStr = SecretStr("")
+    openai_model: str = ""
+    openai_base_url: str = "https://api.openai.com/v1"
+    # Esfuerzo de razonamiento de los modelos que lo admiten (minimal, low, medium, high); vacio: no se envia.
+    openai_reasoning_effort: str = "minimal"
+    openai_timeout: float = Field(default=15, gt=0, le=45)
     # Correo (HU-08). None significa "derivar de app_env": smtp en produccion y file (no envia) en los demas.
     mail_backend: Literal["smtp", "file"] | None = None
     mail_from: str = ""
@@ -126,6 +142,21 @@ class Settings(BaseSettings):
     @classmethod
     def normalized_storage_backend(cls, value):
         return (value.strip().lower() or "local") if isinstance(value, str) else value
+
+    @field_validator(
+        "azure_document_intelligence_endpoint",
+        "azure_content_understanding_endpoint",
+        "azure_openai_endpoint",
+        "openai_base_url",
+    )
+    @classmethod
+    def ai_endpoint(cls, value: str) -> str:
+        return value.strip().rstrip("/")
+
+    @field_validator("document_ai_provider", "openai_reasoning_effort")
+    @classmethod
+    def ai_choice(cls, value: str) -> str:
+        return value.strip().lower()
 
     @field_validator("mail_from", "smtp_host", "smtp_username")
     @classmethod

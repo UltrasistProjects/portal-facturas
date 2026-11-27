@@ -1,16 +1,19 @@
 """Datos de la factura nacional a partir de sus archivos (HU-24, RN-HU24-01 a 03, RD-01 a RD-03).
 
 Con XML, los datos fiscales salen del XML (parse_cfdi). Sin XML, del texto de la representacion impresa del CFDI 4.0
-(parse_printed_cfdi) y, si el PDF no tiene texto, del analizador documental configurado (OCR). Las tres fuentes
-devuelven las mismas claves, asi que el motor, la revision y el detalle no distinguen de donde salieron. Los datos y su
-fuente se guardan en metadata_json del documento: el XML, plano como hasta ahora con "source": "xml"; el PDF, con el
-analisis del archivo y los datos en "invoice".
+(parse_printed_cfdi) y, si el PDF no tiene texto, del analizador documental configurado (OCR). Con la IA activa
+(AI_ENABLED y un proveedor real), todo PDF pasa por el analizador; si falla o no lee los datos esenciales, el portal
+vuelve al parser deterministico y, sin texto, pide el XML. Todas las fuentes devuelven las mismas claves, asi que el
+motor, la revision y el detalle no distinguen de donde salieron. Los datos y su fuente se guardan en metadata_json del
+documento: el XML, plano como hasta ahora con "source": "xml"; el PDF, con el analisis del archivo, los datos en
+"invoice" y, si paso por la IA, su evidencia en "ai" (proveedor, modelo, confianza, duracion y discrepancias).
 """
 
 from __future__ import annotations
 
 import logging
 import re
+import time
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
@@ -19,14 +22,44 @@ from typing import Any
 
 from app.core.constants import DocumentType
 from app.core.errors import BusinessRuleError
-from app.services.ai import AnalyzerUnavailable, get_document_analyzer
+from app.rules.purchase_order_rules import detect_order_number
+from app.services.ai import AnalyzerUnavailable, DocumentAnalyzer, get_document_analyzer
 from app.services.pdf_service import analyze_pdf
 from app.services.xml_service import parse_cfdi
 
 logger = logging.getLogger(__name__)
 
 SOURCE_XML, SOURCE_PDF_TEXT, SOURCE_OCR = "xml", "pdf_text", "ocr"
-SOURCE_LABELS = {SOURCE_XML: "XML", SOURCE_PDF_TEXT: "Texto del PDF", SOURCE_OCR: "OCR"}
+SOURCE_AI, SOURCE_OCR_DI, SOURCE_AI_TEXT = "ai_ocr", "ocr_di", "ai_text"
+SOURCE_LABELS = {
+    SOURCE_XML: "XML",
+    SOURCE_PDF_TEXT: "Texto del PDF",
+    SOURCE_OCR: "OCR",
+    SOURCE_AI: "OCR + IA (Azure Document Intelligence + OpenAI)",
+    SOURCE_OCR_DI: "OCR (Azure Document Intelligence)",
+    SOURCE_AI_TEXT: "Texto del PDF + IA (OpenAI)",
+}
+# Datos que se comparan entre la lectura de la IA y la del parser deterministico (PDF con texto).
+COMPARED_FIELDS = {
+    "uuid": "UUID",
+    "series": "Serie",
+    "folio": "Folio",
+    "issuer_rfc": "RFC del emisor",
+    "receiver_rfc": "RFC del receptor",
+    "date": "Fecha",
+    "subtotal": "Subtotal",
+    "tax": "IVA trasladado",
+    "total": "Total",
+    "currency": "Moneda",
+    "payment_form": "Forma de pago",
+    "payment_method": "Método de pago",
+    "cfdi_use": "Uso de CFDI",
+    "voucher_type": "Tipo de comprobante",
+    "purchase_order": "Orden de compra",
+}
+# Nombres de los campos en el panel "Lectura con IA" de la revision, y confianza del OCR que se senala como baja.
+AI_FIELD_LABELS = {**COMPARED_FIELDS, "issuer_name": "Nombre del emisor", "receiver_name": "Nombre del receptor"}
+LOW_CONFIDENCE = 0.8
 ESSENTIALS = ("uuid", "issuer_rfc", "receiver_rfc", "date", "subtotal", "total", "currency")
 MSG_UNREADABLE = "No pudimos leer los datos de la factura en el PDF. Adjunte el XML."
 MSG_MISMATCH = "El PDF y el XML no corresponden a la misma factura"
@@ -294,14 +327,91 @@ def service_period(data: dict) -> str | None:
     return f"{issued.month:02d}/{issued.year}"
 
 
-def read_pdf(path: Path) -> tuple[dict[str, Any], dict[str, Any] | None, str | None]:
-    """(analisis del PDF, datos, fuente). ValueError si el PDF no abre. Sin texto, el analizador documental; si no
-    esta disponible, sin datos."""
-    analysis = analyze_pdf(path)
-    if analysis["has_extractable_text"]:
-        return analysis, parse_printed_cfdi(analysis["text"]), SOURCE_PDF_TEXT
+def _comparable(data: dict, field: str):
+    if field == "purchase_order":
+        return detect_order_number(c.get("description") for c in data.get("concepts") or []).number
+    value = data.get(field)
+    if value is None or value == "":
+        return None
+    if isinstance(value, Decimal):
+        return value.normalize()
+    return str(value).strip().upper()
+
+
+def compare(ai_data: dict, parsed: dict) -> list[dict[str, Any]]:
+    """Campos en que la lectura de la IA y la del parser deterministico no coinciden (tambien si solo uno lo lee)."""
+    differences = []
+    for field, label in COMPARED_FIELDS.items():
+        ai_value, parser_value = _comparable(ai_data, field), _comparable(parsed, field)
+        if ai_value != parser_value:
+            shown = (ai_value, parser_value) if field == "purchase_order" else (ai_data.get(field), parsed.get(field))
+            differences.append(
+                {"field": field, "label": label, "ai": json_safe(shown[0]), "parser": json_safe(shown[1])}
+            )
+    return differences
+
+
+def _provider(analyzer: DocumentAnalyzer) -> str:
+    return getattr(analyzer, "provider", None) or type(analyzer).__name__
+
+
+def _log_ai(provider: str, started: float, outcome: str, **fields) -> int:
+    """Evento ai.invoice_read: proveedor, duracion y resultado; sin datos fiscales ni contenido (observabilidad)."""
+    duration = round((time.monotonic() - started) * 1000)
+    level = logging.INFO if outcome == "ok" else logging.WARNING
+    extra = {"event": "ai.invoice_read", "provider": provider, "duration_ms": duration, "outcome": outcome, **fields}
+    logger.log(level, "ai.invoice_read", extra=extra)
+    return duration
+
+
+def _read_with_ai(analyzer: DocumentAnalyzer, path: Path, parsed: dict | None) -> tuple[dict | None, str | None, dict]:
+    """(datos, fuente, evidencia) del analizador. Sin datos si falla o no lee lo esencial: quien llama vuelve al flujo
+    sin IA. Cualquier error del analizador se registra y se absorbe: la IA nunca provoca un error 500."""
+    provider, started = _provider(analyzer), time.monotonic()
+    fallback = SOURCE_PDF_TEXT if parsed is not None else None
     try:
-        return analysis, get_document_analyzer().extract_invoice(path), SOURCE_OCR
+        reading = analyzer.read_invoice(path)
+    except AnalyzerUnavailable as exc:
+        duration = _log_ai(provider, started, "fallback", reason=exc.reason, error=str(exc), fallback=fallback)
+        return None, None, {"provider": provider, "outcome": "error", "reason": exc.reason, "duration_ms": duration}
+    except Exception as exc:  # noqa: BLE001 - un defecto del analizador no debe impedir registrar la factura
+        duration = _log_ai(provider, started, "fallback", reason="error", error_type=type(exc).__name__)
+        return None, None, {"provider": provider, "outcome": "error", "reason": "error", "duration_ms": duration}
+    evidence = {"provider": provider, **reading.evidence}
+    if parsed is not None:
+        evidence["compared_with"] = SOURCE_PDF_TEXT
+        evidence["discrepancies"] = compare(reading.data, parsed)
+    complete = is_complete(reading.data)
+    evidence["outcome"] = "ok" if complete else "incomplete"
+    evidence["duration_ms"] = _log_ai(
+        provider,
+        started,
+        "ok" if complete else "fallback",
+        complete=complete,
+        discrepancies=len(evidence.get("discrepancies") or []),
+        fallback=None if complete else fallback,
+    )
+    return (reading.data, reading.source, evidence) if complete else (None, None, evidence)
+
+
+def read_pdf(path: Path) -> tuple[dict[str, Any], dict[str, Any] | None, str | None]:
+    """(analisis del PDF, datos, fuente). ValueError si el PDF no abre.
+
+    Con la IA activa, los datos del analizador (su evidencia queda en analysis["ai"]); si falla o no lee lo esencial,
+    como sin IA: el texto del PDF con el parser deterministico y, sin texto, ningun dato. Sin IA, el parser y, sin
+    texto, el analizador documental de la demo."""
+    analysis = analyze_pdf(path)
+    parsed = parse_printed_cfdi(analysis["text"]) if analysis["has_extractable_text"] else None
+    analyzer = get_document_analyzer()
+    if analyzer.reads_all_pdfs:
+        data, source, analysis["ai"] = _read_with_ai(analyzer, path, parsed)
+        if data is not None:
+            return analysis, data, source
+        return analysis, parsed, SOURCE_PDF_TEXT if parsed is not None else None
+    if parsed is not None:
+        return analysis, parsed, SOURCE_PDF_TEXT
+    try:
+        return analysis, analyzer.extract_invoice(path), SOURCE_OCR
     except AnalyzerUnavailable as exc:
         logger.info("pdf.ocr_unavailable", extra={"event": "pdf.ocr_unavailable", "error": str(exc)})
         return analysis, None, None
@@ -398,6 +508,8 @@ class StoredData:
     data: dict[str, Any]
     source: str
     document_id: int
+    # Evidencia de la lectura con IA del PDF vigente (solo cuando los datos salen del PDF).
+    ai: dict[str, Any] | None = None
 
     @property
     def source_label(self) -> str:
@@ -416,5 +528,5 @@ def stored_data(invoice) -> StoredData | None:
     pdf = current_document(invoice, DocumentType.INVOICE_PDF)
     data = (pdf.metadata_json or {}).get("invoice") if pdf is not None else None
     if data:
-        return StoredData(data, data.get("source") or SOURCE_PDF_TEXT, pdf.id)
+        return StoredData(data, data.get("source") or SOURCE_PDF_TEXT, pdf.id, pdf.metadata_json.get("ai"))
     return None
